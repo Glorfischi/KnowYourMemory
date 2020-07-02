@@ -1,0 +1,37 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+#
+
+$instances = 2
+$memory = 2048
+$cpus = 2
+$pubkey = "id_rsa.pub"
+
+Vagrant.configure("2") do |config|
+  config.vm.box = "debian/buster64"
+  config.vm.synced_folder "..", "/vagrant", disabled: false
+
+  config.vm.provider :virtualbox do |vb|
+    vb.memory = $memory
+    vb.customize ["modifyvm", :id, "--vram", "16"]
+  end
+
+  config.vm.provider :libvirt do |libvirt|
+    libvirt.memory = $memory
+    libvirt.cpus = $cpus
+  end
+
+  (1..$instances).each do |i|
+    config.vm.define vm_name = "RoCE-%02d" % i do |debian|
+      debian.vm.hostname = vm_name
+
+      debian.vm.network "private_network", ip: "172.17.5.#{i+100}"
+    end
+  end
+
+  # add user ssh key to authorized_keys
+  config.vm.provision "file", source: "~/.ssh/"+$pubkey, destination: "/tmp/id_rsa.pub"
+  config.ssh.shell = "bash -c 'BASH_ENV=/etc/profile exec bash'"
+  config.vm.provision :shell, :inline => "cat /tmp/id_rsa.pub >> /home/vagrant/.ssh/authorized_keys; chown -R vagrant:vagrant /home/vagrant/.ssh/"
+  config.vm.provision :shell, :inline => "apt-get update; apt-get install -y python"
+end

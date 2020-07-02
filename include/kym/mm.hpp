@@ -21,12 +21,13 @@ struct Region {
 	void *      addr;
 	uint32_t    length;
 	uint32_t    lkey;
+  struct ibv_mr *mr;
 };
 
 class Allocator {
   public:
-    virtual Region Alloc(size_t size);
-    virtual void Free(Region region);
+    virtual kym::memory::Region Alloc(size_t size) = 0;
+    virtual void Free(kym::memory::Region region) = 0;
 };
 
 

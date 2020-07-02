@@ -7,8 +7,8 @@
  *
  */
 
-#ifndef KNY_KNY_CONN_SEND_RECEIVE_H_
-#define KNY_KNY_CONN_SEND_RECEIVE_H_
+#ifndef KNY_CONN_SEND_RECEIVE_H_
+#define KNY_CONN_SEND_RECEIVE_H_
 
 #include <stddef.h>
 
@@ -64,4 +64,4 @@ SendReceiveConnection DialSendReceive(){
 }
 }
 
-#endif // KNY_KNY_CONN_SEND_RECEIVE_H_
+#endif // KNY_CONN_SEND_RECEIVE_H_

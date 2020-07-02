@@ -1,0 +1,20 @@
+---
+- name: Install rdma-core
+  become: true
+  package:
+    name: [ "rdma-core", "ibverbs-utils", "librdmacm-dev" ]
+    update_cache: yes
+    state: present
+
+- name: Start rxe
+  become: true
+  command: rxe_cfg start
+
+- name: Reset all interfaces
+  become: true
+  command: "rxe_cfg remove {{ item }}"
+  with_items: "{{ ansible_interfaces }}"
+
+- name: Add interface
+  become: true
+  command: "rxe_cfg add {{ rxe_eth_interface }}"

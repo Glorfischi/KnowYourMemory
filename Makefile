@@ -2,7 +2,7 @@ PREFIX = .
 
 CC = g++
 LDFLAGS =  -libverbs -lpthread -lrdmacm
-CFLAGS += -Wall -I$(PREFIX)/include 
+CFLAGS += -Wall -I$(PREFIX)/include  -I$(PREFIX)/src
 CXXFLAGS = $(CFLAGS)
 
 BINDIR = $(PREFIX)/bin
@@ -11,11 +11,11 @@ LIBPATH = $(PREFIX)/lib
 SRCPATH = $(PREFIX)/src
 TESTPATH = $(PREFIX)/tests
 
-HEADERS = $(shell echo $(PREFIX)/include/kym/*.h)
+HEADERS = $(shell echo $(PREFIX)/include/kym/*.hpp) $(shell echo $(PREFIX)/src/*.hpp)
 
 
 TEST = $(BINDIR)/test
-TEST_SRCS=  $(TESTPATH)/test.cpp 
+TEST_SRCS=  $(TESTPATH)/main_test.cpp $(SRCPATH)/mm/dumb_allocator.cpp
 TEST_OBJS= $(TEST_SRCS:.cpp=.o)
 
 test: $(TEST_OBJS)

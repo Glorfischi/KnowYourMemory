@@ -1,5 +1,6 @@
 .clangd/
 compile_commands.json
+.vagrant/
 
 *.o
 ./bin
