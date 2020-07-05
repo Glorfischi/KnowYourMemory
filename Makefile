@@ -2,7 +2,7 @@ PREFIX = .
 
 CC = g++
 LDFLAGS =  -libverbs -lpthread -lrdmacm
-CFLAGS += -Wall -I$(PREFIX)/include  -I$(PREFIX)/src
+CFLAGS += -Wall -I$(PREFIX)/include  -I$(PREFIX)/src -I$(PREFIX)/external
 CXXFLAGS = $(CFLAGS)
 
 BINDIR = $(PREFIX)/bin
@@ -15,7 +15,7 @@ HEADERS = $(shell echo $(PREFIX)/include/kym/*.hpp) $(shell echo $(PREFIX)/src/*
 
 
 TEST = $(BINDIR)/test
-TEST_SRCS=  $(TESTPATH)/main_test.cpp $(SRCPATH)/mm/dumb_allocator.cpp
+TEST_SRCS=  $(TESTPATH)/main_test.cpp $(SRCPATH)/mm/dumb_allocator.cpp $(SRCPATH)/conn/send_receive.cpp
 TEST_OBJS= $(TEST_SRCS:.cpp=.o)
 
 test: $(TEST_OBJS)

@@ -17,19 +17,26 @@
 namespace kym {
 namespace connection {
 
+struct ReceiveRegion {
+  int         id;
+	void *      addr;
+	uint32_t    length;
+};
+
 /*
  * Interfaces
  */
 class Sender {
   public:
-    virtual kym::memory::Region GetMemoryRegion(size_t size);
-    virtual int Send(kym::memory::Region region);
+    virtual kym::memory::Region GetMemoryRegion(size_t size) = 0;
+    virtual void Free(kym::memory::Region region) = 0;
+    virtual int Send(kym::memory::Region region) = 0;
 };
 
 class Receiver {
   public:
-    virtual kym::memory::Region Receive();
-    virtual void Free(kym::memory::Region region);
+    virtual ReceiveRegion Receive() = 0;
+    virtual void Free(ReceiveRegion region) = 0;
 };
 
 

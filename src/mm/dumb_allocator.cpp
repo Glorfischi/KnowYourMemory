@@ -1,10 +1,13 @@
-# include "dumb_allocator.hpp"
-#include "kym/mm.hpp"
-#include <cstddef>
+#include "dumb_allocator.hpp"
 
+#include <cstddef>
 #include <cstdlib>
+
+#include <iostream>
+
 #include <infiniband/verbs.h>
 
+#include "kym/mm.hpp"
 
 kym::memory::DumbAllocator::DumbAllocator(struct ibv_pd *pd): pd_(pd){
 }

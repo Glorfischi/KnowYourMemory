@@ -11,7 +11,12 @@
 #define KNY_CONN_SEND_RECEIVE_H_
 
 #include <stddef.h>
+#include <string>
+#include <vector>
 
+
+#include <rdma/rdma_cma.h>
+#include <rdma/rdma_verbs.h>
 #include <infiniband/verbs.h>
 
 #include "kym/conn.hpp"
@@ -25,40 +30,59 @@ namespace connection {
  */
 class SendReceiveSender : public Sender {
   public:
-    SendReceiveSender();
+    SendReceiveSender(struct ibv_qp *qp, kym::memory::Allocator *allocator);
     kym::memory::Region GetMemoryRegion(size_t size);
+    void Free(kym::memory::Region region);
     int Send(kym::memory::Region region);
   private:
     struct ibv_qp *qp_;
-
-    kym::memory::Allocator allocator;
+    kym::memory::Allocator *allocator_;
 };
 
 class SendReceiveReceiver : public Receiver {
   public:
-    kym::memory::Region Receive();
-    void Free(kym::memory::Region region);
+    SendReceiveReceiver(struct rdma_cm_id *id);
+    kym::connection::ReceiveRegion Receive();
+    void Free(kym::connection::ReceiveRegion);
   private:
+    struct rdma_cm_id *id_;
     struct ibv_qp *qp_;
+
+    std::vector<struct ibv_mr *> mrs_;
 
     // ToDo: Some kind of struct to manage MRs
 };
 
 class SendReceiveConnection : public Connection {
   public:
-    kym::memory::Region AllocateMR(size_t size);
+    SendReceiveConnection(SendReceiveSender sender, SendReceiveReceiver receiver);
+    ~SendReceiveConnection();
+
+    kym::memory::Region GetMemoryRegion(size_t size);
     int Send(kym::memory::Region region);
-
-    kym::memory::Region Receive();
     void Free(kym::memory::Region region);
+
+    kym::connection::ReceiveRegion Receive();
+    void Free(kym::connection::ReceiveRegion);
+  private:
+    SendReceiveSender sender_;
+    SendReceiveReceiver receiver_;
 };
 
-int DialSendReceive(SendReceiveConnection &);
-SendReceiveConnection DialSendReceive(){
-  SendReceiveConnection conn;
-  DialSendReceive(conn);
-  return conn;
+int DialSendReceive(SendReceiveConnection **, std::string ip, int port);
+SendReceiveConnection *DialSendReceive(std::string ip, int port);
+
+class SendReceiveListener {
+  public:
+    SendReceiveListener(struct rdma_cm_id *id);
+    SendReceiveConnection *Accept();
+  private:
+    struct rdma_cm_id *ln_id_;
 };
+
+int ListenSendReceive(SendReceiveListener **,std::string ip, int port);
+SendReceiveListener *ListenSendReceive(std::string ip, int port);
+
 
 
 }
