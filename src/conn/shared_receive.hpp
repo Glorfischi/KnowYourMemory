@@ -10,6 +10,7 @@
 #ifndef KNY_CONN_SHARED_RECEIVE_H_
 #define KNY_CONN_SHARED_RECEIVE_H_
 
+#include <bits/stdint-uintn.h>
 #include <stddef.h>
 #include <string>
 #include <vector>
@@ -27,17 +28,30 @@
 namespace kym {
 namespace connection {
 
+class SharedReceiveQueue {
+  public:
+    SharedReceiveQueue(struct ibv_pd *pd);
+    ~SharedReceiveQueue();
+    int PostReceiveRegion(uint64_t id);
+    kym::connection::ReceiveRegion GetRegionById(uint64_t id);
+
+
+    struct ibv_srq *srq_;
+  private:
+    std::vector<struct ibv_mr *> mrs_;
+};
+
 class SharedReceiver : public Receiver {
   public:
-    SharedReceiver(struct rdma_cm_id *id);
+    SharedReceiver(struct rdma_cm_id *id, SharedReceiveQueue *srq);
     ~SharedReceiver();
     kym::connection::ReceiveRegion Receive();
     void Free(kym::connection::ReceiveRegion);
   private:
     struct rdma_cm_id *id_;
     struct ibv_qp *qp_;
+    SharedReceiveQueue *srq_;
 
-    std::vector<struct ibv_mr *> mrs_;
 };
 
 class SharedReceiveConnection : public Connection {
@@ -67,7 +81,8 @@ class SharedReceiveListener {
   private:
     struct rdma_cm_id *ln_id_;
 
-    struct ibv_srq *srq_;
+    SharedReceiveQueue *srq_;
+
 };
 
 int ListenSharedReceive(SharedReceiveListener **,std::string ip, int port);

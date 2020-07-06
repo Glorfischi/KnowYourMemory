@@ -13,6 +13,7 @@
 #include <rdma/rdma_cma.h>
 #include <rdma/rdma_verbs.h>
 #include <infiniband/verbs.h>
+#include <vector>
 
 #include "kym/conn.hpp"
 #include "kym/mm.hpp"
@@ -99,7 +100,7 @@ int DialSharedReceive(SharedReceiveConnection **conn, std::string ip, int port) 
   SendReceiveSender *sender = new SendReceiveSender(id, allocator);
   
   // Init Receiver
-  SharedReceiver *receiver = new SharedReceiver(id);
+  SharedReceiver *receiver = new SharedReceiver(id, NULL);
 
   *conn = new SharedReceiveConnection(sender, receiver);
   return ret;
@@ -149,7 +150,7 @@ int ListenSharedReceive(SharedReceiveListener **ln, std::string ip, int port) {
   conn_param.initiator_depth =  0;  // The maximum number of outstanding RDMA read and atomic operations that the 
   // local side will have to the remote side.
   conn_param.retry_count = 8;  
-  conn_param.rnr_retry_count = 3; 
+  conn_param.rnr_retry_count = 8; 
 
   // setup endpoint, also creates qp(?)
   ret = rdma_create_ep(&id, addrinfo, NULL, NULL); 
@@ -182,7 +183,6 @@ SharedReceiveConnection *SharedReceiveListener::Accept() {
   ret = rdma_get_request(this->ln_id_, &conn_id);
 
   
-  // TODO(fischi): SRQ
   // TODO(fischi): Parameterize
   struct ibv_qp_init_attr attr;
   memset(&attr, 0, sizeof attr);
@@ -204,21 +204,17 @@ SharedReceiveConnection *SharedReceiveListener::Accept() {
   conn_param.initiator_depth =  0;  // The maximum number of outstanding RDMA read and atomic operations that the 
   // local side will have to the remote side.
   conn_param.retry_count = 3;  
-  conn_param.rnr_retry_count = 8; 
+  conn_param.rnr_retry_count = 2; 
 
 
   // Creating shared receive queue if none is set
-  // TODO(fischi): Parameterize
-  if (this->srq_ == NULL) {
-    struct ibv_srq_init_attr srq_init_attr;
-    srq_init_attr.attr.max_sge = 1;
-    srq_init_attr.attr.max_wr = 10;
-    this->srq_ = ibv_create_srq(this->ln_id_->pd, &srq_init_attr);
-  }
-
-  attr.srq = this->srq_;
+  this->srq_ = new SharedReceiveQueue(this->ln_id_->pd);
+  attr.srq = this->srq_->srq_;
   
   ret = rdma_create_qp(conn_id, this->ln_id_->pd, &attr);
+  if(ret) {
+    std::cerr << "Error creating qp " << ret << std::endl;
+  }
 
   ret = rdma_accept(conn_id, &conn_param);
   if(ret) {
@@ -231,9 +227,8 @@ SharedReceiveConnection *SharedReceiveListener::Accept() {
   SendReceiveSender *sender = new SendReceiveSender(conn_id, allocator);
   
   // Init Receiver
-  SharedReceiver *receiver = new SharedReceiver(conn_id);
+  SharedReceiver *receiver = new SharedReceiver(conn_id, this->srq_);
 
-  std::cout << "Accept" << std::endl;
   return new SharedReceiveConnection(sender, receiver);
 }
 
@@ -242,9 +237,7 @@ SharedReceiveListener::SharedReceiveListener(struct rdma_cm_id *id): ln_id_(id){
 
 SharedReceiveListener::~SharedReceiveListener(){
   rdma_destroy_ep(this->ln_id_);
-  if (this->srq_ != NULL){
-    ibv_destroy_srq(this->srq_);
-  }
+  delete this->srq_;
 }
 
 
@@ -283,14 +276,49 @@ void SharedReceiveConnection::Free(kym::connection::ReceiveRegion region){
 /*
  * SendReceiveReceiver
  */
-SharedReceiver::SharedReceiver(struct rdma_cm_id * id): id_(id), qp_(id->qp) {
-  // TODO(fischi) Should be shared
+SharedReceiver::SharedReceiver(struct rdma_cm_id *id, SharedReceiveQueue *srq): id_(id), qp_(id->qp), srq_(srq) {
+  std::cout << "Receiver qp_num: " << this->id_->qp->qp_num << " recv_cq " << this->qp_->recv_cq << std::endl; 
+}
+
+SharedReceiver::~SharedReceiver(){
+  rdma_destroy_ep(this->id_);
+  delete this->srq_;
+}
+
+kym::connection::ReceiveRegion SharedReceiver::Receive() {
+  struct ibv_wc wc;
+  while(ibv_poll_cq(this->qp_->recv_cq, 1, &wc) == 0){}
+  //TODO(fischi): Error handling
+  //TODO(fischi): Handle if id is not in range?
+  kym::connection::ReceiveRegion reg = {0};
+  reg.id = wc.wr_id;
+  reg.addr = this->srq_->GetRegionById(wc.wr_id).addr;
+  reg.length = wc.byte_len;
+  return reg;
+}
+
+void SharedReceiver::Free(kym::connection::ReceiveRegion region) {
+  // Repost MR
+  int ret = this->srq_->PostReceiveRegion(region.id);
+  if (ret) {
+    std::cout << "ERROR " << ret << std::endl;
+  }
+  //TODO(fischi): Error handling
+  return;
+}
+
+
+SharedReceiveQueue::SharedReceiveQueue(struct ibv_pd *pd){
   // TODO(fischi) Parameterize
+  struct ibv_srq_init_attr srq_init_attr;
+  srq_init_attr.attr.max_sge = 1;
+  srq_init_attr.attr.max_wr = 10;
+  this->srq_ = ibv_create_srq(pd, &srq_init_attr);
+
   size_t transfer_size = 1048576;
   for (int i = 0; i < 10; i++){
-
     char* buf = (char*)malloc(transfer_size);
-    struct ibv_mr * mr = ibv_reg_mr(id->pd, buf, transfer_size, IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);  
+    struct ibv_mr * mr = ibv_reg_mr(pd, buf, transfer_size, IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);  
 
     struct ibv_sge sge;
     sge.addr = (uintptr_t)mr->addr;
@@ -303,34 +331,23 @@ SharedReceiver::SharedReceiver(struct rdma_cm_id * id): id_(id), qp_(id->qp) {
     wr.sg_list = &sge;
     wr.num_sge = 1;
 
-    int ret = ibv_post_recv(id->qp, &wr, &bad);
+    int ret = ibv_post_srq_recv(this->srq_, &wr, &bad);
     if (ret) {
       std::cerr << "Error " << ret << std::endl;
     }
     this->mrs_.push_back(mr);
   }
+
 }
 
-SharedReceiver::~SharedReceiver(){
-  rdma_destroy_ep(this->id_);
+SharedReceiveQueue::~SharedReceiveQueue(){
+  ibv_destroy_srq(this->srq_);
 }
 
-kym::connection::ReceiveRegion SharedReceiver::Receive() {
-  struct ibv_wc wc;
-  while(ibv_poll_cq(this->qp_->recv_cq, 1, &wc) == 0){}
-  //TODO(fischi): Error handling
-  //TODO(fischi): Handle if id is not in range?
-  kym::connection::ReceiveRegion reg = {0};
-  reg.id = wc.wr_id;
-  reg.addr = this->mrs_[wc.wr_id]->addr;
-  reg.length = wc.byte_len;
-  return reg;
-}
-
-void SharedReceiver::Free(kym::connection::ReceiveRegion region) {
-  // Repost MR
-  assert((size_t)region.id < this->mrs_.size());
-  struct ibv_mr *mr = this->mrs_[region.id];
+int SharedReceiveQueue::PostReceiveRegion(uint64_t id){
+  //TODO(fischi) not thread safe
+  assert(id < this->mrs_.size());
+  struct ibv_mr *mr = this->mrs_[id];
 
   struct ibv_sge sge;
   sge.addr = (uintptr_t)mr->addr;
@@ -338,17 +355,20 @@ void SharedReceiver::Free(kym::connection::ReceiveRegion region) {
   sge.lkey = mr->lkey;
 
   struct ibv_recv_wr wr, *bad;
-  wr.wr_id = region.id;
+  wr.wr_id = id;
   wr.next = NULL;
   wr.sg_list = &sge;
   wr.num_sge = 1;
+ 
+  return ibv_post_srq_recv(this->srq_, &wr, &bad);
+}
 
-  int ret = ibv_post_recv(this->qp_, &wr, &bad);
-  if (ret) {
-    std::cout << "ERROR " << ret << std::endl;
-  }
-  //TODO(fischi): Error handling
-  return;
+kym::connection::ReceiveRegion SharedReceiveQueue::GetRegionById(uint64_t id){
+  kym::connection::ReceiveRegion reg = {0};
+  reg.id = id;
+  reg.addr = this->mrs_[id]->addr;
+  reg.length = this->mrs_[id]->length;
+  return reg;
 }
 
 }
