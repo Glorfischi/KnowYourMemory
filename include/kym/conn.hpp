@@ -28,6 +28,7 @@ struct ReceiveRegion {
  */
 class Sender {
   public:
+    virtual ~Sender() = default;
     virtual kym::memory::Region GetMemoryRegion(size_t size) = 0;
     virtual void Free(kym::memory::Region region) = 0;
     virtual int Send(kym::memory::Region region) = 0;
@@ -35,12 +36,16 @@ class Sender {
 
 class Receiver {
   public:
+    virtual ~Receiver() = default;
     virtual ReceiveRegion Receive() = 0;
     virtual void Free(ReceiveRegion region) = 0;
 };
 
 
-class Connection: public Sender, public Receiver {};
+class Connection: public Sender, public Receiver {
+  public:
+    virtual ~Connection() = default;
+};
 
 }
 }

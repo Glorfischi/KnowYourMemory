@@ -47,6 +47,7 @@ cxxopts::ParseResult parse(int argc, char* argv[]) {
 
 
 void test_sender(kym::connection::Sender &sender, int count){
+  std::cout << "Sending" << std::endl;
   kym::memory::Region region = sender.GetMemoryRegion(4);
   for (int i = 0; i < count; ++i){
     //std::cout << i << std::endl;
@@ -58,17 +59,18 @@ void test_sender(kym::connection::Sender &sender, int count){
     }
   }
   sender.Free(region);
+  std::cout << "Sent" << std::endl;
 }
 
 
 void test_receiver(kym::connection::Receiver &receiver, int count){
+  std::cout << "Receiving" << std::endl;
   for (int i = 0; i < count; ++i){
     std::cout << i << std::endl;
-    std::chrono::milliseconds timespan(10); // This is because of a race condition...
-    std::this_thread::sleep_for(timespan);
     kym::connection::ReceiveRegion region = receiver.Receive();
     receiver.Free(region);
   }
+  std::cout << "Received" << std::endl;
 }
 
 void test_allocator(kym::memory::Allocator &allocator){
@@ -90,18 +92,22 @@ int main(int argc, char* argv[]) {
   bool client = flags["client"].as<bool>();  
   bool server = flags["server"].as<bool>();  
 
+  std::cout << "Conn start" << std::endl;
+  kym::connection::Connection *conn;
   if (client) {
-    auto conn = kym::connection::DialSendReceive("172.17.5.101", 9999);
+    conn = kym::connection::DialSendReceive("172.17.5.101", 9999);
 
     std::chrono::milliseconds timespan(1000); // This is because of a race condition...
     std::this_thread::sleep_for(timespan);
 
     test_sender(*conn, 500);
-  } else if (server) {
+  } else  {
     auto ln = kym::connection::ListenSendReceive("172.17.5.101", 9999);
-    test_receiver(*ln->Accept(), 500);
+    conn = ln->Accept();
+    test_receiver(*conn, 500);
   }
 
+  delete conn;
   
   return 0;
 }

@@ -94,10 +94,10 @@ int DialSendReceive(SendReceiveConnection **conn, std::string ip, int port) {
   // Init Sender
   // TODO(fischi): Free
   memory::DumbAllocator *allocator = new memory::DumbAllocator(id->pd);
-  SendReceiveSender sender(id->qp, allocator);
+  SendReceiveSender *sender = new SendReceiveSender(id, allocator);
   
   // Init Receiver
-  SendReceiveReceiver receiver(id);
+  SendReceiveReceiver *receiver = new SendReceiveReceiver(id);
 
   *conn = new SendReceiveConnection(sender, receiver);
   return ret;
@@ -107,7 +107,7 @@ SendReceiveConnection *DialSendReceive(std::string ip, int port) {
   SendReceiveConnection *conn;
   int ret = DialSendReceive(&conn, ip, port);
   if(ret){
-    std::cout << "Errr " << ret << std::endl;
+    std::cout << "ERROR " << ret << std::endl;
   };
   return conn;
 }
@@ -211,10 +211,10 @@ SendReceiveConnection *SendReceiveListener::Accept() {
   // Init Sender
   // TODO(fischi): Free
   memory::DumbAllocator *allocator = new memory::DumbAllocator(conn_id->pd);
-  SendReceiveSender sender(conn_id->qp, allocator);
+  SendReceiveSender *sender = new SendReceiveSender(conn_id, allocator);
   
   // Init Receiver
-  SendReceiveReceiver receiver(conn_id);
+  SendReceiveReceiver *receiver = new SendReceiveReceiver(conn_id);
 
   return new SendReceiveConnection(sender, receiver);
 }
@@ -222,33 +222,39 @@ SendReceiveConnection *SendReceiveListener::Accept() {
 SendReceiveListener::SendReceiveListener(struct rdma_cm_id *id): ln_id_(id){
 }
 
+SendReceiveListener::~SendReceiveListener(){
+  rdma_destroy_ep(this->ln_id_);
+}
+
 
 /*
  * SendReceiveConnection
  */
-SendReceiveConnection::SendReceiveConnection(SendReceiveSender sender, SendReceiveReceiver receiver): sender_(sender), receiver_(receiver){
+SendReceiveConnection::SendReceiveConnection(SendReceiveSender *sender, SendReceiveReceiver *receiver): sender_(sender), receiver_(receiver){
 }
 SendReceiveConnection::~SendReceiveConnection(){
+  delete this->receiver_;
+  delete this->sender_;
 }
 
 kym::memory::Region SendReceiveConnection::GetMemoryRegion(size_t size){
-  return this->sender_.GetMemoryRegion(size);
-};
+  return this->sender_->GetMemoryRegion(size);
+}
 
 int SendReceiveConnection::Send(kym::memory::Region region){
-  return this->sender_.Send(region);
+  return this->sender_->Send(region);
 }
 
 void SendReceiveConnection::Free(kym::memory::Region region){
-  return this->sender_.Free(region);
+  return this->sender_->Free(region);
 }
 
 kym::connection::ReceiveRegion SendReceiveConnection::Receive() {
-  return this->receiver_.Receive();
+  return this->receiver_->Receive();
 }
 
 void SendReceiveConnection::Free(kym::connection::ReceiveRegion region){
-  return this->receiver_.Free(region);
+  return this->receiver_->Free(region);
 }
 
 
@@ -257,7 +263,10 @@ void SendReceiveConnection::Free(kym::connection::ReceiveRegion region){
  * SendReceiveSender
  */
 
-SendReceiveSender::SendReceiveSender(struct ibv_qp *qp, kym::memory::Allocator *allocator): qp_(qp), allocator_(allocator){
+SendReceiveSender::SendReceiveSender(struct rdma_cm_id * id, kym::memory::Allocator *allocator): id_(id), qp_(id->qp), allocator_(allocator){
+}
+SendReceiveSender::~SendReceiveSender(){
+  rdma_destroy_ep(this->id_);
 }
 
 kym::memory::Region SendReceiveSender::GetMemoryRegion(size_t size){
@@ -266,6 +275,8 @@ kym::memory::Region SendReceiveSender::GetMemoryRegion(size_t size){
 };
 
 void SendReceiveSender::Free(kym::memory::Region region){
+  assert(this->allocator_ != NULL);
+  return this->allocator_->Free(region);
 }
 
 int SendReceiveSender::Send(kym::memory::Region region){
@@ -322,6 +333,10 @@ SendReceiveReceiver::SendReceiveReceiver(struct rdma_cm_id * id): id_(id), qp_(i
     }
     this->mrs_.push_back(mr);
   }
+}
+
+SendReceiveReceiver::~SendReceiveReceiver(){
+  rdma_destroy_ep(this->id_);
 }
 
 kym::connection::ReceiveRegion SendReceiveReceiver::Receive() {

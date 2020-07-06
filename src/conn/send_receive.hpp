@@ -30,11 +30,13 @@ namespace connection {
  */
 class SendReceiveSender : public Sender {
   public:
-    SendReceiveSender(struct ibv_qp *qp, kym::memory::Allocator *allocator);
+    SendReceiveSender(struct rdma_cm_id *id, kym::memory::Allocator *allocator);
+    ~SendReceiveSender();
     kym::memory::Region GetMemoryRegion(size_t size);
     void Free(kym::memory::Region region);
     int Send(kym::memory::Region region);
   private:
+    struct rdma_cm_id *id_;
     struct ibv_qp *qp_;
     kym::memory::Allocator *allocator_;
 };
@@ -42,6 +44,7 @@ class SendReceiveSender : public Sender {
 class SendReceiveReceiver : public Receiver {
   public:
     SendReceiveReceiver(struct rdma_cm_id *id);
+    ~SendReceiveReceiver();
     kym::connection::ReceiveRegion Receive();
     void Free(kym::connection::ReceiveRegion);
   private:
@@ -55,7 +58,7 @@ class SendReceiveReceiver : public Receiver {
 
 class SendReceiveConnection : public Connection {
   public:
-    SendReceiveConnection(SendReceiveSender sender, SendReceiveReceiver receiver);
+    SendReceiveConnection(SendReceiveSender *sender, SendReceiveReceiver *receiver);
     ~SendReceiveConnection();
 
     kym::memory::Region GetMemoryRegion(size_t size);
@@ -65,8 +68,8 @@ class SendReceiveConnection : public Connection {
     kym::connection::ReceiveRegion Receive();
     void Free(kym::connection::ReceiveRegion);
   private:
-    SendReceiveSender sender_;
-    SendReceiveReceiver receiver_;
+    SendReceiveSender *sender_;
+    SendReceiveReceiver *receiver_;
 };
 
 int DialSendReceive(SendReceiveConnection **, std::string ip, int port);
@@ -75,6 +78,7 @@ SendReceiveConnection *DialSendReceive(std::string ip, int port);
 class SendReceiveListener {
   public:
     SendReceiveListener(struct rdma_cm_id *id);
+    ~SendReceiveListener();
     SendReceiveConnection *Accept();
   private:
     struct rdma_cm_id *ln_id_;
