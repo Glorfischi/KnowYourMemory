@@ -14,7 +14,7 @@ kym::memory::DumbAllocator::DumbAllocator(struct ibv_pd *pd): pd_(pd){
 
 kym::memory::Region kym::memory::DumbAllocator::Alloc(size_t size){
   void *buf = malloc(size);
-  struct ibv_mr * mr = ibv_reg_mr(this->pd_, buf, size, IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);  
+  struct ibv_mr * mr = ibv_reg_mr(this->pd_, buf, size, IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ);  
   kym::memory::Region reg = {0};
   reg.addr = buf;
   reg.length = size;

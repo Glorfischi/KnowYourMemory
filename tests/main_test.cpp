@@ -16,6 +16,7 @@
 #include "mm/dumb_allocator.hpp"
 #include "conn/send_receive.hpp"
 #include "conn/shared_receive.hpp"
+#include "conn/read.hpp"
 
 cxxopts::ParseResult parse(int argc, char* argv[]) {
   cxxopts::Options options(argv[0], "Test Binary");
@@ -59,6 +60,8 @@ void test_sender(kym::connection::Sender &sender, int count){
       std::cout << "ERROR " << err << std::endl;
       perror("err");
     }
+    //std::chrono::milliseconds timespan(1); // This is because of a race condition...
+    //std::this_thread::sleep_for(timespan);
   }
   auto t2 = std::chrono::high_resolution_clock::now();
   auto duration = std::chrono::duration_cast<std::chrono::microseconds>( t2 - t1 ).count();
@@ -69,12 +72,13 @@ void test_sender(kym::connection::Sender &sender, int count){
 
 void test_receiver(kym::connection::Receiver &receiver, int count){
   kym::connection::ReceiveRegion region = receiver.Receive();
+  // std::cout << *(int *) region.addr << std::endl;
   receiver.Free(region);
   auto t1 = std::chrono::high_resolution_clock::now();
   for (int i = 1; i < count; ++i){
     kym::connection::ReceiveRegion region = receiver.Receive();
+    // std::cout << *(int *) region.addr << std::endl;
     receiver.Free(region);
-    //std::cout << *(int *) region.addr << std::endl;
   }
   auto t2 = std::chrono::high_resolution_clock::now();
   auto duration = std::chrono::duration_cast<std::chrono::microseconds>( t2 - t1 ).count();
@@ -99,7 +103,7 @@ int main(int argc, char* argv[]) {
   std::string ip = flags["address"].as<std::string>();  
   bool client = flags["client"].as<bool>();  
 
-  /*std::cout << "#### Testing SendReceive 1:1 ####" << std::endl;
+  std::cout << "#### Testing SendReceive 1:1 ####" << std::endl;
   kym::connection::Connection *conn;
   if (client) {
     conn = kym::connection::DialSendReceive("172.17.5.101", 9999);
@@ -126,8 +130,21 @@ int main(int argc, char* argv[]) {
     test_receiver(*conn, 5000);
   }
   std::cout << "#################################" << std::endl;
+  std::cout << "#### Testing Read 1:1 ####" << std::endl;
+  if (client) {
+    conn = kym::connection::DialRead("172.17.5.101", 9996);
 
-  // TODO(fischi) Fails at 5th accept?
+    std::chrono::milliseconds timespan(1000); // This is because of a race condition...
+    std::this_thread::sleep_for(timespan);
+    test_sender(*conn, 500);
+    std::this_thread::sleep_for(timespan);
+  } else  {
+    auto ln = kym::connection::ListenRead("172.17.5.101", 9996);
+    conn = ln->Accept();
+    test_receiver(*conn, 500);
+  }
+  std::cout << "##########################" << std::endl;
+  /*// TODO(fischi) Fails at 5th accept?
   std::cout << "#### Testing SharedReceive 5:5 ####" << std::endl;
   if (client) {
     for(int i = 0; i<4; i++){
@@ -145,7 +162,7 @@ int main(int argc, char* argv[]) {
     }
   }
   std::cout << "#################################" << std::endl;*/
-  std::cout << "#### Testing SharedReceive interleaf ####" << std::endl;
+  /*std::cout << "#### Testing SharedReceive interleaf ####" << std::endl;
   if (client) {
     auto conn1 = kym::connection::DialSharedReceive("172.17.5.101", 9997);
     auto conn2 = kym::connection::DialSharedReceive("172.17.5.101", 9997);
@@ -184,13 +201,13 @@ int main(int argc, char* argv[]) {
     std::cout << *(int *) region.addr << std::endl;
 
   }
-  std::cout << "#########################################" << std::endl;
+  std::cout << "#########################################" << std::endl;*/
 
 
 
 
 
-  //delete conn;
+  delete conn;
   
   return 0;
 }
