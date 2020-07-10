@@ -4,3 +4,17 @@ compile_commands.json
 
 *.o
 bin/
+
+
+# TeX stuff
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.pdf
+*.run.xml
+_minted-*
+

@@ -1,0 +1,91 @@
+\documentclass[a4paper,twoside]{article} % for a report (default)
+
+\title{Know Your Memory: Development Diary} 
+\author{Fabian Fischer}
+
+\usepackage{color}
+\usepackage{minted} % for minted source code highlighting
+\setminted{style=borland}
+\newminted{c}{autogobble,linenos} % shortcut, allows begin{ccode}
+\newmintinline{c}{} % shortcut, allows \cinline
+
+\usepackage{biblatex} % bibliography
+% \addbibresource{diary.bib}
+
+\usepackage{parskip} % avoid leading indent, add vertical space between pars
+\usepackage[T1]{fontenc}
+\usepackage[sfdefault,book]{FiraSans} %% option 'sfdefault' activates Fira Sans
+                                      %% as the default text font
+\renewcommand*\oldstylenums[1]{{\firaoldstyle #1}}
+\usepackage{sourcecodepro} % better source code
+\usepackage[font=sf]{caption} % also use sans serif in caption
+\usepackage{tikz} % for beautiful diagrams
+
+% arcane magic to change line number style for minted
+\renewcommand{\theFancyVerbLine}{\sffamily\textcolor[rgb]{0.4,0.4,0.4}{\scriptsize\oldstylenums{\arabic{FancyVerbLine}}}}
+
+% Basic note command for TODOs etc
+\newcommand{\note}[1]{[\textcolor{red}{\textit{#1}}]}
+
+\newcommand{\entry}[3]{\section*{#3}#1  #2}
+
+\begin{document}
+% \maketitle
+
+% \tableofcontents
+% \listoffigures
+% \listoftables
+% \listoflistings
+
+\entry{2020-07-07}{d7ac527afe2f6cbbb529c0c300b8966dc72debc5}{Inital C Design}
+
+\subsection*{Interface Design}
+This week I switched to C++...
+
+\subsubsection*{SendReceiveConnection}
+\subsubsection*{SharedReceive}
+
+
+* SRQ
+  - The `recv\_cq` are different and the completion event seems to only be posed to the correct qp
+\subsubsection*{ReadConnection}
+
+\subsection{RDMA Retry}
+* RNR retry
+  - The receiving side can set the `rnr\_rety\_count`. This is the maximum amount of `receiver not ready` errors that are generated
+when send request arrives before a buffer has been posted to receive the incoming data. 
+  - 8 Seems to be infinite
+  - If this is execeeded connection is dropped. QP moves to error state.
+  - Can we Recover? Signal Backpressure? Intercept error? Timout if infinite retries is enabled?
+
+
+
+* Listener can only except 4 times? Did not investigate, any ideas?
+
+* Encoutered soft lockups of kernel. Seems to happen wehn some qp or receive queue NULL. Bug? Intendet behaviour?
+
+* WriteConnetion works, but does not quite fit in current API. We don't know when we can reuse the send buffer. 
+  - How do we notice when it was read?. Could enable write and write to it from other side? Overhead?
+
+* Interface:
+  - Send:
+    - GetMemoryRegion: Gives you a region to write to
+    - Send(region): Sends the region
+      - Could add non blocking send or send with multiple regions
+    - Free(region): Returns region
+  - Receive:
+    - Receive: Gives you the next incomming message in a region
+      - Could add receiveing multiple regions at once?
+    - Free(region): Returns regions. In case of sending reposts it
+  - Allocator:
+    - Simple Allocate, Free. Right now very very basic
+
+* Test:
+  - Receiver calls receive and free in a loop
+  - Sender gets on region and sends it in a loop
+
+
+
+
+
+\end{document}
