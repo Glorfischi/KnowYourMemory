@@ -59,9 +59,9 @@ class SharedReceiveConnection : public Connection {
     SharedReceiveConnection(SendReceiveSender *sender, SharedReceiver *receiver);
     ~SharedReceiveConnection();
 
-    kym::memory::Region GetMemoryRegion(size_t size);
-    int Send(kym::memory::Region region);
-    void Free(kym::memory::Region region);
+    SendRegion GetMemoryRegion(size_t size);
+    int Send(SendRegion region);
+    void Free(SendRegion region);
 
     kym::connection::ReceiveRegion Receive();
     void Free(kym::connection::ReceiveRegion);

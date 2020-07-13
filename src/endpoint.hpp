@@ -12,6 +12,7 @@
 
 #include <memory> // For smart pointers
 
+#include <rdma/rdma_cma.h>
 #include <infiniband/verbs.h> 
 
 #include "error.hpp"
@@ -34,7 +35,7 @@ struct Options {
 
 class Endpoint {
   public:
-    friend class Listener;
+    Endpoint(rdma_cm_id*);
 
     ibv_pd GetPd();
 
@@ -42,27 +43,26 @@ class Endpoint {
     Status PostSend(uint64_t ctx, uint32_t lkey, void *addr, size_t size);
     Status PostRead(uint64_t ctx, uint32_t lkey, void *addr, size_t size);
     Status PostWrite(uint64_t ctx, uint32_t lkey, void *addr, size_t size);
-    StatusOr<ibv_wc> PollSendCq();
+    StatusOr<struct ibv_wc> PollSendCq();
 
     Status PostRecvRaw(struct ibv_recv_wr *wr, struct ibv_recv_wr **bad_wr);
     Status PostRecv(uint64_t ctx, uint32_t lkey, void *addr, size_t size);
-    StatusOr<ibv_wc> PollRecvCq();
-
+    StatusOr<struct ibv_wc> PollRecvCq();
   private:
-    Endpoint();
+    rdma_cm_id *id_;
 };
 
 class Listener {
   public:
+    Listener(rdma_cm_id*);
+
     StatusOr<std::unique_ptr<Endpoint>> Accept(Options opts);
   private:
-    Listener();
+    rdma_cm_id *id_;
 };
 
 StatusOr<std::unique_ptr<Endpoint>> Dial(std::string ip, int port, Options opts);
-
 StatusOr<std::unique_ptr<Listener>> Listen(std::string ip, int port);
-StatusOr<std::unique_ptr<Listener>> Listen(std::string ip, int port, Options opts);
 
 }
 }

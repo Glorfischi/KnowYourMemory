@@ -15,6 +15,7 @@
 #include <infiniband/verbs.h>
 #include <vector>
 
+#include "endpoint.hpp"
 #include "kym/conn.hpp"
 #include "kym/mm.hpp"
 #include "mm/dumb_allocator.hpp"
@@ -24,6 +25,21 @@
 namespace kym {
 namespace connection {
 
+endpoint::Options defaultOptions = {
+  .qp_attr = {
+    .cap.max_send_wr = 1,
+    .cap.max_recv_wr = 10,
+    .cap.max_send_sge = 1,
+    .cap.max_recv_sge = 1,
+    .cap.max_inline_data = 0,
+    .qp_type = IBV_QPT_RC,
+  },
+  .responder_resources = 0,
+  .initiator_depth =  0,
+  .retry_count = 8,  
+  .rnr_retry_count = 8, 
+};
+ 
 /*
  * Client Dial
  */

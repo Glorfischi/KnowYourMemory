@@ -13,14 +13,18 @@
 #include <stddef.h>
 #include <string>
 #include <vector>
+#include <memory> // For smart pointers
 
 
 #include <rdma/rdma_cma.h>
 #include <rdma/rdma_verbs.h>
 #include <infiniband/verbs.h>
 
-#include "kym/conn.hpp"
-#include "kym/mm.hpp"
+#include "error.hpp"
+#include "endpoint.hpp"
+
+#include "conn.hpp"
+#include "mm.hpp"
 
 namespace kym {
 namespace connection {
@@ -30,62 +34,58 @@ namespace connection {
  */
 class SendReceiveSender : public Sender {
   public:
-    SendReceiveSender(struct rdma_cm_id *id, kym::memory::Allocator *allocator);
-    ~SendReceiveSender();
-    kym::memory::Region GetMemoryRegion(size_t size);
-    void Free(kym::memory::Region region);
-    int Send(kym::memory::Region region);
+    SendReceiveSender(std::shared_ptr<endpoint::Endpoint> ep, std::shared_ptr<kym::memory::Allocator> allocator);
+    ~SendReceiveSender() = default;
+
+    StatusOr<SendRegion> GetMemoryRegion(size_t size);
+    Status Free(SendRegion region);
+    Status Send(SendRegion region);
   private:
-    struct rdma_cm_id *id_;
-    struct ibv_qp *qp_;
-    kym::memory::Allocator *allocator_;
+    std::shared_ptr<memory::Allocator> allocator_;
+    std::shared_ptr<endpoint::Endpoint> ep_;
 };
 
 class SendReceiveReceiver : public Receiver {
   public:
-    SendReceiveReceiver(struct rdma_cm_id *id);
-    ~SendReceiveReceiver();
-    kym::connection::ReceiveRegion Receive();
-    void Free(kym::connection::ReceiveRegion);
+    SendReceiveReceiver(std::shared_ptr<endpoint::Endpoint> ep);
+    ~SendReceiveReceiver() = default;
+
+    StatusOr<ReceiveRegion> Receive();
+    Status Free(kym::connection::ReceiveRegion);
   private:
-    struct rdma_cm_id *id_;
-    struct ibv_qp *qp_;
-
-    std::vector<struct ibv_mr *> mrs_;
-
-    // ToDo: Some kind of struct to manage MRs
+    std::shared_ptr<endpoint::Endpoint> ep_;
+    std::vector<struct ibv_mr *> mrs_; // TODO(Fischi) Should we do this smarter?
 };
 
 class SendReceiveConnection : public Connection {
   public:
-    SendReceiveConnection(SendReceiveSender *sender, SendReceiveReceiver *receiver);
-    ~SendReceiveConnection();
+    SendReceiveConnection(std::unique_ptr<SendReceiveSender> sender, std::unique_ptr<SendReceiveReceiver> receiver);
+    ~SendReceiveConnection() = default;
 
-    kym::memory::Region GetMemoryRegion(size_t size);
-    int Send(kym::memory::Region region);
-    void Free(kym::memory::Region region);
+    StatusOr<SendRegion> GetMemoryRegion(size_t size);
+    Status Send(SendRegion region);
+    Status Free(SendRegion region);
 
-    kym::connection::ReceiveRegion Receive();
-    void Free(kym::connection::ReceiveRegion);
+    StatusOr<ReceiveRegion> Receive();
+    Status Free(ReceiveRegion);
   private:
-    SendReceiveSender *sender_;
-    SendReceiveReceiver *receiver_;
+    std::unique_ptr<SendReceiveSender> sender_;
+    std::unique_ptr<SendReceiveReceiver> receiver_;
 };
 
-int DialSendReceive(SendReceiveConnection **, std::string ip, int port);
-SendReceiveConnection *DialSendReceive(std::string ip, int port);
+StatusOr<std::unique_ptr<SendReceiveConnection>> DialSendReceive(std::string ip, int port);
 
 class SendReceiveListener {
   public:
-    SendReceiveListener(struct rdma_cm_id *id);
-    ~SendReceiveListener();
-    SendReceiveConnection *Accept();
+    SendReceiveListener(std::unique_ptr<endpoint::Listener> listener);
+    ~SendReceiveListener() = default;
+
+    StatusOr<std::unique_ptr<SendReceiveConnection>> Accept();
   private:
-    struct rdma_cm_id *ln_id_;
+    std::unique_ptr<endpoint::Listener> listener_;
 };
 
-int ListenSendReceive(SendReceiveListener **,std::string ip, int port);
-SendReceiveListener *ListenSendReceive(std::string ip, int port);
+StatusOr<std::unique_ptr<SendReceiveListener>> ListenSendReceive(std::string ip, int port);
 
 
 

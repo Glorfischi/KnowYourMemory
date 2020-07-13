@@ -12,6 +12,9 @@ enum class StatusCode {
 
   Unknown = 1,
   NotImplemented = 2,
+
+  // User error
+  InvalidArgument = 10,
 };
 
 class Status {
@@ -44,9 +47,9 @@ class StatusOr {
 
     StatusOr(Status status) : status_(std::move(status)) {}
 
-    StatusOr(const T value) : value_(std::move(value))  {}
+    StatusOr(T value) : value_(std::move(value))  {}
 
-    T value () const { return value_; }
+    T value () { return std::move(value_); }
 
     bool ok() const { return status_.ok(); }
     explicit operator bool() const { return status_.ok(); }

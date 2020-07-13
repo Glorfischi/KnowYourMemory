@@ -15,7 +15,8 @@
 
 #include <infiniband/verbs.h>
 
-#include "kym/mm.hpp"
+#include "error.hpp"
+#include "mm.hpp"
 
 namespace kym {
 namespace memory {
@@ -23,18 +24,16 @@ namespace memory {
 
 class DumbAllocator : public Allocator {
   public:
-    DumbAllocator(struct ibv_pd *pd);
+    DumbAllocator(struct ibv_pd pd);
 
-    kym::memory::Region Alloc(size_t size);
+    StatusOr<Region> Alloc(size_t size);
+    Status Free(kym::memory::Region region);
 
-    void Free(kym::memory::Region region);
-
-    struct ibv_pd *pd_;
   private:
+    struct ibv_pd pd_;
 };
 
 
 }
 }
 #endif // KNY_MM_DUMB_ALLOCATOR_HPP_
-
