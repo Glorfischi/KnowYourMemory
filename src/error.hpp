@@ -8,26 +8,27 @@ namespace kym {
 
 enum class StatusCode {
   /// Not an error; returned on success.
-  kOk = 0,
+  Ok = 0,
 
-  kUnknown = 1,
+  Unknown = 1,
+  NotImplemented = 2,
 };
 
 class Status {
  public:
   Status() = default;
 
-  explicit Status(StatusCode status_code, std::string message)
-      : code_(status_code), message_(std::move(message)) {}
+  explicit Status(StatusCode status_code) : code_(status_code) {}
+  explicit Status(StatusCode status_code, std::string message) : code_(status_code), message_(std::move(message)) {}
 
-  bool ok() const { return code_ == StatusCode::kOk; }
+  bool ok() const { return code_ == StatusCode::Ok; }
   explicit operator bool() const { return ok(); }
 
   StatusCode code() const { return code_; }
   std::string const& message() const { return message_; }
 
  private:
-  StatusCode code_{StatusCode::kOk};
+  StatusCode code_{StatusCode::Ok};
   std::string message_;
 };
 
@@ -39,7 +40,7 @@ inline std::ostream& operator<<(std::ostream& os, Status const& status) {
 template<typename T>
 class StatusOr {
   public:
-    StatusOr() : StatusOr(Status(StatusCode::kUnknown, "default")) {}
+    StatusOr() : StatusOr(Status(StatusCode::Unknown, "default")) {}
 
     StatusOr(Status status) : status_(std::move(status)) {}
 
