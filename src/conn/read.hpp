@@ -14,14 +14,16 @@
 #include <stddef.h>
 #include <string>
 #include <vector>
+#include <memory>
 
 
 #include <rdma/rdma_cma.h>
 #include <rdma/rdma_verbs.h>
 #include <infiniband/verbs.h>
 
-#include "kym/conn.hpp"
-#include "kym/mm.hpp"
+#include "conn.hpp"
+#include "mm.hpp"
+#include "endpoint.hpp"
 
 namespace kym {
 namespace connection {
@@ -38,63 +40,66 @@ struct ReadRequest {
  */
 class ReadSender : public Sender {
   public:
-    ReadSender(struct rdma_cm_id *id, kym::memory::Allocator *allocator);
-    ~ReadSender();
-    kym::memory::Region GetMemoryRegion(size_t size);
-    void Free(kym::memory::Region region);
-    int Send(kym::memory::Region region);
+    ReadSender(std::shared_ptr<endpoint::Endpoint>, std::shared_ptr<memory::Allocator>);
+    ~ReadSender() = default;
+
+    StatusOr<SendRegion> GetMemoryRegion(size_t size);
+    Status Free(SendRegion region);
+    Status Send(SendRegion region);
   private:
-    struct rdma_cm_id *id_;
-    struct ibv_qp *qp_;
-    kym::memory::Allocator *allocator_;
+    std::shared_ptr<memory::Allocator> allocator_;
+    std::shared_ptr<endpoint::Endpoint> ep_;
 };
 
 class ReadReceiver : public Receiver {
   public:
-    ReadReceiver(struct rdma_cm_id *id, kym::memory::Allocator *allocator);
+    ReadReceiver(std::shared_ptr<endpoint::Endpoint>, std::shared_ptr<memory::Allocator>);
     ~ReadReceiver();
-    kym::connection::ReceiveRegion Receive();
-    void Free(kym::connection::ReceiveRegion);
+
+    StatusOr<ReceiveRegion> Receive();
+    Status Free(kym::connection::ReceiveRegion);
   private:
-    struct rdma_cm_id *id_;
-    struct ibv_qp *qp_;
+    std::shared_ptr<endpoint::Endpoint> ep_;
+    std::shared_ptr<memory::Allocator> allocator_;
 
     std::vector<struct ibv_mr *> mrs_;
-
-    kym::memory::Allocator *allocator_;
-    std::vector<kym::memory::Region> recv_regions_;
 };
 
 class ReadConnection : public Connection {
   public:
-    ReadConnection(ReadSender *sender, ReadReceiver *receiver);
-    ~ReadConnection();
+    ReadConnection(std::shared_ptr<endpoint::Endpoint>);
+    ~ReadConnection() = default;
 
-    kym::memory::Region GetMemoryRegion(size_t size);
-    int Send(kym::memory::Region region);
-    void Free(kym::memory::Region region);
+    Status Close();
 
-    kym::connection::ReceiveRegion Receive();
-    void Free(kym::connection::ReceiveRegion);
+    StatusOr<SendRegion> GetMemoryRegion(size_t size);
+    Status Send(SendRegion region);
+    Status Free(SendRegion region);
+
+    StatusOr<ReceiveRegion> Receive();
+    Status Free(ReceiveRegion);
   private:
-    ReadSender *sender_;
-    ReadReceiver *receiver_;
+    std::shared_ptr<endpoint::Endpoint> ep_;
+
+    std::unique_ptr<ReadSender> sender_;
+    std::unique_ptr<ReadReceiver> receiver_;
 };
 
-int DialRead(ReadConnection **, std::string ip, int port);
-ReadConnection *DialRead(std::string ip, int port);
+StatusOr<std::unique_ptr<ReadConnection>> DialRead(std::string ip, int port);
 
 class ReadListener {
   public:
-    ReadListener(struct rdma_cm_id *id);
-    ~ReadListener();
-    ReadConnection *Accept();
+    ReadListener(std::unique_ptr<endpoint::Listener>);
+    ~ReadListener() = default;
+
+    Status Close();
+
+    StatusOr<std::unique_ptr<ReadConnection>> Accept();
   private:
-    struct rdma_cm_id *ln_id_;
+    std::unique_ptr<endpoint::Listener> listener_;
 };
 
-int ListenRead(ReadListener **,std::string ip, int port);
-ReadListener *ListenRead(std::string ip, int port);
+StatusOr<std::unique_ptr<ReadListener>> ListenRead(std::string ip, int port);
 
 }
 }

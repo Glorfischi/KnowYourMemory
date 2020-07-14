@@ -17,7 +17,7 @@
 #include "mm/dumb_allocator.hpp"
 #include "conn/send_receive.hpp"
 #include "conn/shared_receive.hpp"
-//#include "conn/read.hpp"
+#include "conn/read.hpp"
 
 cxxopts::ParseResult parse(int argc, char* argv[]) {
   cxxopts::Options options(argv[0], "Test Binary");
@@ -182,22 +182,38 @@ int main(int argc, char* argv[]) {
     test_receiver(*conn, 5000);
   }
   std::cout << "#################################" << std::endl;
-  /*std::cout << "#### Testing Read 1:1 ####" << std::endl;
+  std::cout << "#### Testing Read 1:1 ####" << std::endl;
   if (client) {
-    conn = kym::connection::DialRead("172.17.5.101", 9996);
+    auto connStat = kym::connection::DialRead("172.17.5.101", 9996);
+    if (!connStat.ok()){
+      std::cerr << "Error accepting" << connStat.status().message() << std::endl;
+      return 1;
+    }
+    auto conn = connStat.value();
 
     std::chrono::milliseconds timespan(1000); // This is because of a race condition...
     std::this_thread::sleep_for(timespan);
     test_sender(*conn, 500);
     std::this_thread::sleep_for(timespan);
   } else  {
-    auto ln = kym::connection::ListenRead("172.17.5.101", 9996);
-    conn = ln->Accept();
+    auto lnStat = kym::connection::ListenRead("172.17.5.101", 9996);
+    if (!lnStat.ok()){
+      std::cerr << "Error listening" << lnStat.status().message() << std::endl;
+      return 1;
+    }
+    auto ln = lnStat.value();
+
+    auto connStat = ln->Accept();
+    if (!connStat.ok()){
+      std::cerr << "Error accepting" << connStat.status().message() << std::endl;
+      return 1;
+    }
+    auto conn = connStat.value();
     test_receiver(*conn, 500);
   }
   std::cout << "##########################" << std::endl;
   // TODO(fischi) Fails at 5th accept?
-  std::cout << "#### Testing SharedReceive 5:5 ####" << std::endl;
+  /*std::cout << "#### Testing SharedReceive 5:5 ####" << std::endl;
   if (client) {
     for(int i = 0; i<4; i++){
       conn = kym::connection::DialSharedReceive("172.17.5.101", 9997);

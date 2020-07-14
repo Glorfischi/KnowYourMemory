@@ -10,10 +10,12 @@
 #ifndef KNY_ENDPOINT_HPP
 #define KNY_ENDPOINT_HPP
 
+#include <bits/stdint-uintn.h>
 #include <memory> // For smart pointers
 
 #include <rdma/rdma_cma.h>
 #include <infiniband/verbs.h> 
+#include <rdma/rdma_verbs.h>
 
 #include "error.hpp"
 
@@ -44,7 +46,8 @@ class Endpoint {
 
     Status PostSendRaw(struct ibv_send_wr *wr, struct ibv_send_wr **bad_wr);
     Status PostSend(uint64_t ctx, uint32_t lkey, void *addr, size_t size);
-    Status PostRead(uint64_t ctx, uint32_t lkey, void *addr, size_t size);
+    Status PostInline(uint64_t ctx, void *addr, size_t size);
+    Status PostRead(uint64_t ctx, uint32_t lkey, void *addr, size_t size, uint64_t remote_addr, uint32_t rkey);
     Status PostWrite(uint64_t ctx, uint32_t lkey, void *addr, size_t size);
     StatusOr<struct ibv_wc> PollSendCq();
 

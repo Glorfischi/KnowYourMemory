@@ -140,7 +140,6 @@ SendReceiveSender::SendReceiveSender(std::shared_ptr<endpoint::Endpoint> ep,
 
 
 StatusOr<SendRegion> SendReceiveSender::GetMemoryRegion(size_t size){
-  assert(this->allocator_ != nullptr);
   auto mrStatus =  this->allocator_->Alloc(size);
   if (!mrStatus.ok()){
     return mrStatus.status();
@@ -155,7 +154,6 @@ StatusOr<SendRegion> SendReceiveSender::GetMemoryRegion(size_t size){
 };
 
 Status SendReceiveSender::Free(SendRegion region){
-  assert(this->allocator_ != NULL);
   memory::Region mr = memory::Region();
   mr.addr = region.addr;
   mr.length = region.length;

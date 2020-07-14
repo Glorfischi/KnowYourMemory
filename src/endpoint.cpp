@@ -6,6 +6,7 @@
 
 #include "endpoint.hpp"
 
+#include <bits/stdint-uintn.h>
 #include <cstdio>
 #include <memory> // For smart pointers
 
@@ -38,8 +39,13 @@ ibv_pd Endpoint::GetPd(){
   return *this->id_->pd;
 }
 
-Status Endpoint::PostSendRaw(struct ibv_send_wr *wr, struct ibv_send_wr **bad_wr){
-  return Status(kym::StatusCode::NotImplemented);
+Status Endpoint::PostSendRaw(struct ibv_send_wr *wr , struct ibv_send_wr **bad_wr){
+  int ret = ibv_post_send(this->id_->qp, wr, bad_wr);
+  if (ret) {
+    // TODO(Fischi) Map error codes
+    return Status(StatusCode::Unknown, "error sending");
+  }
+  return Status();
 }
 
 Status Endpoint::PostSend(uint64_t ctx, uint32_t lkey, void *addr, size_t size){
@@ -56,16 +62,40 @@ Status Endpoint::PostSend(uint64_t ctx, uint32_t lkey, void *addr, size_t size){
   wr.opcode = IBV_WR_SEND;
 
   wr.send_flags = IBV_SEND_SIGNALED;  
-
-  int ret = ibv_post_send(this->id_->qp, &wr, &bad);
-  if (ret) {
-    // TODO(Fischi) Map error codes
-    return Status(StatusCode::Unknown, "error sending");
-  }
-  return Status();
+  return this->PostSendRaw( &wr, &bad);
 }
-Status Endpoint::PostRead(uint64_t ctx, uint32_t lkey, void *addr, size_t size){
-  return Status(kym::StatusCode::NotImplemented);
+Status Endpoint::PostInline(uint64_t ctx, void *addr, size_t size){
+  struct ibv_sge sge;
+  sge.addr = (uintptr_t)addr;
+  sge.length = size;
+
+  struct ibv_send_wr wr, *bad;
+  wr.wr_id = ctx;
+  wr.next = NULL;
+  wr.sg_list = &sge;
+  wr.num_sge = 1;
+  wr.opcode = IBV_WR_SEND;
+
+  wr.send_flags = IBV_SEND_SIGNALED | IBV_SEND_INLINE;  
+  return this->PostSendRaw( &wr, &bad);
+}
+Status Endpoint::PostRead(uint64_t ctx, uint32_t lkey, void *addr, size_t size, uint64_t remote_addr, uint32_t rkey){
+  struct ibv_sge sge;
+  sge.addr = (uintptr_t)addr;
+  sge.length = size;
+  sge.lkey =  lkey;
+  struct ibv_send_wr wr, *bad;
+
+  wr.wr_id = 0;
+  wr.next = NULL;
+  wr.sg_list = &sge;
+  wr.num_sge = 1;
+  wr.opcode = IBV_WR_RDMA_READ;
+  wr.send_flags = IBV_SEND_SIGNALED;  
+  wr.wr.rdma.remote_addr = remote_addr;
+  wr.wr.rdma.rkey = rkey;
+
+  return this->PostSendRaw( &wr, &bad);
 }
 Status Endpoint::PostWrite(uint64_t ctx, uint32_t lkey, void *addr, size_t size){
   return Status(kym::StatusCode::NotImplemented);
