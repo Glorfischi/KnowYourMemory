@@ -48,7 +48,7 @@ class Endpoint {
     Status PostSend(uint64_t ctx, uint32_t lkey, void *addr, size_t size);
     Status PostInline(uint64_t ctx, void *addr, size_t size);
     Status PostRead(uint64_t ctx, uint32_t lkey, void *addr, size_t size, uint64_t remote_addr, uint32_t rkey);
-    Status PostWrite(uint64_t ctx, uint32_t lkey, void *addr, size_t size);
+    Status PostWrite(uint64_t ctx, uint32_t lkey, void *addr, size_t size, uint64_t remote_addr, uint32_t rkey);
     StatusOr<struct ibv_wc> PollSendCq();
 
     Status PostRecvRaw(struct ibv_recv_wr *wr, struct ibv_recv_wr **bad_wr);

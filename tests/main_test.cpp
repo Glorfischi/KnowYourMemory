@@ -89,6 +89,7 @@ void test_receiver(kym::connection::Receiver &receiver, int count){
       std::cerr << "Reading failed! " << reg.status().message() << std::endl;
       return;
     }
+    //std::cout << *(int *)reg.value().addr << std::endl;
     receiver.Free(reg.value());
   }
   auto t2 = std::chrono::high_resolution_clock::now();
@@ -186,7 +187,7 @@ int main(int argc, char* argv[]) {
   if (client) {
     auto connStat = kym::connection::DialRead("172.17.5.101", 9996);
     if (!connStat.ok()){
-      std::cerr << "Error accepting" << connStat.status().message() << std::endl;
+      std::cerr << "Error dialing " << connStat.status().message() << std::endl;
       return 1;
     }
     auto conn = connStat.value();

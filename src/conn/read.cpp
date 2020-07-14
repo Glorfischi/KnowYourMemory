@@ -13,11 +13,15 @@
 #include <ostream>
 #include <string>
 
+#include <thread>
+#include <chrono>
+
 #include <rdma/rdma_cma.h>
 #include <rdma/rdma_verbs.h>
 #include <infiniband/verbs.h>
 
 #include "conn.hpp"
+#include "error.hpp"
 #include "mm.hpp"
 #include "endpoint.hpp"
 
@@ -40,7 +44,7 @@ endpoint::Options read_connection_default_opts = {
   },
   .responder_resources = 5,
   .initiator_depth =  5,
-  .retry_count = 8,  
+  .retry_count = 5,  
   .rnr_retry_count = 8, 
 };
 
@@ -55,13 +59,58 @@ StatusOr<std::unique_ptr<ReadConnection>> DialRead(std::string ip, int port){
     port = 18515;
   }
 
-  auto epStatus = kym::endpoint::Dial(ip, port, read_connection_default_opts);
-  if (!epStatus.ok()){
-    return epStatus.status();
+  auto ep_status = kym::endpoint::Dial(ip, port, read_connection_default_opts);
+  if (!ep_status.ok()){
+    return ep_status.status();
   }
-  std::shared_ptr<endpoint::Endpoint> ep = epStatus.value();
-  // TODO(fischi): Negotiate ack buffer
-  auto conn = std::make_unique<ReadConnection>(ep);
+  std::shared_ptr<endpoint::Endpoint> ep = ep_status.value();
+
+
+  // Negotiate ack buffer
+  // FIXME(Fischi) We seem to have some kind of race. I don't know how.
+  std::chrono::milliseconds timespan(1000); // This is because of a race condition...
+  std::this_thread::sleep_for(timespan);
+
+  std::shared_ptr<memory::DumbAllocator> allocator = std::make_shared<memory::DumbAllocator>(ep->GetPd());
+  auto rcv_buf_stat = allocator->Alloc(sizeof(ReadRequest));
+  if (!rcv_buf_stat.ok()){
+    return rcv_buf_stat.status();
+  }
+  memory::Region rcv_buf = rcv_buf_stat.value();
+  auto rcv_stat = ep->PostRecv(42, rcv_buf.lkey, rcv_buf.addr, rcv_buf.length);
+  if (!rcv_stat.ok()){
+    return rcv_stat;
+  }
+
+  auto ack_buf_stat = allocator->Alloc(sizeof(uint64_t));
+  if (!ack_buf_stat.ok()){
+    return ack_buf_stat.status();
+  }
+  memory::Region ack_buf = ack_buf_stat.value();
+  *(uint64_t *)ack_buf.addr = 0;
+
+  ReadRequest req;
+  req.addr = (uint64_t)ack_buf.addr;
+  req.key = ack_buf.lkey;
+  ep->PostInline(0, &req, sizeof(req));
+  auto send_wc_stat = ep->PollSendCq();
+  if (!send_wc_stat.ok()){
+    return send_wc_stat.status();
+  }
+
+  auto rcv_wc_stat = ep->PollRecvCq();
+  if (!rcv_wc_stat.ok()){
+    return rcv_wc_stat.status();
+  }
+
+  struct ibv_wc rcv_wc = rcv_wc_stat.value();
+  if (rcv_wc.wr_id != 42) {
+    // Bad race
+    return Status(StatusCode::Unknown, "protocol missmatch");
+  }
+  ReadRequest *remote_buf = (ReadRequest *)rcv_buf.addr;
+
+  auto conn = std::make_unique<ReadConnection>(ep, allocator, ack_buf, rcv_buf, remote_buf->addr, remote_buf->key);
   return StatusOr<std::unique_ptr<ReadConnection>>(std::move(conn));
 }
 
@@ -90,8 +139,49 @@ StatusOr<std::unique_ptr<ReadConnection>> ReadListener::Accept(){
   }
   std::shared_ptr<endpoint::Endpoint> ep = epStatus.value();
 
-  // TODO(Fischi) Negotiate ack buffer
-  auto conn = std::make_unique<ReadConnection>(ep);
+  // Negotiate ack buffer
+  // FIXME(Fischi) We seem to have some kind of race. I don't know how.
+  std::shared_ptr<memory::DumbAllocator> allocator = std::make_shared<memory::DumbAllocator>(ep->GetPd());
+  auto rcv_buf_stat = allocator->Alloc(sizeof(ReadRequest));
+  if (!rcv_buf_stat.ok()){
+    return rcv_buf_stat.status();
+  }
+  memory::Region rcv_buf = rcv_buf_stat.value();
+  auto rcv_stat = ep->PostRecv(42, rcv_buf.lkey, rcv_buf.addr, rcv_buf.length);
+  if (!rcv_stat.ok()){
+    return rcv_stat;
+  }
+
+  auto ack_buf_stat = allocator->Alloc(sizeof(uint64_t));
+  if (!ack_buf_stat.ok()){
+    return ack_buf_stat.status();
+  }
+  memory::Region ack_buf = ack_buf_stat.value();
+  *(uint64_t *)ack_buf.addr = 0;
+
+  auto rcv_wc_stat = ep->PollRecvCq();
+  if (!rcv_wc_stat.ok()){
+    return rcv_wc_stat.status();
+  }
+
+  struct ibv_wc rcv_wc = rcv_wc_stat.value();
+  if (rcv_wc.wr_id != 42) {
+    // Bad race
+    return Status(StatusCode::Unknown, "protocol missmatch");
+  }
+  ReadRequest *remote_buf = (ReadRequest *)rcv_buf.addr;
+
+
+  ReadRequest req;
+  req.addr = (uint64_t)ack_buf.addr;
+  req.key = ack_buf.lkey;
+  ep->PostInline(0, &req, sizeof(req));
+  auto send_wc_stat = ep->PollSendCq();
+  if (!send_wc_stat.ok()){
+    return send_wc_stat.status();
+  }
+ 
+  auto conn = std::make_unique<ReadConnection>(ep, allocator, ack_buf, rcv_buf, remote_buf->addr, remote_buf->key);
   return StatusOr<std::unique_ptr<ReadConnection>>(std::move(conn));
 }
 
@@ -106,10 +196,10 @@ Status ReadListener::Close() {
 /*
  * ReadConnection
  */
-ReadConnection::ReadConnection(std::shared_ptr<endpoint::Endpoint> ep) : ep_(ep) {
-  std::shared_ptr<memory::DumbAllocator> allocator = std::make_shared<memory::DumbAllocator>(ep->GetPd());
-  this->sender_ = std::make_unique<ReadSender>(ep, allocator);
-  this->receiver_ = std::make_unique<ReadReceiver>(ep, allocator);
+ReadConnection::ReadConnection(std::shared_ptr<endpoint::Endpoint> ep, std::shared_ptr<memory::Allocator> allocator,
+    memory::Region ack, memory::Region ack_source, uint64_t ack_remote_addr, uint32_t ack_remote_key) : ep_(ep) {
+  this->sender_ = std::make_unique<ReadSender>(ep, allocator, ack);
+  this->receiver_ = std::make_unique<ReadReceiver>(ep, allocator, ack_source, ack_remote_addr, ack_remote_key);
 }
 
 Status ReadConnection::Close(){
@@ -140,7 +230,11 @@ Status ReadConnection::Free(ReceiveRegion region){
  */
 
 ReadSender::ReadSender(std::shared_ptr<endpoint::Endpoint> ep, 
-    std::shared_ptr<kym::memory::Allocator> allocator) : allocator_(allocator), ep_(ep) {
+    std::shared_ptr<kym::memory::Allocator> allocator, memory::Region ack) : allocator_(allocator), ep_(ep), ack_(ack) {
+}
+
+ReadSender::~ReadSender(){
+  this->allocator_->Free(this->ack_);
 }
 
 StatusOr<SendRegion> ReadSender::GetMemoryRegion(size_t size){
@@ -181,15 +275,21 @@ Status ReadSender::Send(SendRegion region){
   if (!wcStatus.ok()){
     return wcStatus.status();
   }
-  // TODO(Fischi) Ack
+  uint64_t acked = 0;
+  while(acked == 0){
+    // TODO(fischi) Do we need volatile?
+    acked = *(uint64_t *)this->ack_.addr;
+  }
+  *(uint64_t *)this->ack_.addr = 0;
   return Status();
 }
 
 /*
  * ReadReceiver
  */
-ReadReceiver::ReadReceiver(std::shared_ptr<endpoint::Endpoint> ep, 
-    std::shared_ptr<kym::memory::Allocator> allocator) : ep_(ep), allocator_(allocator) {
+ReadReceiver::ReadReceiver(std::shared_ptr<endpoint::Endpoint> ep, std::shared_ptr<kym::memory::Allocator> allocator, 
+    memory::Region ack, uint64_t ack_remote_addr, uint32_t ack_remote_key) 
+  : ep_(ep), allocator_(allocator), ack_(ack), ack_remote_addr_(ack_remote_addr), ack_remote_key_(ack_remote_key) {
   // TODO(fischi) Parameterize
   size_t transfer_size = sizeof(struct ReadRequest);
   ibv_pd pd = this->ep_->GetPd();
@@ -253,6 +353,14 @@ StatusOr<ReceiveRegion> ReadReceiver::Receive(){
   if (!rwcStatus.ok()){
     return rwcStatus.status();
   }
+
+  *(uint64_t *)this->ack_.addr = 1;
+  auto write_stat = this->ep_->PostWrite(0, this->ack_.lkey, this->ack_.addr, sizeof(uint64_t),
+      this->ack_remote_addr_, this->ack_remote_key_);
+  if (!write_stat.ok()){
+    return write_stat;
+  }
+
   return rcvReg;
 }
 
