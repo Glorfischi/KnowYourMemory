@@ -36,6 +36,9 @@ struct Options {
 class Endpoint {
   public:
     Endpoint(rdma_cm_id*);
+    ~Endpoint();
+
+    Status Close();
 
     ibv_pd GetPd();
 
@@ -55,6 +58,11 @@ class Endpoint {
 class Listener {
   public:
     Listener(rdma_cm_id*);
+    ~Listener();
+
+    Status Close();
+
+    ibv_pd GetPd();
 
     StatusOr<std::unique_ptr<Endpoint>> Accept(Options opts);
   private:

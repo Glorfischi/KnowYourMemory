@@ -21,6 +21,19 @@ namespace endpoint {
 Endpoint::Endpoint(rdma_cm_id *id) : id_(id){
 }
 
+Endpoint::~Endpoint() {
+  rdma_destroy_ep(this->id_);
+}
+
+Status Endpoint::Close() {
+  int ret = rdma_disconnect(this->id_);
+  if (ret) {
+    // TODO(Fischi) Map error codes
+    return Status(StatusCode::Unknown, "error disconnecting endpoint");
+  }
+  return Status();
+}
+
 ibv_pd Endpoint::GetPd(){
   return *this->id_->pd;
 }
@@ -139,6 +152,22 @@ StatusOr<std::unique_ptr<Endpoint>> Listener::Accept(Options opts){
 }
 
 Listener::Listener(rdma_cm_id *id) : id_(id) {
+}
+
+Listener::~Listener(){
+}
+
+ibv_pd Listener::GetPd(){
+  return *this->id_->pd;
+}
+
+Status Listener::Close(){
+  int ret = rdma_destroy_id(this->id_);
+  if (ret) {
+    // TODO(Fischi) Map error codes
+    return Status(StatusCode::Unknown, "error destroying listener");
+  }
+  return Status();
 }
 
 StatusOr<std::unique_ptr<Endpoint>> Dial(std::string ip, int port, Options opts){

@@ -58,11 +58,7 @@ StatusOr<std::unique_ptr<SendReceiveConnection>> DialSendReceive(std::string ip,
     return epStatus.status();
   }
   std::shared_ptr<endpoint::Endpoint> ep = epStatus.value();
-
-  std::shared_ptr<memory::DumbAllocator> allocator = std::make_shared<memory::DumbAllocator>(ep->GetPd());
-  auto sender = std::make_unique<SendReceiveSender>(ep, allocator);
-  auto receiver = std::make_unique<SendReceiveReceiver>(ep);
-  auto conn = std::make_unique<SendReceiveConnection>(std::move(sender), std::move(receiver));
+  auto conn = std::make_unique<SendReceiveConnection>(ep);
   return StatusOr<std::unique_ptr<SendReceiveConnection>>(std::move(conn));
 }
 
@@ -91,23 +87,29 @@ StatusOr<std::unique_ptr<SendReceiveConnection>> SendReceiveListener::Accept(){
   }
   std::shared_ptr<endpoint::Endpoint> ep = epStatus.value();
 
-  std::shared_ptr<memory::DumbAllocator> allocator = std::make_shared<memory::DumbAllocator>(ep->GetPd());
-  auto sender = std::make_unique<SendReceiveSender>(ep, allocator);
-  auto receiver = std::make_unique<SendReceiveReceiver>(ep);
-  auto conn = std::make_unique<SendReceiveConnection>(std::move(sender), std::move(receiver));
+  auto conn = std::make_unique<SendReceiveConnection>(ep);
   return StatusOr<std::unique_ptr<SendReceiveConnection>>(std::move(conn));
 
 }
 
 SendReceiveListener::SendReceiveListener(std::unique_ptr<endpoint::Listener> listener) : listener_(std::move(listener)) {}
 
+
+Status SendReceiveListener::Close() {
+  return this->listener_->Close();
+}
 /*
  * SendReceiveConnection
  */
-SendReceiveConnection::SendReceiveConnection(std::unique_ptr<SendReceiveSender> sender, 
-    std::unique_ptr<SendReceiveReceiver> receiver) {
-  this->sender_ = std::move(sender);
-  this->receiver_ = std::move(receiver);
+SendReceiveConnection::SendReceiveConnection(std::shared_ptr<endpoint::Endpoint> ep){
+  std::shared_ptr<memory::DumbAllocator> allocator = std::make_shared<memory::DumbAllocator>(ep->GetPd());
+  this->ep_ = ep;
+  this->sender_ = std::make_unique<SendReceiveSender>(ep, allocator);
+  this->receiver_ = std::make_unique<SendReceiveReceiver>(ep);
+}
+
+Status SendReceiveConnection::Close() {
+  return this->ep_->Close();
 }
 
 StatusOr<SendRegion> SendReceiveConnection::GetMemoryRegion(size_t size){
@@ -195,6 +197,16 @@ SendReceiveReceiver::SendReceiveReceiver(std::shared_ptr<endpoint::Endpoint> ep)
     this->mrs_.push_back(mr);
   }
 }
+SendReceiveReceiver::~SendReceiveReceiver() {
+  // TODO(Fischi) This might fail.. We cannot fail in destructors. Maybe we need some kind of close() method?
+  for (auto mr : this->mrs_){
+    int ret = ibv_dereg_mr(mr);
+    if (ret) {
+      std::cerr << "Error " << ret << std::endl;
+    }
+    free(mr->addr);
+  }
+}
 
 
 StatusOr<ReceiveRegion> SendReceiveReceiver::Receive() {
@@ -216,6 +228,7 @@ Status SendReceiveReceiver::Free(ReceiveRegion region) {
   struct ibv_mr *mr = this->mrs_[region.context];
   return this->ep_->PostRecv(region.context, mr->lkey, mr->addr, mr->length); 
 }
+
 
 }
 }

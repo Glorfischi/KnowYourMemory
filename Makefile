@@ -15,8 +15,8 @@ HEADERS = $(shell echo $(PREFIX)/include/kym/*.hpp) $(shell echo $(PREFIX)/src/*
 
 
 TEST = $(BINDIR)/test
-TEST_SRCS=  $(TESTPATH)/main_test.cpp $(SRCPATH)/endpoint.cpp $(SRCPATH)/mm/dumb_allocator.cpp $(SRCPATH)/conn/send_receive.cpp 
-						#$(SRCPATH)/conn/shared_receive.cpp $(SRCPATH)/conn/read.cpp 
+TEST_SRCS=  $(TESTPATH)/main_test.cpp $(SRCPATH)/endpoint.cpp $(SRCPATH)/mm/dumb_allocator.cpp $(SRCPATH)/conn/send_receive.cpp \
+						$(SRCPATH)/conn/shared_receive.cpp #$(SRCPATH)/conn/read.cpp 
 TEST_OBJS= $(TEST_SRCS:.cpp=.o)
 
 test: $(TEST_OBJS)

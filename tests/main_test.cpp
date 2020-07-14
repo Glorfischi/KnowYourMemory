@@ -16,7 +16,7 @@
 
 #include "mm/dumb_allocator.hpp"
 #include "conn/send_receive.hpp"
-//#include "conn/shared_receive.hpp"
+#include "conn/shared_receive.hpp"
 //#include "conn/read.hpp"
 
 cxxopts::ParseResult parse(int argc, char* argv[]) {
@@ -121,35 +121,68 @@ int main(int argc, char* argv[]) {
 
     std::chrono::milliseconds timespan(1000); // This is because of a race condition...
     std::this_thread::sleep_for(timespan);
-    test_sender(*sr_conn.value(), 5000);
+    auto c = sr_conn.value();
+    test_sender(*c, 5000);
+    auto cStatus = c->Close();
+    if (!cStatus.ok()){
+      std::cerr << "Error closing send_receive connection" << cStatus.message() << std::endl;
+      return 1;
+    }
   } else  {
     auto ln = kym::connection::ListenSendReceive("172.17.5.101", 9999);
     if (!ln.ok()){
       std::cerr << "Error listening for send_receive" << ln.status().message() << std::endl;
       return 1;
     }
-    auto conn = ln.value()->Accept();
+    auto l = ln.value();
+    auto conn = l->Accept();
     if (!conn.ok()){
       std::cerr << "Error accepting for send_receive" << conn.status().message() << std::endl;
       return 1;
     }
-    test_receiver(*conn.value(), 5000);
+    auto c = conn.value();
+    test_receiver(*c, 5000);
+    auto cStatus = c->Close();
+    if (!cStatus.ok()){
+      std::cerr << "Error closing send_receive connection" << cStatus.message() << std::endl;
+      return 1;
+    }
+    auto lStatus = l->Close();
+    if (!lStatus.ok()){
+      std::cerr << "Error closing send_receive listener" << lStatus.message() << std::endl;
+      return 1;
+    }
   }
-  /*std::cout << "#################################" << std::endl;
+  std::cout << "#################################" << std::endl;
   std::cout << "#### Testing SharedReceive 1:1 ####" << std::endl;
   if (client) {
-    conn = kym::connection::DialSharedReceive("172.17.5.101", 9998);
+    auto conn = kym::connection::DialSharedReceive("172.17.5.101", 9999);
+    if (!conn.ok()){
+      std::cerr << "Error dialing shared_receive " << conn.status().message() << std::endl;
+      return 1;
+    }
 
     std::chrono::milliseconds timespan(1000); // This is because of a race condition...
     std::this_thread::sleep_for(timespan);
-    test_sender(*conn, 5000);
+    auto c = conn.value();
+    test_sender(*c, 5000);
   } else  {
-    auto ln = kym::connection::ListenSharedReceive("172.17.5.101", 9998);
-    conn = ln->Accept();
+    auto lnStat = kym::connection::ListenSharedReceive("172.17.5.101", 9999);
+    if (!lnStat.ok()){
+      std::cerr << "Error listening for shared_receive" << lnStat.status().message() << std::endl;
+      return 1;
+    }
+    auto ln = lnStat.value();
+    auto connStat = ln->Accept();
+    if (!connStat.ok()){
+      std::cerr << "Error accepting for shared_receive" << connStat.status().message() << std::endl;
+      return 1;
+    }
+    auto conn = connStat.value();
     test_receiver(*conn, 5000);
   }
   std::cout << "#################################" << std::endl;
-  std::cout << "#### Testing Read 1:1 ####" << std::endl;
+  /*std::cout << "#### Testing Read 1:1 ####" << std::endl;
   if (client) {
     conn = kym::connection::DialRead("172.17.5.101", 9996);
 

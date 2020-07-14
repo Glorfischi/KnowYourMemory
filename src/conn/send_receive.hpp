@@ -48,7 +48,7 @@ class SendReceiveSender : public Sender {
 class SendReceiveReceiver : public Receiver {
   public:
     SendReceiveReceiver(std::shared_ptr<endpoint::Endpoint> ep);
-    ~SendReceiveReceiver() = default;
+    ~SendReceiveReceiver();
 
     StatusOr<ReceiveRegion> Receive();
     Status Free(kym::connection::ReceiveRegion);
@@ -59,8 +59,10 @@ class SendReceiveReceiver : public Receiver {
 
 class SendReceiveConnection : public Connection {
   public:
-    SendReceiveConnection(std::unique_ptr<SendReceiveSender> sender, std::unique_ptr<SendReceiveReceiver> receiver);
+    SendReceiveConnection(std::shared_ptr<endpoint::Endpoint>);
     ~SendReceiveConnection() = default;
+
+    Status Close();
 
     StatusOr<SendRegion> GetMemoryRegion(size_t size);
     Status Send(SendRegion region);
@@ -69,6 +71,7 @@ class SendReceiveConnection : public Connection {
     StatusOr<ReceiveRegion> Receive();
     Status Free(ReceiveRegion);
   private:
+    std::shared_ptr<endpoint::Endpoint> ep_;
     std::unique_ptr<SendReceiveSender> sender_;
     std::unique_ptr<SendReceiveReceiver> receiver_;
 };
@@ -79,6 +82,8 @@ class SendReceiveListener {
   public:
     SendReceiveListener(std::unique_ptr<endpoint::Listener> listener);
     ~SendReceiveListener() = default;
+
+    Status Close();
 
     StatusOr<std::unique_ptr<SendReceiveConnection>> Accept();
   private:
