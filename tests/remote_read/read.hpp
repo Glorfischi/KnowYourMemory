@@ -35,43 +35,6 @@ struct ReadRequest {
 	uint32_t		length;
 };
 
-/*
- * 
- */
-class ReadSender : public Sender {
-  public:
-    ReadSender(std::shared_ptr<endpoint::Endpoint>, std::shared_ptr<memory::Allocator>, memory::Region ack);
-    ~ReadSender();
-
-    StatusOr<SendRegion> GetMemoryRegion(size_t size);
-    Status Free(SendRegion region);
-    Status Send(SendRegion region);
-  private:
-    std::shared_ptr<memory::Allocator> allocator_;
-    std::shared_ptr<endpoint::Endpoint> ep_;
-
-    memory::Region ack_; // Region the receiver write to to acknowlege that the read was successfull
-};
-
-class ReadReceiver : public Receiver {
-  public:
-    ReadReceiver(std::shared_ptr<endpoint::Endpoint>, std::shared_ptr<memory::Allocator>, 
-        memory::Region ack, uint64_t ack_remote_addr, uint32_t ack_remote_key);
-    ~ReadReceiver();
-
-    StatusOr<ReceiveRegion> Receive();
-    Status Free(kym::connection::ReceiveRegion);
-  private:
-    std::shared_ptr<endpoint::Endpoint> ep_;
-    std::shared_ptr<memory::Allocator> allocator_;
-
-    std::vector<struct ibv_mr *> mrs_;
-
-    memory::Region ack_; // Region to send ack from
-    uint64_t ack_remote_addr_;
-    uint32_t ack_remote_key_;
-};
-
 class ReadConnection : public Connection {
   public:
     ReadConnection(std::shared_ptr<endpoint::Endpoint>, std::shared_ptr<memory::Allocator> allocator,
@@ -88,9 +51,19 @@ class ReadConnection : public Connection {
     Status Free(ReceiveRegion);
   private:
     std::shared_ptr<endpoint::Endpoint> ep_;
+    std::shared_ptr<memory::Allocator> allocator_;
 
-    std::unique_ptr<ReadSender> sender_;
-    std::unique_ptr<ReadReceiver> receiver_;
+
+    memory::Region ack_; // Region the receiver write to to acknowlege that the read was successfull
+
+
+    std::vector<struct ibv_mr *> mrs_;
+
+    memory::Region ack_send_buf_; // Region to send ack from
+    uint64_t ack_remote_addr_;
+    uint32_t ack_remote_key_;
+
+
 };
 
 StatusOr<std::unique_ptr<ReadConnection>> DialRead(std::string ip, int port);

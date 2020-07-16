@@ -68,7 +68,7 @@ StatusOr<std::unique_ptr<ReadConnection>> DialRead(std::string ip, int port){
 
   // Negotiate ack buffer
   // FIXME(Fischi) We seem to have some kind of race. I don't know how.
-  std::chrono::milliseconds timespan(1000); // This is because of a race condition...
+  std::chrono::milliseconds timespan(100); // This is because of a race condition...
   std::this_thread::sleep_for(timespan);
 
   std::shared_ptr<memory::DumbAllocator> allocator = std::make_shared<memory::DumbAllocator>(ep->GetPd());
@@ -197,47 +197,38 @@ Status ReadListener::Close() {
  * ReadConnection
  */
 ReadConnection::ReadConnection(std::shared_ptr<endpoint::Endpoint> ep, std::shared_ptr<memory::Allocator> allocator,
-    memory::Region ack, memory::Region ack_source, uint64_t ack_remote_addr, uint32_t ack_remote_key) : ep_(ep) {
-  this->sender_ = std::make_unique<ReadSender>(ep, allocator, ack);
-  this->receiver_ = std::make_unique<ReadReceiver>(ep, allocator, ack_source, ack_remote_addr, ack_remote_key);
+    memory::Region ack, memory::Region ack_source, uint64_t ack_remote_addr, uint32_t ack_remote_key) 
+  : ep_(ep), allocator_(allocator), ack_(ack), ack_send_buf_(ack_source), ack_remote_addr_(ack_remote_addr), ack_remote_key_(ack_remote_key) {
+  // TODO(fischi) Parameterize
+  size_t transfer_size = sizeof(struct ReadRequest);
+  ibv_pd pd = this->ep_->GetPd();
+  for (int i = 0; i < 10; i++){
+    // TODO(Fischi) Maybe we should replace that was a call to an allocator?
+    char* buf = (char*)malloc(transfer_size);
+    struct ibv_mr * mr = ibv_reg_mr(&pd, buf, transfer_size, IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);  
+
+    // TODO(Fischi) Error handling. This should not be in the constructor
+    auto regStatus = this->ep_->PostRecv(i, mr->lkey, mr->addr, transfer_size); 
+    this->mrs_.push_back(mr);
+  }
 }
 
 Status ReadConnection::Close(){
+  auto free_s = this->allocator_->Free(this->ack_);
+  if (!free_s.ok()){
+    return free_s;
+  }
+  for (auto mr : this->mrs_){
+    int ret = ibv_dereg_mr(mr);
+    if (ret) {
+      return Status(StatusCode::Unknown, "Error deregistering receive region");
+    }
+    free(mr->addr);
+  }
   return this->ep_->Close();
 }
 
 StatusOr<SendRegion> ReadConnection::GetMemoryRegion(size_t size){
-  return this->sender_->GetMemoryRegion(size);
-}
-Status ReadConnection::Send(SendRegion region){
-  return this->sender_->Send(region);
-}
-Status ReadConnection::Free(SendRegion region){
-  return this->sender_->Free(region);
-}
-
-StatusOr<ReceiveRegion> ReadConnection::Receive(){
-  return this->receiver_->Receive();
-}
-Status ReadConnection::Free(ReceiveRegion region){
-  return this->receiver_->Free(region);
-}
-
-
-
-/*
- * ReadSender
- */
-
-ReadSender::ReadSender(std::shared_ptr<endpoint::Endpoint> ep, 
-    std::shared_ptr<kym::memory::Allocator> allocator, memory::Region ack) : allocator_(allocator), ep_(ep), ack_(ack) {
-}
-
-ReadSender::~ReadSender(){
-  this->allocator_->Free(this->ack_);
-}
-
-StatusOr<SendRegion> ReadSender::GetMemoryRegion(size_t size){
   auto mrStatus =  this->allocator_->Alloc(size);
   if (!mrStatus.ok()){
     return mrStatus.status();
@@ -249,19 +240,9 @@ StatusOr<SendRegion> ReadSender::GetMemoryRegion(size_t size){
   reg.length = mr.length;
   reg.lkey = mr.lkey;
   return reg;
-};
-
-Status ReadSender::Free(SendRegion region){
-  memory::Region mr = memory::Region();
-  mr.addr = region.addr;
-  mr.length = region.length;
-  mr.lkey = region.lkey;
-  mr.context = region.context;
-  return this->allocator_->Free(mr);
 }
 
-
-Status ReadSender::Send(SendRegion region){
+Status ReadConnection::Send(SendRegion region){
   struct ReadRequest req;
   req.addr = (uint64_t)region.addr;
   req.key = region.lkey;
@@ -284,39 +265,16 @@ Status ReadSender::Send(SendRegion region){
   return Status();
 }
 
-/*
- * ReadReceiver
- */
-ReadReceiver::ReadReceiver(std::shared_ptr<endpoint::Endpoint> ep, std::shared_ptr<kym::memory::Allocator> allocator, 
-    memory::Region ack, uint64_t ack_remote_addr, uint32_t ack_remote_key) 
-  : ep_(ep), allocator_(allocator), ack_(ack), ack_remote_addr_(ack_remote_addr), ack_remote_key_(ack_remote_key) {
-  // TODO(fischi) Parameterize
-  size_t transfer_size = sizeof(struct ReadRequest);
-  ibv_pd pd = this->ep_->GetPd();
-  for (int i = 0; i < 10; i++){
-
-    // TODO(Fischi) Maybe we should replace that was a call to an allocator?
-    char* buf = (char*)malloc(transfer_size);
-    struct ibv_mr * mr = ibv_reg_mr(&pd, buf, transfer_size, IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);  
-
-    // TODO(Fischi) Error handling. This should not be in the constructor
-    auto regStatus = this->ep_->PostRecv(i, mr->lkey, mr->addr, transfer_size); 
-    this->mrs_.push_back(mr);
-  }
+Status ReadConnection::Free(SendRegion region){
+  memory::Region mr = memory::Region();
+  mr.addr = region.addr;
+  mr.length = region.length;
+  mr.lkey = region.lkey;
+  mr.context = region.context;
+  return this->allocator_->Free(mr);
 }
 
-ReadReceiver::~ReadReceiver(){
-  // TODO(Fischi) This might fail.. We cannot fail in destructors. Maybe we need some kind of close() method?
-  for (auto mr : this->mrs_){
-    int ret = ibv_dereg_mr(mr);
-    if (ret) {
-      std::cerr << "Error " << ret << std::endl;
-    }
-    free(mr->addr);
-  }
-}
-
-StatusOr<ReceiveRegion> ReadReceiver::Receive(){
+StatusOr<ReceiveRegion> ReadConnection::Receive(){
   auto wcStatus = this->ep_->PollRecvCq();
   if (!wcStatus.ok()){
     return wcStatus.status();
@@ -354,8 +312,8 @@ StatusOr<ReceiveRegion> ReadReceiver::Receive(){
     return rwcStatus.status();
   }
 
-  *(uint64_t *)this->ack_.addr = 1;
-  auto write_stat = this->ep_->PostWrite(0, this->ack_.lkey, this->ack_.addr, sizeof(uint64_t),
+  *(uint64_t *)this->ack_send_buf_.addr = 1;
+  auto write_stat = this->ep_->PostWrite(0, this->ack_send_buf_.lkey, this->ack_send_buf_.addr, sizeof(uint64_t),
       this->ack_remote_addr_, this->ack_remote_key_);
   if (!write_stat.ok()){
     return write_stat;
@@ -364,8 +322,7 @@ StatusOr<ReceiveRegion> ReadReceiver::Receive(){
   return rcvReg;
 }
 
-
-Status ReadReceiver::Free(ReceiveRegion region) {
+Status ReadConnection::Free(ReceiveRegion region){
   memory::Region mr = memory::Region();
   mr.addr = region.addr;
   mr.length = region.length;
