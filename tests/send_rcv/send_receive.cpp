@@ -155,7 +155,6 @@ Status SendReceiveConnection::Send(SendRegion region){
     return wcStatus.status();
   }
   return Status();
-
 }
 Status SendReceiveConnection::Free(SendRegion region){
   memory::Region mr = memory::Region();

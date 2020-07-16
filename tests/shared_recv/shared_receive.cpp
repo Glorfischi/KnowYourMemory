@@ -18,9 +18,9 @@
 
 #include "endpoint.hpp"
 #include "conn.hpp"
+#include "error.hpp"
 #include "mm.hpp"
 #include "mm/dumb_allocator.hpp"
-#include "conn/send_receive.hpp"
 
 
 namespace kym {
@@ -61,11 +61,9 @@ StatusOr<std::unique_ptr<SharedReceiveConnection>> DialSharedReceive(std::string
   std::shared_ptr<endpoint::Endpoint> ep = epStatus.value();
 
   std::shared_ptr<memory::DumbAllocator> allocator = std::make_shared<memory::DumbAllocator>(ep->GetPd());
-  auto sender = std::make_unique<SendReceiveSender>(ep, allocator);
   // TODO(fischi): enable SRQ sharing for dialing
   auto srq = std::make_shared<SharedReceiveQueue>(ep->GetPd());
-  auto receiver = std::make_unique<SharedReceiver>(ep, srq);
-  auto conn = std::make_unique<SharedReceiveConnection>(std::move(sender), std::move(receiver));
+  auto conn = std::make_unique<SharedReceiveConnection>(ep, srq);
   return StatusOr<std::unique_ptr<SharedReceiveConnection>>(std::move(conn));
 }
 
@@ -98,10 +96,7 @@ StatusOr<std::unique_ptr<SharedReceiveConnection>> SharedReceiveListener::Accept
   }
   std::shared_ptr<endpoint::Endpoint> ep = epStatus.value();
 
-  std::shared_ptr<memory::DumbAllocator> allocator = std::make_shared<memory::DumbAllocator>(ep->GetPd());
-  auto sender = std::make_unique<SendReceiveSender>(ep, allocator);
-  auto receiver = std::make_unique<SharedReceiver>(ep, this->srq_);
-  auto conn = std::make_unique<SharedReceiveConnection>(std::move(sender), std::move(receiver));
+  auto conn = std::make_unique<SharedReceiveConnection>(ep, this->srq_);
   return StatusOr<std::unique_ptr<SharedReceiveConnection>>(std::move(conn));
 
 }
@@ -110,43 +105,61 @@ SharedReceiveListener::SharedReceiveListener(std::unique_ptr<endpoint::Listener>
     std::shared_ptr<SharedReceiveQueue> srq) : listener_(std::move(ln)), srq_(srq) {}
 
 
+Status SharedReceiveListener::Close() {
+  return this->listener_->Close();
+}
+
 
 /*
  * SharedReceiveConnection
  */
-SharedReceiveConnection::SharedReceiveConnection(std::unique_ptr<SendReceiveSender> sender, 
-    std::unique_ptr<SharedReceiver> receiver){
-  this->sender_ = std::move(sender);
-  this->receiver_ = std::move(receiver);
+SharedReceiveConnection::SharedReceiveConnection(std::shared_ptr<endpoint::Endpoint> ep,
+    std::shared_ptr<SharedReceiveQueue> srq): ep_(ep), srq_(srq){
+  this->allocator_ = std::make_shared<memory::DumbAllocator>(ep->GetPd());
+
+}
+Status SharedReceiveConnection::Close() {
+  auto srq_s = this->srq_->Close();
+  if (!srq_s.ok()){
+    return srq_s;
+  }
+  return this->ep_->Close();
 }
 
 StatusOr<SendRegion> SharedReceiveConnection::GetMemoryRegion(size_t size){
-  return this->sender_->GetMemoryRegion(size);
+  auto mrStatus =  this->allocator_->Alloc(size);
+  if (!mrStatus.ok()){
+    return mrStatus.status();
+  }
+  auto mr = mrStatus.value();
+  struct SendRegion reg = {0};
+  reg.context = mr.context;
+  reg.addr = mr.addr;
+  reg.length = mr.length;
+  reg.lkey = mr.lkey;
+  return reg;
 }
 Status SharedReceiveConnection::Send(SendRegion region){
-  return this->sender_->Send(region);
+  auto sendStatus = this->ep_->PostSend(0, region.lkey, region.addr, region.length);
+  if (!sendStatus.ok()){
+    return sendStatus;
+  }
+  auto wcStatus = this->ep_->PollSendCq();
+  if (!wcStatus.ok()){
+    return wcStatus.status();
+  }
+  return Status();
 }
 Status SharedReceiveConnection::Free(SendRegion region){
-  return this->sender_->Free(region);
+  memory::Region mr = memory::Region();
+  mr.addr = region.addr;
+  mr.length = region.length;
+  mr.lkey = region.lkey;
+  mr.context = region.context;
+  return this->allocator_->Free(mr);
 }
 
 StatusOr<ReceiveRegion> SharedReceiveConnection::Receive(){
-  return this->receiver_->Receive();
-}
-Status SharedReceiveConnection::Free(ReceiveRegion region){
-  return this->receiver_->Free(region);
-}
-
-
-
-/*
- * SendReceiveReceiver
- */
-SharedReceiver::SharedReceiver(std::shared_ptr<endpoint::Endpoint> ep,
-    std::shared_ptr<SharedReceiveQueue> srq): srq_(srq), ep_(ep) {}
-
-
-StatusOr<ReceiveRegion> SharedReceiver::Receive(){
   auto wcStatus = this->ep_->PollRecvCq();
   if (!wcStatus.ok()){
     return wcStatus.status();
@@ -161,13 +174,9 @@ StatusOr<ReceiveRegion> SharedReceiver::Receive(){
   reg.length = wc.byte_len;
   return reg;
 }
-
-Status SharedReceiver::Free(ReceiveRegion region) {
-  // Repost MR
+Status SharedReceiveConnection::Free(ReceiveRegion region){
   return this->srq_->PostReceiveRegion(region);
 }
-
-
 
 
 SharedReceiveQueue::SharedReceiveQueue(struct ibv_pd pd){
@@ -206,8 +215,7 @@ SharedReceiveQueue::SharedReceiveQueue(struct ibv_pd pd){
 
 }
 
-SharedReceiveQueue::~SharedReceiveQueue(){
-  // TODO(Fischi) This might fail.. We cannot fail in destructors. Maybe we need some kind of close() method?
+Status SharedReceiveQueue::Close() {
   int ret = ibv_destroy_srq(this->srq_);
   if (ret) {
     std::cerr << "Error " << ret << std::endl;
@@ -215,10 +223,11 @@ SharedReceiveQueue::~SharedReceiveQueue(){
   for (auto mr : this->mrs_){
     int ret = ibv_dereg_mr(mr);
     if (ret) {
-      std::cerr << "Error " << ret << std::endl;
+      return Status(StatusCode::Unknown, "error freeing receive buffer");
     }
     free(mr->addr);
   }
+  return Status();
 }
 
 Status SharedReceiveQueue::PostReceiveRegion(ReceiveRegion reg){

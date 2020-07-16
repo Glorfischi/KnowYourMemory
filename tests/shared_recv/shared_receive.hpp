@@ -26,8 +26,6 @@
 #include "conn.hpp"
 #include "mm.hpp"
 
-#include "conn/send_receive.hpp"
-
 namespace kym {
 namespace connection {
 
@@ -36,7 +34,9 @@ class SharedReceiveQueue {
     friend class SharedReceiveListener;
 
     SharedReceiveQueue(struct ibv_pd pd);
-    ~SharedReceiveQueue();
+    ~SharedReceiveQueue() = default;
+
+    Status Close();
 
     Status PostReceiveRegion(ReceiveRegion reg);
     StatusOr<ReceiveRegion> GetRegionById(uint64_t id);
@@ -46,23 +46,12 @@ class SharedReceiveQueue {
     std::vector<struct ibv_mr *> mrs_;
 };
 
-class SharedReceiver : public Receiver {
-  public:
-    SharedReceiver(std::shared_ptr<endpoint::Endpoint> ep, std::shared_ptr<SharedReceiveQueue> srq);
-    ~SharedReceiver() = default;
-
-    StatusOr<ReceiveRegion> Receive();
-    Status Free(ReceiveRegion);
-  private:
-    std::shared_ptr<SharedReceiveQueue> srq_;
-    std::shared_ptr<endpoint::Endpoint> ep_;
-
-};
-
 class SharedReceiveConnection : public Connection {
   public:
-    SharedReceiveConnection(std::unique_ptr<SendReceiveSender> sender, std::unique_ptr<SharedReceiver> receiver);
+    SharedReceiveConnection(std::shared_ptr<endpoint::Endpoint>, std::shared_ptr<SharedReceiveQueue>);
     ~SharedReceiveConnection() = default;
+
+    Status Close();
 
     StatusOr<SendRegion> GetMemoryRegion(size_t size);
     Status Send(SendRegion region);
@@ -72,8 +61,10 @@ class SharedReceiveConnection : public Connection {
     Status Free(ReceiveRegion);
 
   private:
-    std::unique_ptr<SendReceiveSender> sender_;
-    std::unique_ptr<SharedReceiver> receiver_;
+    std::shared_ptr<endpoint::Endpoint> ep_;
+    std::shared_ptr<memory::Allocator> allocator_;
+    std::shared_ptr<SharedReceiveQueue> srq_;
+
 };
 
 StatusOr<std::unique_ptr<SharedReceiveConnection>> DialSharedReceive(std::string ip, int port);
@@ -82,6 +73,8 @@ class SharedReceiveListener {
   public:
     SharedReceiveListener(std::unique_ptr<endpoint::Listener> ln, std::shared_ptr<SharedReceiveQueue> srq);
     ~SharedReceiveListener() = default;
+
+    Status Close();
 
     StatusOr<std::unique_ptr<SharedReceiveConnection>> Accept();
   private:
