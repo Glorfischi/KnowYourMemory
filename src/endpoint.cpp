@@ -124,6 +124,7 @@ StatusOr<struct ibv_wc> Endpoint::PollSendCq(){
   while(ibv_poll_cq(this->id_->qp->send_cq, 1, &wc) == 0){}
   if (wc.status){
     // TODO(Fischi) Map error codes
+    std::cerr << "Err " << wc.status << std::endl;
     return Status(StatusCode::Unknown, "error polling send cq");
   }
   return wc;

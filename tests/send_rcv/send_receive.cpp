@@ -102,85 +102,9 @@ Status SendReceiveListener::Close() {
  * SendReceiveConnection
  */
 SendReceiveConnection::SendReceiveConnection(std::shared_ptr<endpoint::Endpoint> ep){
-  std::shared_ptr<memory::DumbAllocator> allocator = std::make_shared<memory::DumbAllocator>(ep->GetPd());
+  this->allocator_ = std::make_shared<memory::DumbAllocator>(ep->GetPd());
   this->ep_ = ep;
-  this->sender_ = std::make_unique<SendReceiveSender>(ep, allocator);
-  this->receiver_ = std::make_unique<SendReceiveReceiver>(ep);
-}
 
-Status SendReceiveConnection::Close() {
-  return this->ep_->Close();
-}
-
-StatusOr<SendRegion> SendReceiveConnection::GetMemoryRegion(size_t size){
-  return this->sender_->GetMemoryRegion(size);
-}
-Status SendReceiveConnection::Send(SendRegion region){
-  return this->sender_->Send(region);
-}
-Status SendReceiveConnection::Free(SendRegion region){
-  return this->sender_->Free(region);
-}
-
-StatusOr<ReceiveRegion> SendReceiveConnection::Receive(){
-  return this->receiver_->Receive();
-}
-Status SendReceiveConnection::Free(ReceiveRegion region){
-  return this->receiver_->Free(region);
-}
-
-
-/*
- * SendReceiveSender
- */
-
-SendReceiveSender::SendReceiveSender(std::shared_ptr<endpoint::Endpoint> ep, 
-    std::shared_ptr<kym::memory::Allocator> allocator) : allocator_(allocator), ep_(ep) {
-}
-
-
-StatusOr<SendRegion> SendReceiveSender::GetMemoryRegion(size_t size){
-  auto mrStatus =  this->allocator_->Alloc(size);
-  if (!mrStatus.ok()){
-    return mrStatus.status();
-  }
-  auto mr = mrStatus.value();
-  struct SendRegion reg = {0};
-  reg.context = mr.context;
-  reg.addr = mr.addr;
-  reg.length = mr.length;
-  reg.lkey = mr.lkey;
-  return reg;
-};
-
-Status SendReceiveSender::Free(SendRegion region){
-  memory::Region mr = memory::Region();
-  mr.addr = region.addr;
-  mr.length = region.length;
-  mr.lkey = region.lkey;
-  mr.context = region.context;
-  return this->allocator_->Free(mr);
-}
-
-Status SendReceiveSender::Send(SendRegion region){
-  auto sendStatus = this->ep_->PostSend(0, region.lkey, region.addr, region.length);
-  if (!sendStatus.ok()){
-    return sendStatus;
-  }
-  auto wcStatus = this->ep_->PollSendCq();
-  if (!wcStatus.ok()){
-    return wcStatus.status();
-  }
-  return Status();
-}
-
-
-
-
-/*
- * SendReceiveReceiver
- */
-SendReceiveReceiver::SendReceiveReceiver(std::shared_ptr<endpoint::Endpoint> ep): ep_(ep) {
   // TODO(fischi) Parameterize
   size_t transfer_size = 1048576;
   ibv_pd pd = this->ep_->GetPd();
@@ -192,11 +116,12 @@ SendReceiveReceiver::SendReceiveReceiver(std::shared_ptr<endpoint::Endpoint> ep)
 
     // TODO(Fischi) Error handling. This should not be in the constructor
     auto regStatus = this->ep_->PostRecv(i, mr->lkey, mr->addr, transfer_size); 
+    assert(regStatus.ok());
     this->mrs_.push_back(mr);
   }
 }
-SendReceiveReceiver::~SendReceiveReceiver() {
-  // TODO(Fischi) This might fail.. We cannot fail in destructors. Maybe we need some kind of close() method?
+
+Status SendReceiveConnection::Close() {
   for (auto mr : this->mrs_){
     int ret = ibv_dereg_mr(mr);
     if (ret) {
@@ -204,10 +129,44 @@ SendReceiveReceiver::~SendReceiveReceiver() {
     }
     free(mr->addr);
   }
+  return this->ep_->Close();
 }
 
+StatusOr<SendRegion> SendReceiveConnection::GetMemoryRegion(size_t size){
+  auto mrStatus =  this->allocator_->Alloc(size);
+  if (!mrStatus.ok()){
+    return mrStatus.status();
+  }
+  auto mr = mrStatus.value();
+  struct SendRegion reg = {0};
+  reg.context = mr.context;
+  reg.addr = mr.addr;
+  reg.length = mr.length;
+  reg.lkey = mr.lkey;
+  return reg;
+}
+Status SendReceiveConnection::Send(SendRegion region){
+  auto sendStatus = this->ep_->PostSend(0, region.lkey, region.addr, region.length);
+  if (!sendStatus.ok()){
+    return sendStatus;
+  }
+  auto wcStatus = this->ep_->PollSendCq();
+  if (!wcStatus.ok()){
+    return wcStatus.status();
+  }
+  return Status();
 
-StatusOr<ReceiveRegion> SendReceiveReceiver::Receive() {
+}
+Status SendReceiveConnection::Free(SendRegion region){
+  memory::Region mr = memory::Region();
+  mr.addr = region.addr;
+  mr.length = region.length;
+  mr.lkey = region.lkey;
+  mr.context = region.context;
+  return this->allocator_->Free(mr);
+}
+
+StatusOr<ReceiveRegion> SendReceiveConnection::Receive(){
   auto wcStatus = this->ep_->PollRecvCq();
   if (!wcStatus.ok()){
     return wcStatus.status();
@@ -221,12 +180,9 @@ StatusOr<ReceiveRegion> SendReceiveReceiver::Receive() {
   return reg;
 }
 
-Status SendReceiveReceiver::Free(ReceiveRegion region) {
-  assert((size_t)region.context < this->mrs_.size());
+Status SendReceiveConnection::Free(ReceiveRegion region){
   struct ibv_mr *mr = this->mrs_[region.context];
   return this->ep_->PostRecv(region.context, mr->lkey, mr->addr, mr->length); 
 }
-
-
 }
 }

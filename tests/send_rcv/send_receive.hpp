@@ -29,34 +29,6 @@
 namespace kym {
 namespace connection {
 
-/*
- * 
- */
-class SendReceiveSender : public Sender {
-  public:
-    SendReceiveSender(std::shared_ptr<endpoint::Endpoint> ep, std::shared_ptr<kym::memory::Allocator> allocator);
-    ~SendReceiveSender() = default;
-
-    StatusOr<SendRegion> GetMemoryRegion(size_t size);
-    Status Free(SendRegion region);
-    Status Send(SendRegion region);
-  private:
-    std::shared_ptr<memory::Allocator> allocator_;
-    std::shared_ptr<endpoint::Endpoint> ep_;
-};
-
-class SendReceiveReceiver : public Receiver {
-  public:
-    SendReceiveReceiver(std::shared_ptr<endpoint::Endpoint> ep);
-    ~SendReceiveReceiver();
-
-    StatusOr<ReceiveRegion> Receive();
-    Status Free(kym::connection::ReceiveRegion);
-  private:
-    std::shared_ptr<endpoint::Endpoint> ep_;
-    std::vector<struct ibv_mr *> mrs_; // TODO(Fischi) Should we do this smarter?
-};
-
 class SendReceiveConnection : public Connection {
   public:
     SendReceiveConnection(std::shared_ptr<endpoint::Endpoint>);
@@ -71,9 +43,10 @@ class SendReceiveConnection : public Connection {
     StatusOr<ReceiveRegion> Receive();
     Status Free(ReceiveRegion);
   private:
+    std::shared_ptr<memory::Allocator> allocator_;
     std::shared_ptr<endpoint::Endpoint> ep_;
-    std::unique_ptr<SendReceiveSender> sender_;
-    std::unique_ptr<SendReceiveReceiver> receiver_;
+    std::vector<struct ibv_mr *> mrs_; 
+
 };
 
 StatusOr<std::unique_ptr<SendReceiveConnection>> DialSendReceive(std::string ip, int port);

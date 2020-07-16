@@ -194,7 +194,7 @@ int main(int argc, char* argv[]) {
 
     std::chrono::milliseconds timespan(1000); // This is because of a race condition...
     std::this_thread::sleep_for(timespan);
-    test_sender(*conn, 500);
+    test_sender(*conn, 5000);
     std::this_thread::sleep_for(timespan);
   } else  {
     auto lnStat = kym::connection::ListenRead("172.17.5.101", 9996);
@@ -210,7 +210,7 @@ int main(int argc, char* argv[]) {
       return 1;
     }
     auto conn = connStat.value();
-    test_receiver(*conn, 500);
+    test_receiver(*conn, 5000);
   }
   std::cout << "##########################" << std::endl;
   // TODO(fischi) Fails at 5th accept?
