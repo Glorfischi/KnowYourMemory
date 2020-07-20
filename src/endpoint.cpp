@@ -83,6 +83,23 @@ Status Endpoint::PostInline(uint64_t ctx, void *addr, size_t size){
   wr.send_flags = IBV_SEND_SIGNALED | IBV_SEND_INLINE;  
   return this->PostSendRaw(&wr, &bad);
 }
+
+Status Endpoint::PostImmidate(uint64_t ctx, uint32_t imm){
+  struct ibv_sge sge;
+  sge.addr = (uintptr_t)&imm;
+  sge.length = 0;
+
+  struct ibv_send_wr wr, *bad;
+  wr.wr_id = ctx;
+  wr.next = NULL;
+  wr.sg_list = &sge;
+  wr.num_sge = 1;
+  wr.imm_data = imm;
+  wr.opcode = IBV_WR_SEND_WITH_IMM;
+
+  wr.send_flags = IBV_SEND_SIGNALED | IBV_SEND_INLINE;  
+  return this->PostSendRaw(&wr, &bad);
+}
 Status Endpoint::PostRead(uint64_t ctx, uint32_t lkey, void *addr, size_t size, uint64_t remote_addr, uint32_t rkey){
   struct ibv_sge sge;
   sge.addr = (uintptr_t)addr;
@@ -108,7 +125,7 @@ Status Endpoint::PostWrite(uint64_t ctx, uint32_t lkey, void *addr, size_t size,
   sge.lkey =  lkey;
   struct ibv_send_wr wr, *bad;
 
-  wr.wr_id = 0;
+  wr.wr_id = ctx;
   wr.next = NULL;
   wr.sg_list = &sge;
   wr.num_sge = 1;
@@ -116,6 +133,27 @@ Status Endpoint::PostWrite(uint64_t ctx, uint32_t lkey, void *addr, size_t size,
   wr.send_flags = IBV_SEND_SIGNALED;  
   wr.wr.rdma.remote_addr = remote_addr;
   wr.wr.rdma.rkey = rkey;
+
+  return this->PostSendRaw(&wr, &bad);
+}
+
+Status Endpoint::PostWriteWithImmidate(uint64_t ctx, uint32_t lkey, void *addr, size_t size, 
+    uint64_t remote_addr, uint32_t rkey, uint32_t imm){
+  struct ibv_sge sge;
+  sge.addr = (uintptr_t)addr;
+  sge.length = size;
+  sge.lkey =  lkey;
+  struct ibv_send_wr wr, *bad;
+
+  wr.wr_id = ctx;
+  wr.next = NULL;
+  wr.sg_list = &sge;
+  wr.num_sge = 1;
+  wr.opcode = IBV_WR_RDMA_WRITE_WITH_IMM;
+  wr.send_flags = IBV_SEND_SIGNALED;  
+  wr.wr.rdma.remote_addr = remote_addr;
+  wr.wr.rdma.rkey = rkey;
+  wr.imm_data = imm;
 
   return this->PostSendRaw(&wr, &bad);
 }
@@ -164,6 +202,19 @@ StatusOr<ibv_wc> Endpoint::PollRecvCq(){
   return wc;
 }
 
+StatusOr<ibv_wc> Endpoint::PollRecvCqOnce(){
+  struct ibv_wc wc;
+  int ret = ibv_poll_cq(this->id_->qp->recv_cq, 1, &wc);
+  if (!ret){
+    // TODO(Fischi) Map error codes
+    return Status(StatusCode::Unknown, "nothin recieved");
+  }
+  if (wc.status){
+    // TODO(Fischi) Map error codes
+    return Status(StatusCode::Unknown, "error polling recv cq");
+  }
+  return wc;
+}
 
 
 StatusOr<std::unique_ptr<Endpoint>> Listener::Accept(Options opts){

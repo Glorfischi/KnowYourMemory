@@ -49,11 +49,14 @@ class Endpoint {
     Status PostInline(uint64_t ctx, void *addr, size_t size);
     Status PostRead(uint64_t ctx, uint32_t lkey, void *addr, size_t size, uint64_t remote_addr, uint32_t rkey);
     Status PostWrite(uint64_t ctx, uint32_t lkey, void *addr, size_t size, uint64_t remote_addr, uint32_t rkey);
+    Status PostWriteWithImmidate(uint64_t ctx, uint32_t lkey, void *addr, size_t size, uint64_t remote_addr, uint32_t rkey, uint32_t imm);
+    Status PostImmidate(uint64_t ctx, uint32_t imm);
     StatusOr<struct ibv_wc> PollSendCq();
 
     Status PostRecvRaw(struct ibv_recv_wr *wr, struct ibv_recv_wr **bad_wr);
     Status PostRecv(uint64_t ctx, uint32_t lkey, void *addr, size_t size);
     StatusOr<struct ibv_wc> PollRecvCq();
+    StatusOr<struct ibv_wc> PollRecvCqOnce();
   private:
     rdma_cm_id *id_;
 };

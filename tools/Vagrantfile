@@ -4,7 +4,7 @@
 
 $instances = 2
 $memory = 2048
-$cpus = 2
+$cpus = 4
 $pubkey = "id_rsa.pub"
 
 Vagrant.configure("2") do |config|
