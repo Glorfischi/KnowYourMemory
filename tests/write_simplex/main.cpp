@@ -70,7 +70,7 @@ int main(int argc, char* argv[]) {
         return 1;
       }
       auto buf = buf_s.value();
-      std::cout << *(uint64_t *)buf.addr << std::endl;
+      // std::cout << *(uint64_t *)buf.addr << std::endl;
       auto free_s = conn->Free(buf_s.value());
       if (!free_s.ok()){
         std::cerr << free_s << std::endl;
