@@ -30,6 +30,7 @@ class Status {
   StatusCode code() const { return code_; }
   std::string const& message() const { return message_; }
 
+  Status Wrap(std::string message){return Status(this->code_, message + "\n" + this->message_);};
  private:
   StatusCode code_{StatusCode::Ok};
   std::string message_;

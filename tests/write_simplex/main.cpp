@@ -72,6 +72,10 @@ int main(int argc, char* argv[]) {
       auto buf = buf_s.value();
       std::cout << *(uint64_t *)buf.addr << std::endl;
       auto free_s = conn->Free(buf_s.value());
+      if (!free_s.ok()){
+        std::cerr << free_s << std::endl;
+        return 1;
+      }
       auto finish = std::chrono::high_resolution_clock::now();
       latency_m.push_back(std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count()/1000.0);
     }
@@ -116,13 +120,13 @@ int main(int argc, char* argv[]) {
 
 
   } 
-  /*auto n = count;
+  auto n = count;
   std::sort (latency_m.begin(), latency_m.end());
   int q025 = (int)(n*0.025);
   int q500 = (int)(n*0.5);
   int q975 = (int)(n*0.975);
   std::cout << "q025" << "\t" << "q50" << "\t" << "q975" << std::endl;
-  std::cout << latency_m[q025] << "\t" << latency_m[q500] << "\t" << latency_m[q975] << std::endl;*/
+  std::cout << latency_m[q025] << "\t" << latency_m[q500] << "\t" << latency_m[q975] << std::endl;
   
   return 0;
 }

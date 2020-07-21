@@ -45,7 +45,7 @@ endpoint::Options default_write_simplex_snd_options = {
   .responder_resources = 0,
   .initiator_depth =  write_simplex_outstanding,
   .retry_count = 8,  
-  .rnr_retry_count = 8, 
+  .rnr_retry_count = 7, 
 };
 endpoint::Options default_write_simplex_rcv_options = {
   .qp_attr = {
@@ -54,14 +54,14 @@ endpoint::Options default_write_simplex_rcv_options = {
       .max_recv_wr = write_simplex_outstanding,
       .max_send_sge = 1,
       .max_recv_sge = 1,
-      .max_inline_data = sizeof(connectionInfo)
+      .max_inline_data = 2*sizeof(connectionInfo)
     },
     .qp_type = IBV_QPT_RC,
   },
-  .responder_resources = write_simplex_outstanding,
+  .responder_resources = 2*write_simplex_outstanding,
   .initiator_depth = 0,
   .retry_count = 8,  
-  .rnr_retry_count = 8, 
+  .rnr_retry_count = 7, 
 };
 
 
@@ -164,23 +164,29 @@ StatusOr<SendRegion> WriteSimplexSender::GetMemoryRegion(size_t size){
 }
 Status WriteSimplexSender::Send(SendRegion region){
   // Check if there is space to send
-  std::cout << "head " << this->buf_head_ << " tail " << this->buf_tail_ << std::endl;
   // TODO(Fischi) Should we return or block?
   if (this->buf_head_ == this->buf_tail_ && this->buf_full_){
     return Status(StatusCode::Unknown, "buffer is full");
   } else if (this->buf_head_ == this->buf_tail_ && region.length > this->buf_size_){
+    // We are empty, but the message is larger then our complete buffer.
     return Status(StatusCode::Unknown, "message larger then buffer");
   } else if (this->buf_head_ < this->buf_tail_ 
       && this->buf_tail_ + region.length > this->buf_size_
       && region.length > this->buf_head_){
+    // The free region does "wrap around" the end of the buffer. It either needs to fit in front of the used space or
+    // behind it.
     return Status(StatusCode::Unknown, "not enough free space for message");
   } else if (this->buf_head_ > this->buf_tail_ 
       && this->buf_head_ - this->buf_tail_ < region.length){
+    // The free region is continuous. The message needs to be at most as big. 
     return Status(StatusCode::Unknown, "not enough free space for message");
   }
 
+  // We poll the recieve queue. If we received an ack we can move the head and free space.
   auto wcStatus = this->ep_->PollRecvCqOnce();
   while (wcStatus.ok() || this->ack_outstanding_ == write_simplex_outstanding){
+    // We will try again until the receive queue is empty. If there are already as many acks outstanding as 
+    // possible, we will block. Otherwise we might generate a receiver not ready error.
     if (wcStatus.ok()){
       struct ibv_wc wc = wcStatus.value();
       struct ibv_mr *mr = this->ack_mrs_[wc.wr_id];
@@ -195,10 +201,11 @@ Status WriteSimplexSender::Send(SendRegion region){
     wcStatus = this->ep_->PollRecvCqOnce();
   }
 
+  // We either write directly at the tail if there is enough space or we wrap around to the beginning of the buffer.
   uint32_t write_offset = (this->buf_tail_ + region.length <= this->buf_size_) ? this->buf_tail_ : 0;
-  std::cout << "writing to off " << write_offset << std::endl;
   this->buf_tail_ = write_offset + region.length; 
   if (this->buf_tail_ == this->buf_head_){
+    // We filled the buffer completely.
     this->buf_full_ = true;
   }
   auto send_stat = this->ep_->PostWriteWithImmidate(1, region.lkey, region.addr, region.length, 
@@ -317,7 +324,7 @@ Status WriteSimplexReceiver::Close(){
 StatusOr<ReceiveRegion> WriteSimplexReceiver::Receive(){
   auto wcStatus = this->ep_->PollRecvCq();
   if (!wcStatus.ok()){
-    return wcStatus.status();
+    return wcStatus.status().Wrap("error polling receive cq");
   }
   struct ibv_wc wc = wcStatus.value();
   uint32_t msg_len = wc.imm_data;
@@ -325,9 +332,10 @@ StatusOr<ReceiveRegion> WriteSimplexReceiver::Receive(){
   struct ibv_mr *mr = this->rcv_mrs_[wc.wr_id];
   auto repost_s = ep_->PostRecv(wc.wr_id, mr->lkey, mr->addr, mr->length); 
   if (!repost_s.ok()){
-    return repost_s;
+    return repost_s.Wrap("error reposting buffer");
   }
 
+  // We either read at the head or a the beginning of the buffer if there is not enough space
   uint32_t read_offset = (this->buf_head_ + msg_len <= this->buf_mr_->length) ? this->buf_head_ : 0;
   ReceiveRegion reg;
   reg.addr = (void *)((uint64_t)this->buf_mr_->addr + read_offset);
@@ -337,16 +345,17 @@ StatusOr<ReceiveRegion> WriteSimplexReceiver::Receive(){
 }
 Status WriteSimplexReceiver::Free(ReceiveRegion reg){
   // TODO(fischi) How do we handle out of order frees?
+  // Get the new head after we freed. Either we read at the old head or at the beginning of the buffer
   this->buf_head_  = (this->buf_head_ + reg.length <= this->buf_mr_->length) ? this->buf_head_ + reg.length : reg.length;
 
   auto sendStatus = this->ep_->PostInline(0, &this->buf_head_, sizeof(this->buf_head_)); 
   if (!sendStatus.ok()){
-    return sendStatus;
+    return sendStatus.Wrap("error sending ack");
   }
 
   auto wcStatus = this->ep_->PollSendCq();
   if (!wcStatus.ok()){
-    return wcStatus.status();
+    return wcStatus.status().Wrap("error polling ack send cq");
   }
   return Status();
 }
