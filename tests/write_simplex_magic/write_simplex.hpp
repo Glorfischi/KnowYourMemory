@@ -37,6 +37,7 @@ class WriteSimplexReceiver : public Receiver {
 
     struct ibv_mr *buf_mr_;
     uint32_t      buf_head_;   
+    size_t        buf_size_;
 };
 
 class WriteSimplexSender : public Sender {
