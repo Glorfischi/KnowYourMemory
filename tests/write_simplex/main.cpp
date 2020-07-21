@@ -70,7 +70,7 @@ int main(int argc, char* argv[]) {
         return 1;
       }
       auto buf = buf_s.value();
-      std::cout << *(uint64_t *)buf.addr << std::endl;
+      // std::cout << *(uint64_t *)buf.addr << std::endl;
       auto free_s = conn->Free(buf_s.value());
       if (!free_s.ok()){
         std::cerr << free_s << std::endl;
@@ -88,10 +88,6 @@ int main(int argc, char* argv[]) {
       return 1;
     }
     auto conn = conn_s.value();
-
-    std::chrono::milliseconds timespan(1000); // This is because of a race condition...
-    std::this_thread::sleep_for(timespan);
-    
 
     auto buf_s = conn->GetMemoryRegion(2048);
     if (!buf_s.ok()){
@@ -115,6 +111,9 @@ int main(int argc, char* argv[]) {
       auto finish = std::chrono::high_resolution_clock::now();
       latency_m.push_back(std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count()/1000.0);
     }
+
+    std::chrono::milliseconds timespan(1000); // We need to wait for the last ack to come in. o/w reciever will fail. This is hacky..
+    std::this_thread::sleep_for(timespan);
     conn->Free(buf);
     conn->Close();
 
