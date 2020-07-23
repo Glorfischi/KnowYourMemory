@@ -15,6 +15,10 @@ enum class StatusCode {
 
   // User error
   InvalidArgument = 10,
+
+  // System error
+  Internal = 100,
+
 };
 
 class Status {

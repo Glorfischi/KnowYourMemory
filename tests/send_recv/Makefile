@@ -9,7 +9,7 @@ BINDIR = ./bin
 SRCPATH = $(PREFIX)/src
 
 BIN = $(BINDIR)/sendrecv
-SRCS=  ./main.cpp ./send_receive.cpp $(SRCPATH)/endpoint.cpp $(SRCPATH)/mm/dumb_allocator.cpp 
+SRCS=  ./main.cpp ./send_receive.cpp $(SRCPATH)/endpoint.cpp $(SRCPATH)/receive_queue.cpp $(SRCPATH)/mm/dumb_allocator.cpp 
 OBJS= $(SRCS:.cpp=.o)
 
 all: $(OBJS)
