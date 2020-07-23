@@ -21,6 +21,7 @@
 #include "conn.hpp"
 #include "mm.hpp"
 #include "mm/dumb_allocator.hpp"
+#include "receive_queue.hpp"
 
 
 namespace kym {
@@ -58,7 +59,35 @@ StatusOr<std::unique_ptr<SendReceiveConnection>> DialSendReceive(std::string ip,
     return epStatus.status();
   }
   std::shared_ptr<endpoint::Endpoint> ep = epStatus.value();
-  auto conn = std::make_unique<SendReceiveConnection>(ep);
+
+  auto allocator = std::make_shared<memory::DumbAllocator>(ep->GetPd());
+
+  auto rq_stat = endpoint::GetReceiveQueue(ep.get(), 8*1024, 10);
+  if (!rq_stat.ok()){
+    return rq_stat.status().Wrap("error creating receive queue while dialing");
+  }
+  std::shared_ptr<endpoint::ReceiveQueue> rq = rq_stat.value();
+
+  auto conn = std::make_unique<SendReceiveConnection>(ep, rq, false, allocator);
+
+  return StatusOr<std::unique_ptr<SendReceiveConnection>>(std::move(conn));
+}
+
+StatusOr<std::unique_ptr<SendReceiveConnection>> DialSendReceive(std::string ip, int port, std::shared_ptr<endpoint::IReceiveQueue> rq){
+  // Default to port 18515
+  if (port == 0) {
+    port = 18515;
+  }
+
+  auto epStatus = kym::endpoint::Dial(ip, port, defaultOptions);
+  if (!epStatus.ok()){
+    return epStatus.status();
+  }
+  std::shared_ptr<endpoint::Endpoint> ep = epStatus.value();
+
+  auto allocator = std::make_shared<memory::DumbAllocator>(ep->GetPd());
+
+  auto conn = std::make_unique<SendReceiveConnection>(ep, rq, true, allocator);
   return StatusOr<std::unique_ptr<SendReceiveConnection>>(std::move(conn));
 }
 
@@ -87,7 +116,16 @@ StatusOr<std::unique_ptr<SendReceiveConnection>> SendReceiveListener::Accept(){
   }
   std::shared_ptr<endpoint::Endpoint> ep = epStatus.value();
 
-  auto conn = std::make_unique<SendReceiveConnection>(ep);
+  auto allocator = std::make_shared<memory::DumbAllocator>(ep->GetPd());
+
+  auto rq_stat = endpoint::GetReceiveQueue(ep.get(), 8*1024, 10);
+  if (!rq_stat.ok()){
+    return rq_stat.status().Wrap("error creating receive queue while dialing");
+  }
+  std::shared_ptr<endpoint::ReceiveQueue> rq = rq_stat.value();
+
+  auto conn = std::make_unique<SendReceiveConnection>(ep, rq, false, allocator);
+
   return StatusOr<std::unique_ptr<SendReceiveConnection>>(std::move(conn));
 
 }
@@ -101,33 +139,21 @@ Status SendReceiveListener::Close() {
 /*
  * SendReceiveConnection
  */
-SendReceiveConnection::SendReceiveConnection(std::shared_ptr<endpoint::Endpoint> ep){
-  this->allocator_ = std::make_shared<memory::DumbAllocator>(ep->GetPd());
+SendReceiveConnection::SendReceiveConnection(std::shared_ptr<endpoint::Endpoint> ep, 
+    std::shared_ptr<endpoint::IReceiveQueue> rq, bool rq_shared, std::shared_ptr<memory::Allocator> allocator){
+  this->allocator_ = allocator;
   this->ep_ = ep;
-
-  // TODO(fischi) Parameterize
-  size_t transfer_size = 1048576;
-  ibv_pd pd = this->ep_->GetPd();
-  for (int i = 0; i < 10; i++){
-
-    // TODO(Fischi) Maybe we should replace that was a call to an allocator?
-    char* buf = (char*)malloc(transfer_size);
-    struct ibv_mr * mr = ibv_reg_mr(&pd, buf, transfer_size, IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);  
-
-    // TODO(Fischi) Error handling. This should not be in the constructor
-    auto regStatus = this->ep_->PostRecv(i, mr->lkey, mr->addr, transfer_size); 
-    assert(regStatus.ok());
-    this->mrs_.push_back(mr);
-  }
+  this->rq_ = rq;
+  this->rq_shared_ = rq_shared;
+  
 }
 
 Status SendReceiveConnection::Close() {
-  for (auto mr : this->mrs_){
-    int ret = ibv_dereg_mr(mr);
-    if (ret) {
-      std::cerr << "Error " << ret << std::endl;
+  if (!this->rq_shared_){
+    auto stat = this->rq_->Close();
+    if (!stat.ok()){
+      return stat.Wrap("error closing receive queue for SendReceiveConnection");
     }
-    free(mr->addr);
   }
   return this->ep_->Close();
 }
@@ -168,19 +194,21 @@ Status SendReceiveConnection::Free(SendRegion region){
 StatusOr<ReceiveRegion> SendReceiveConnection::Receive(){
   auto wcStatus = this->ep_->PollRecvCq();
   if (!wcStatus.ok()){
-    return wcStatus.status();
+    return wcStatus.status().Wrap("error while polling recieve queue for receive");
   }
 
   struct ibv_wc wc = wcStatus.value();
+
+  struct ibv_mr *mr = this->rq_->GetMR(wc.wr_id);
   ReceiveRegion reg;
   reg.context = wc.wr_id;
-  reg.addr = this->mrs_[wc.wr_id]->addr;
+  reg.addr = mr->addr;
   reg.length = wc.byte_len;
   return reg;
 }
 
 Status SendReceiveConnection::Free(ReceiveRegion region){
-  struct ibv_mr *mr = this->mrs_[region.context];
+  struct ibv_mr *mr = this->rq_->GetMR(region.context);
   return this->ep_->PostRecv(region.context, mr->lkey, mr->addr, mr->length); 
 }
 }

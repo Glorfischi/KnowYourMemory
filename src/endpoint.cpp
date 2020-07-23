@@ -33,7 +33,7 @@ Status Endpoint::Close() {
   int ret = rdma_disconnect(this->id_);
   if (ret) {
     // TODO(Fischi) Map error codes
-    return Status(StatusCode::Unknown, "error disconnecting endpoint");
+    return Status(StatusCode::Internal, "error disconnecting endpoint");
   }
   return Status();
 }
@@ -46,7 +46,7 @@ Status Endpoint::PostSendRaw(struct ibv_send_wr *wr , struct ibv_send_wr **bad_w
   int ret = ibv_post_send(this->id_->qp, wr, bad_wr);
   if (ret) {
     // TODO(Fischi) Map error codes
-    return Status(StatusCode::Unknown, "error  " + std::to_string(ret) + " sending");
+    return Status(StatusCode::Internal, "error  " + std::to_string(ret) + " sending");
   }
   return Status();
 }
@@ -161,7 +161,7 @@ StatusOr<struct ibv_wc> Endpoint::PollSendCq(){
   while(ibv_poll_cq(this->id_->qp->send_cq, 1, &wc) == 0){}
   if (wc.status){
     // TODO(Fischi) Map error codes
-    return Status(StatusCode::Unknown, "error polling send cq \n" + std::string(ibv_wc_status_str(wc.status)));
+    return Status(StatusCode::Internal, "error polling send cq \n" + std::string(ibv_wc_status_str(wc.status)));
   }
   return wc;
 }
@@ -185,7 +185,7 @@ Status Endpoint::PostRecv(uint64_t ctx, uint32_t lkey, void *addr, size_t size){
   int ret = ibv_post_recv(this->id_->qp, &wr, &bad);
   if (ret) {
     // TODO(Fischi) Map error codes
-    return Status(StatusCode::Unknown, "error posting receive buffer");
+    return Status(StatusCode::Internal, "error posting receive buffer");
   }
   return Status();
 }
@@ -195,7 +195,7 @@ StatusOr<ibv_wc> Endpoint::PollRecvCq(){
   while(ibv_poll_cq(this->id_->qp->recv_cq, 1, &wc) == 0){}
   if (wc.status){
     // TODO(Fischi) Map error codes
-    return Status(StatusCode::Unknown, "error polling recv cq\n" + std::string(ibv_wc_status_str(wc.status)));
+    return Status(StatusCode::Internal, "error polling recv cq\n" + std::string(ibv_wc_status_str(wc.status)));
   }
   return wc;
 }
@@ -205,11 +205,11 @@ StatusOr<ibv_wc> Endpoint::PollRecvCqOnce(){
   int ret = ibv_poll_cq(this->id_->qp->recv_cq, 1, &wc);
   if (!ret){
     // TODO(Fischi) Map error codes
-    return Status(StatusCode::Unknown, "nothing recieved in send cq");
+    return Status(StatusCode::Internal, "nothing recieved in send cq");
   }
   if (wc.status){
     // TODO(Fischi) Map error codes
-    return Status(StatusCode::Unknown, "error polling recv cq\n" + std::string(ibv_wc_status_str(wc.status)));
+    return Status(StatusCode::Internal, "error polling recv cq\n" + std::string(ibv_wc_status_str(wc.status)));
   }
   return wc;
 }
@@ -222,7 +222,7 @@ StatusOr<std::unique_ptr<Endpoint>> Listener::Accept(Options opts){
   ret = rdma_get_request(this->id_, &conn_id);
   if (ret) {
     // TODO(Fischi) Map error codes
-    return Status(StatusCode::Unknown, "accept: error getting request");
+    return Status(StatusCode::Internal, "accept: error getting request");
   }
 
   struct rdma_conn_param conn_param;
@@ -238,13 +238,13 @@ StatusOr<std::unique_ptr<Endpoint>> Listener::Accept(Options opts){
   ret = rdma_create_qp(conn_id, this->id_->pd, &opts.qp_attr);
   if (ret) {
     // TODO(Fischi) Map error codes
-    return Status(StatusCode::Unknown, "accept: error getting creating qp");
+    return Status(StatusCode::Internal, "accept: error getting creating qp");
   }
 
   ret = rdma_accept(conn_id, &conn_param);
   if (ret) {
     // TODO(Fischi) Map error codes
-    return Status(StatusCode::Unknown, "accept: error accepting connection");
+    return Status(StatusCode::Internal, "accept: error accepting connection");
   }
 
   return StatusOr<std::unique_ptr<Endpoint>>(std::make_unique<Endpoint>(conn_id));
@@ -264,7 +264,7 @@ Status Listener::Close(){
   int ret = rdma_destroy_id(this->id_);
   if (ret) {
     // TODO(Fischi) Map error codes
-    return Status(StatusCode::Unknown, "error destroying listener");
+    return Status(StatusCode::Internal, "error destroying listener");
   }
   return Status();
 }
@@ -284,7 +284,7 @@ StatusOr<std::unique_ptr<Endpoint>> Dial(std::string ip, int port, Options opts)
   ret = rdma_getaddrinfo(ip.c_str(), std::to_string(port).c_str(), &hints, &addrinfo);
   if (ret) {
     // TODO(Fischi) Map error codes
-    return Status(StatusCode::Unknown, "Error getting address info");
+    return Status(StatusCode::Internal, "Error getting address info");
   }
 
   struct rdma_cm_id *id;
@@ -293,7 +293,7 @@ StatusOr<std::unique_ptr<Endpoint>> Dial(std::string ip, int port, Options opts)
   ret = rdma_create_ep(&id, addrinfo, NULL, &opts.qp_attr); 
   if (ret) {
     // TODO(Fischi) Map error codes
-    return Status(StatusCode::Unknown, "Error creating endpoint");
+    return Status(StatusCode::Internal, "Error creating endpoint");
   }
 
   // cleanup addrinfo, we don't need it anymore
@@ -315,7 +315,7 @@ StatusOr<std::unique_ptr<Endpoint>> Dial(std::string ip, int port, Options opts)
   ret = rdma_connect(id, &conn_param);
   if (ret) {
     // TODO(Fischi) Map error codes
-    return Status(StatusCode::Unknown, "Error connecting to remote");
+    return Status(StatusCode::Internal, "Error connecting to remote");
   }
   
   return StatusOr<std::unique_ptr<Endpoint>>(std::make_unique<Endpoint>(id));
@@ -333,7 +333,7 @@ StatusOr<std::unique_ptr<Listener>> Listen(std::string ip, int port){
   ret = rdma_getaddrinfo(ip.c_str(), std::to_string(port).c_str(), &hints, &addrinfo);
   if (ret) {
     // TODO(Fischi) Map error codes
-    return Status(StatusCode::Unknown, "Error getting address info");
+    return Status(StatusCode::Internal, "Error getting address info");
   }
   
   struct rdma_cm_id *id;
@@ -349,7 +349,7 @@ StatusOr<std::unique_ptr<Listener>> Listen(std::string ip, int port){
   ret = rdma_create_ep(&id, addrinfo, NULL, NULL); 
   if (ret) {
     // TODO(Fischi) Map error codes
-    return Status(StatusCode::Unknown, "Error creating listening endpoint");
+    return Status(StatusCode::Internal, "Error creating listening endpoint");
   }
 
   // cleanup addrinfo, we don't need it anymore
@@ -358,7 +358,7 @@ StatusOr<std::unique_ptr<Listener>> Listen(std::string ip, int port){
   ret = rdma_listen(id, 2);
   if(ret){
     // TODO(Fischi) Map error codes
-    return Status(StatusCode::Unknown, "listening failed");
+    return Status(StatusCode::Internal, "listening failed");
   }
 
   return StatusOr<std::unique_ptr<Listener>>(std::make_unique<Listener>(id));

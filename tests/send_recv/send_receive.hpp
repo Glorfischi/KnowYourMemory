@@ -22,6 +22,7 @@
 
 #include "error.hpp"
 #include "endpoint.hpp"
+#include "receive_queue.hpp"
 
 #include "conn.hpp"
 #include "mm.hpp"
@@ -31,7 +32,8 @@ namespace connection {
 
 class SendReceiveConnection : public Connection {
   public:
-    SendReceiveConnection(std::shared_ptr<endpoint::Endpoint>);
+    SendReceiveConnection(std::shared_ptr<endpoint::Endpoint>, std::shared_ptr<endpoint::IReceiveQueue>, 
+        bool rq_shared, std::shared_ptr<memory::Allocator>);
     ~SendReceiveConnection() = default;
 
     Status Close();
@@ -45,11 +47,14 @@ class SendReceiveConnection : public Connection {
   private:
     std::shared_ptr<memory::Allocator> allocator_;
     std::shared_ptr<endpoint::Endpoint> ep_;
-    std::vector<struct ibv_mr *> mrs_; 
+
+    std::shared_ptr<endpoint::IReceiveQueue> rq_;
+    bool rq_shared_;
 
 };
 
 StatusOr<std::unique_ptr<SendReceiveConnection>> DialSendReceive(std::string ip, int port);
+StatusOr<std::unique_ptr<SendReceiveConnection>> DialSendReceive(std::string ip, int port, std::shared_ptr<endpoint::IReceiveQueue> rq);
 
 class SendReceiveListener {
   public:
