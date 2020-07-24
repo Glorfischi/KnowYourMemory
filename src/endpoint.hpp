@@ -23,6 +23,7 @@ namespace kym {
 namespace endpoint {
 
 struct Options {
+  struct ibv_pd *pd;
   struct ibv_qp_init_attr  qp_attr;
 
   const void *private_data;
