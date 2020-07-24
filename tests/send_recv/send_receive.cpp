@@ -62,6 +62,7 @@ StatusOr<std::unique_ptr<SendReceiveConnection>> DialSendReceive(std::string ip,
 
   auto allocator = std::make_shared<memory::DumbAllocator>(ep->GetPd());
 
+  //TODO(Fischi) parameterize
   auto rq_stat = endpoint::GetReceiveQueue(ep.get(), 8*1024, 10);
   if (!rq_stat.ok()){
     return rq_stat.status().Wrap("error creating receive queue while dialing");
@@ -109,8 +110,35 @@ StatusOr<std::unique_ptr<SendReceiveListener>> ListenSendReceive(std::string ip,
   return StatusOr<std::unique_ptr<SendReceiveListener>>(std::move(rcvLn));
 }
 
+StatusOr<std::unique_ptr<SendReceiveListener>> ListenSharedReceive(std::string ip, int port) {
+  // Default to port 18515
+  if (port == 0) {
+    port = 18515;
+  }
+  
+  auto lnStatus = endpoint::Listen(ip, port);
+  if (!lnStatus.ok()){
+    return lnStatus.status();
+  }
+  std::unique_ptr<endpoint::Listener> ln = lnStatus.value();
+
+  //TODO(Fischi) parameterize
+  auto srq_stat = endpoint::GetSharedReceiveQueue(ln->GetPd(), 8*1024, 10);
+  if (!srq_stat.ok()){
+    return srq_stat.status().Wrap("error creating shared receive queue");
+  }
+  std::shared_ptr<endpoint::SharedReceiveQueue> srq = srq_stat.value();
+
+  auto rcvLn = std::make_unique<SendReceiveListener>(std::move(ln), srq);
+  return StatusOr<std::unique_ptr<SendReceiveListener>>(std::move(rcvLn));
+}
+
 StatusOr<std::unique_ptr<SendReceiveConnection>> SendReceiveListener::Accept(){
-  auto epStatus = this->listener_->Accept(defaultOptions);
+  kym::endpoint::Options opts = defaultOptions;
+  if (this->srq_ != nullptr){
+    opts.qp_attr.srq = this->srq_->GetSRQ();
+  }
+  auto epStatus = this->listener_->Accept(opts);
   if (!epStatus.ok()){
     return epStatus.status();
   }
@@ -118,11 +146,16 @@ StatusOr<std::unique_ptr<SendReceiveConnection>> SendReceiveListener::Accept(){
 
   auto allocator = std::make_shared<memory::DumbAllocator>(ep->GetPd());
 
-  auto rq_stat = endpoint::GetReceiveQueue(ep.get(), 8*1024, 10);
-  if (!rq_stat.ok()){
-    return rq_stat.status().Wrap("error creating receive queue while dialing");
+  std::shared_ptr<endpoint::IReceiveQueue> rq;
+  if (this->srq_ == nullptr){
+    auto rq_stat = endpoint::GetReceiveQueue(ep.get(), 8*1024, 10);
+    if (!rq_stat.ok()){
+      return rq_stat.status().Wrap("error creating receive queue while dialing");
+    }
+    rq = rq_stat.value();
+  } else {
+    rq = this->srq_;
   }
-  std::shared_ptr<endpoint::ReceiveQueue> rq = rq_stat.value();
 
   auto conn = std::make_unique<SendReceiveConnection>(ep, rq, false, allocator);
 
@@ -131,6 +164,8 @@ StatusOr<std::unique_ptr<SendReceiveConnection>> SendReceiveListener::Accept(){
 }
 
 SendReceiveListener::SendReceiveListener(std::unique_ptr<endpoint::Listener> listener) : listener_(std::move(listener)) {}
+SendReceiveListener::SendReceiveListener(std::unique_ptr<endpoint::Listener> listener, 
+    std::shared_ptr<endpoint::SharedReceiveQueue> srq ) : listener_(std::move(listener)), srq_(srq) {}
 
 
 Status SendReceiveListener::Close() {
@@ -208,8 +243,7 @@ StatusOr<ReceiveRegion> SendReceiveConnection::Receive(){
 }
 
 Status SendReceiveConnection::Free(ReceiveRegion region){
-  struct ibv_mr *mr = this->rq_->GetMR(region.context);
-  return this->ep_->PostRecv(region.context, mr->lkey, mr->addr, mr->length); 
+  return this->rq_->PostMR(region.context);
 }
 }
 }

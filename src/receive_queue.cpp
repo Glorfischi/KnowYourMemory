@@ -11,6 +11,7 @@
 
 #include <bits/stdint-uintn.h>
 #include <memory>
+#include <ostream>
 #include <stddef.h>
 
 #include <infiniband/verbs.h> 
