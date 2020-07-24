@@ -59,6 +59,29 @@ StatusOr<std::unique_ptr<ReceiveQueue>> GetReceiveQueue(Endpoint *ep, size_t tra
 
 
 
+/*
+ * Implementation of the ReceiveQueue Interface for a  shared receive queue.
+ */
+class SharedReceiveQueue : public IReceiveQueue {
+  public:
+    SharedReceiveQueue(struct ibv_srq *srq, std::vector<ibv_mr*> mrs): srq_(srq), mrs_(mrs){}; 
+    ~SharedReceiveQueue() = default;
+
+    Status Close();
+
+    struct ibv_mr *GetMR(uint32_t wr_id);
+    Status PostMR(uint32_t wr_id);
+
+    struct ibv_srq *GetSRQ();
+  private:
+    struct ibv_srq *srq_;
+    std::vector<ibv_mr*> mrs_;
+};
+StatusOr<std::shared_ptr<SharedReceiveQueue>> GetSharedReceiveQueue(struct ibv_pd pd, size_t transfer_size, size_t inflight);
+
+
+
+
 }
 }
 

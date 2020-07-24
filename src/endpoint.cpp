@@ -290,10 +290,10 @@ StatusOr<std::unique_ptr<Endpoint>> Dial(std::string ip, int port, Options opts)
   struct rdma_cm_id *id;
 
   // setup endpoint, also creates qp
-  ret = rdma_create_ep(&id, addrinfo, NULL, &opts.qp_attr); 
+  ret = rdma_create_ep(&id, addrinfo, opts.pd, &opts.qp_attr); 
   if (ret) {
     // TODO(Fischi) Map error codes
-    return Status(StatusCode::Internal, "Error creating endpoint");
+    return Status(StatusCode::Internal, "Error " + std::to_string(errno) + " creating endpoint");
   }
 
   // cleanup addrinfo, we don't need it anymore
