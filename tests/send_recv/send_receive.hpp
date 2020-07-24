@@ -59,6 +59,7 @@ StatusOr<std::unique_ptr<SendReceiveConnection>> DialSendReceive(std::string ip,
 class SendReceiveListener {
   public:
     SendReceiveListener(std::unique_ptr<endpoint::Listener> listener);
+    SendReceiveListener(std::unique_ptr<endpoint::Listener> listener, std::shared_ptr<endpoint::SharedReceiveQueue> srq);
     ~SendReceiveListener() = default;
 
     Status Close();
@@ -66,9 +67,11 @@ class SendReceiveListener {
     StatusOr<std::unique_ptr<SendReceiveConnection>> Accept();
   private:
     std::unique_ptr<endpoint::Listener> listener_;
+    std::shared_ptr<endpoint::SharedReceiveQueue> srq_;
 };
 
 StatusOr<std::unique_ptr<SendReceiveListener>> ListenSendReceive(std::string ip, int port);
+StatusOr<std::unique_ptr<SendReceiveListener>> ListenSharedReceive(std::string ip, int port);
 
 
 

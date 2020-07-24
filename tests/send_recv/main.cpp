@@ -19,6 +19,7 @@ cxxopts::ParseResult parse(int argc, char* argv[]) {
   try {
     options.add_options()
       ("s,server", "Whether to act as a server", cxxopts::value<bool>())
+      ("srq", "Whether to use a shard receive queue", cxxopts::value<bool>())
       ("i,address", "IP address to connect to", cxxopts::value<std::string>())
       ("n,count", "How many times to repeat measurement", cxxopts::value<int>()->default_value("1000"))
      ;
@@ -40,6 +41,7 @@ int main(int argc, char* argv[]) {
   auto flags = parse(argc,argv);
   std::string ip = flags["address"].as<std::string>();  
   bool server = flags["server"].as<bool>();  
+  bool srq = flags["srq"].as<bool>();  
   int count = flags["count"].as<int>();  
 
   std::vector<float> latency_m;
@@ -47,12 +49,22 @@ int main(int argc, char* argv[]) {
   std::cout << "#### Testing SendReceive Latency ####" << std::endl;
   std::unique_ptr<kym::connection::SendReceiveConnection> conn;
   if (server) {
-    auto ln_s = kym::connection::ListenSendReceive(ip, 9999);
-    if (!ln_s.ok()){
-      std::cerr << "Error listening for send_receive " << ln_s.status().message() << std::endl;
-      return 1;
+    std::unique_ptr<kym::connection::SendReceiveListener> ln;
+    if (srq){
+      auto ln_s = kym::connection::ListenSharedReceive(ip, 9999);
+      if (!ln_s.ok()){
+        std::cerr << "Error listening for send_receive with shared receive queue " << ln_s.status().message() << std::endl;
+        return 1;
+      }
+      ln = ln_s.value();
+    } else {
+      auto ln_s = kym::connection::ListenSendReceive(ip, 9999);
+      if (!ln_s.ok()){
+        std::cerr << "Error listening for send_receive " << ln_s.status().message() << std::endl;
+        return 1;
+      }
+      ln = ln_s.value();
     }
-    auto ln = ln_s.value();
     auto conn_s = ln->Accept();
     if (!conn_s.ok()){
       std::cerr << "Error accepting for send_receive " << conn_s.status().message() << std::endl;
