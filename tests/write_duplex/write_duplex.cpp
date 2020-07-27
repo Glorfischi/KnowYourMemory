@@ -72,7 +72,7 @@ StatusOr<connectionInfo> receiveCI(endpoint::Endpoint *ep){
   // Getting info on ring buffer
   auto pd = ep->GetPd();
   char* buf = (char*)malloc(sizeof(connectionInfo));
-  struct ibv_mr * mr = ibv_reg_mr(&pd, buf, sizeof(connectionInfo), IBV_ACCESS_REMOTE_READ | IBV_ACCESS_LOCAL_WRITE);  
+  struct ibv_mr * mr = ibv_reg_mr(&pd, buf, sizeof(connectionInfo), IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);  
   auto rcv_stat = ep->PostRecv(54, mr->lkey, mr->addr, mr->length);
   if (!rcv_stat.ok()){
     return rcv_stat;
@@ -107,10 +107,8 @@ StatusOr<std::unique_ptr<WriteDuplexConnection>> DialWriteDuplex(std::string ip,
     return ep_stat.status();
   }
 
-  std::shared_ptr<endpoint::Endpoint> ep = ep_stat.value();
+  std::unique_ptr<endpoint::Endpoint> ep = ep_stat.value();
 
-  auto rq = endpoint::GetReceiveQueue(ep.get(), sizeof(uint32_t), write_duplex_outstanding);
-  
   auto alloc = std::make_shared<memory::DumbAllocator>(ep->GetPd());
 
   auto magic_stat = ringbuffer::GetMagicBuffer(write_duplex_buf_size);
@@ -120,41 +118,92 @@ StatusOr<std::unique_ptr<WriteDuplexConnection>> DialWriteDuplex(std::string ip,
   auto pd = ep->GetPd();
   struct ibv_mr *buf_mr = ibv_reg_mr(&pd, magic_stat.value(), 2 * write_duplex_buf_size, IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);  
 
+  auto ci_stat = receiveCI(ep.get());
+  if (!ci_stat.ok()){
+    return ci_stat.status().Wrap("error receiving connection info while dialing"); 
+  }
+  connectionInfo ci = ci_stat.value();
+
   auto stat = sendCI(ep.get(), write_duplex_buf_size, buf_mr->lkey);
   if (!stat.ok()){
     return stat.Wrap("error sending connection info while dialing"); 
   }
-  auto ci_stat = receiveCI(ep.get());
-  if (!ci_stat.ok()){
-    return stat.Wrap("error receiving connection info while dialing"); 
+  
+  auto rq_stat = endpoint::GetReceiveQueue(ep.get(), sizeof(uint32_t), write_duplex_outstanding);
+  if (!rq_stat.ok()){
+    return rq_stat.status().Wrap("error getting receive_queue");
   }
-  connectionInfo ci = ci_stat.value();
+  std::unique_ptr<endpoint::ReceiveQueue> rq = rq_stat.value();
 
-  auto sndr = std::make_unique<WriteDuplexConnection>(ep, buf_mr, rq, alloc, ci.addr, ci.key);
 
-  return std::move(sndr);
+  auto conn = std::make_unique<WriteDuplexConnection>(std::move(ep), buf_mr, std::move(rq), alloc, ci.addr, ci.key);
+
+  return std::move(conn);
 }
 
 StatusOr<std::unique_ptr<WriteDuplexListener>> ListenWriteDuplex(std::string ip, int port){
-  return Status(StatusCode::NotImplemented);
+  // Default to port 18515
+  if (port == 0) {
+    port = 18515;
+  }
+  auto ln_stat = endpoint::Listen(ip, port);
+  if (!ln_stat.ok()){
+    return ln_stat.status();
+  }
+  std::unique_ptr<endpoint::Listener> ln = ln_stat.value();
+  return std::make_unique<WriteDuplexListener>(std::move(ln));
 }
 
 
-WriteDuplexListener::WriteDuplexListener(std::unique_ptr<endpoint::Listener> listener){
-}
+WriteDuplexListener::WriteDuplexListener(std::unique_ptr<endpoint::Listener> listener): listener_(std::move(listener)){}
+
 Status WriteDuplexListener::Close(){
-  return Status(StatusCode::NotImplemented);
+  return this->listener_->Close();
 }
 StatusOr<std::unique_ptr<WriteDuplexConnection>> WriteDuplexListener::Accept(){
-  return Status(StatusCode::NotImplemented);
+  auto epStatus = this->listener_->Accept(default_write_duplex_options);
+  if (!epStatus.ok()){
+    return epStatus.status();
+  }
+  std::unique_ptr<endpoint::Endpoint> ep = epStatus.value();
+    
+    auto alloc = std::make_shared<memory::DumbAllocator>(ep->GetPd());
+
+  auto magic_stat = ringbuffer::GetMagicBuffer(write_duplex_buf_size);
+  if (!magic_stat.ok()){
+    return magic_stat.status().Wrap("error initialzing magic buffer while accepting");
+  }
+  auto pd = ep->GetPd();
+  struct ibv_mr *buf_mr = ibv_reg_mr(&pd, magic_stat.value(), 2 * write_duplex_buf_size, IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);  
+
+  
+  auto stat = sendCI(ep.get(), write_duplex_buf_size, buf_mr->lkey);
+  if (!stat.ok()){
+    return stat.Wrap("error sending connection info while accepting"); 
+  }
+  auto ci_stat = receiveCI(ep.get());
+  if (!ci_stat.ok()){
+    return ci_stat.status().Wrap("error receiving connection info while accepting"); 
+  }
+  connectionInfo ci = ci_stat.value();
+
+  auto rq_stat = endpoint::GetReceiveQueue(ep.get(), sizeof(uint32_t), write_duplex_outstanding);
+  if (!rq_stat.ok()){
+    return rq_stat.status().Wrap("error getting receive_queue");
+  }
+  std::unique_ptr<endpoint::ReceiveQueue> rq = rq_stat.value();
+  
+  auto conn = std::make_unique<WriteDuplexConnection>(std::move(ep), buf_mr, std::move(rq), alloc, ci.addr, ci.key);
+
+  return std::move(conn);
 }
 
 
-WriteDuplexConnection::WriteDuplexConnection(std::shared_ptr<endpoint::Endpoint> ep, struct ibv_mr *buf_mr, 
-    std::shared_ptr<kym::endpoint::IReceiveQueue> rq, std::shared_ptr<memory::Allocator> allocator, 
+WriteDuplexConnection::WriteDuplexConnection(std::unique_ptr<endpoint::Endpoint> ep, struct ibv_mr *buf_mr, 
+    std::unique_ptr<kym::endpoint::ReceiveQueue> rq, std::shared_ptr<memory::Allocator> allocator, 
     uint64_t rbuf_vaddr_, uint32_t rbuf_rkey_){
-  this->ep_ = ep;
-  this->rq_ = rq;
+  this->ep_ = std::move(ep);
+  this->rq_ = std::move(rq);
   this->allocator_ = allocator;
 
   this->rbuf_vaddr_ = rbuf_vaddr_;

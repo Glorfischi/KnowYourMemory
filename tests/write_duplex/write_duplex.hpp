@@ -24,8 +24,8 @@ namespace connection {
 
 class WriteDuplexConnection : public Receiver {
   public:
-    WriteDuplexConnection(std::shared_ptr<endpoint::Endpoint>, struct ibv_mr *buf_mr, 
-        std::shared_ptr<kym::endpoint::IReceiveQueue> rq, std::shared_ptr<memory::Allocator>, 
+    WriteDuplexConnection(std::unique_ptr<endpoint::Endpoint>, struct ibv_mr *buf_mr, 
+        std::unique_ptr<kym::endpoint::ReceiveQueue> rq, std::shared_ptr<memory::Allocator>, 
         uint64_t rbuf_vaddr_, uint32_t rbuf_rkey_);
     ~WriteDuplexConnection() = default;
 
@@ -38,8 +38,8 @@ class WriteDuplexConnection : public Receiver {
     Status Send(SendRegion region);
     Status Free(SendRegion region);
   private:
-    std::shared_ptr<endpoint::Endpoint> ep_;
-    std::shared_ptr<kym::endpoint::IReceiveQueue> rq_;
+    std::unique_ptr<endpoint::Endpoint> ep_;
+    std::unique_ptr<kym::endpoint::ReceiveQueue> rq_;
     std::shared_ptr<memory::Allocator> allocator_;
 
     // Local Buffer

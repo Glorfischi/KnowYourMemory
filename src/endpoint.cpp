@@ -161,7 +161,7 @@ StatusOr<struct ibv_wc> Endpoint::PollSendCq(){
   while(ibv_poll_cq(this->id_->qp->send_cq, 1, &wc) == 0){}
   if (wc.status){
     // TODO(Fischi) Map error codes
-    return Status(StatusCode::Internal, "error polling send cq \n" + std::string(ibv_wc_status_str(wc.status)));
+    return Status(StatusCode::Internal, "error " + std::to_string(wc.status) +  " polling send cq \n" + std::string(ibv_wc_status_str(wc.status)));
   }
   return wc;
 }
@@ -195,7 +195,7 @@ StatusOr<ibv_wc> Endpoint::PollRecvCq(){
   while(ibv_poll_cq(this->id_->qp->recv_cq, 1, &wc) == 0){}
   if (wc.status){
     // TODO(Fischi) Map error codes
-    return Status(StatusCode::Internal, "error polling recv cq\n" + std::string(ibv_wc_status_str(wc.status)));
+    return Status(StatusCode::Internal, "error " + std::to_string(wc.status) +  " polling recv cq\n" + std::string(ibv_wc_status_str(wc.status)));
   }
   return wc;
 }
