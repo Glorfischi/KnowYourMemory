@@ -17,11 +17,11 @@ namespace ringbuffer {
 /*
  * Get a new "magic" circular buffer allocated using shared memory.
  */
-StatusOr<void *> getMagicBuffer(size_t buf_size);
+StatusOr<void *> GetMagicBuffer(size_t buf_size);
 /*
  * Frees a "magic" circular buffer allocated using shared memory.
  */
-Status freeMagicBuffer(void * buf, size_t buf_size);
+Status FreeMagicBuffer(void * buf, size_t buf_size);
 
 }
 }
