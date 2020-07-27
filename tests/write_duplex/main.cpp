@@ -61,6 +61,11 @@ int main(int argc, char* argv[]) {
     auto conn = conn_s.value();
 
     for(int i = 0; i<count; i++){
+      // TODO(Fischi) Remove this. For now we only test the sender
+      std::chrono::milliseconds timespan(1000); 
+      std::this_thread::sleep_for(timespan);
+      continue;
+
       auto start = std::chrono::high_resolution_clock::now();
       auto buf_s = conn->Receive();
       if (!buf_s.ok()){
@@ -89,7 +94,7 @@ int main(int argc, char* argv[]) {
     }
     auto conn = conn_s.value();
 
-    auto buf_s = conn->GetMemoryRegion(2048);
+    auto buf_s = conn->GetMemoryRegion(512*1024);
     if (!buf_s.ok()){
       std::cerr << "Error allocating send region " << buf_s.status().message() << std::endl;
       conn->Close();
@@ -100,6 +105,7 @@ int main(int argc, char* argv[]) {
     *(uint64_t *)buf.addr = 0;
     for(int i = 0; i<count; i++){
       *(uint64_t *)buf.addr += 1;
+      std::cout << "Sending " << i << std::endl;
       auto start = std::chrono::high_resolution_clock::now();
       auto send_s = conn->Send(buf);
       if (!send_s.ok()){
