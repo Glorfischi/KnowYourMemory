@@ -24,9 +24,10 @@ namespace connection {
 
 class WriteDuplexConnection : public Receiver {
   public:
-    WriteDuplexConnection(std::unique_ptr<endpoint::Endpoint>, struct ibv_mr *buf_mr, 
+    WriteDuplexConnection(std::unique_ptr<endpoint::Endpoint>, struct ibv_mr *buf_mr, struct ibv_mr *buf_head_mr, 
         std::unique_ptr<kym::endpoint::ReceiveQueue> rq, std::shared_ptr<memory::Allocator>, 
-        uint64_t rbuf_vaddr_, uint32_t rbuf_rkey_);
+        struct ibv_mr *rbuf_head_mr, uint64_t rbuf_vaddr_, uint32_t rbuf_rkey_,  uint64_t rbuf_head_vaddr_, 
+        uint32_t rbuf_head_rkey_);
     ~WriteDuplexConnection() = default;
 
     Status Close();
@@ -44,14 +45,19 @@ class WriteDuplexConnection : public Receiver {
 
     // Local Buffer
     struct ibv_mr *buf_mr_;
-    uint32_t      buf_head_;   
+    struct ibv_mr *buf_head_mr_;   
+    uint32_t      *buf_head_;   
 
 
     // Remote Buffer
     uint64_t rbuf_vaddr_;
     uint32_t rbuf_rkey_;
+    // Remote Buffer info
+    uint64_t       rbuf_head_vaddr_;
+    uint32_t       rbuf_head_rkey_;
+    struct ibv_mr *rbuf_head_mr_; // Buffer to read into
+    uint32_t      *rbuf_head_;   
 
-    uint32_t rbuf_head_;   
     uint32_t rbuf_tail_;
     uint32_t rbuf_size_;
     bool     rbuf_full_;
