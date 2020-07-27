@@ -9,7 +9,8 @@ BINDIR = ./bin
 SRCPATH = $(PREFIX)/src
 
 BIN = $(BINDIR)/writeduplex
-SRCS=  ./main.cpp ./write_duplex.cpp $(SRCPATH)/endpoint.cpp $(SRCPATH)/mm/dumb_allocator.cpp 
+SRCS=  ./main.cpp ./write_duplex.cpp $(SRCPATH)/endpoint.cpp $(SRCPATH)/receive_queue.cpp \
+			 $(SRCPATH)/ring_buffer/magic_buffer.cpp $(SRCPATH)/mm/dumb_allocator.cpp 
 OBJS= $(SRCS:.cpp=.o)
 
 all: $(OBJS)
