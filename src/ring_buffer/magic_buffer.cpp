@@ -10,7 +10,7 @@
 namespace kym {
 namespace ringbuffer {
 
-StatusOr<void *> getMagicBuffer(size_t buf_size){
+StatusOr<void *> GetMagicBuffer(size_t buf_size){
   // TODO(fischi) Check that buf_size is aligned to page size
   
   // (fischi) We reserve virtual memory two times the size of the buffer. This mapping is not actually 
@@ -56,7 +56,7 @@ StatusOr<void *> getMagicBuffer(size_t buf_size){
 }
 
 
-Status freeMagicBuffer(void * buf_addr, size_t buf_size){
+Status FreeMagicBuffer(void * buf_addr, size_t buf_size){
   int ret = shmdt(buf_addr);
   if (ret) {
     return Status(StatusCode::Internal, "error " + std::to_string(errno) + " umapping first half of buffer");
