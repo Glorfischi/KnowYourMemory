@@ -228,6 +228,7 @@ WriteDuplexConnection::WriteDuplexConnection(std::unique_ptr<endpoint::Endpoint>
   this->buf_mr_ = buf_mr;
   this->buf_head_mr_ = buf_head_mr;
   this->buf_head_ = (uint32_t *)buf_head_mr->addr;
+  this->buf_size_ = write_duplex_buf_size;
 
   this->rbuf_vaddr_ = rbuf_vaddr;
   this->rbuf_rkey_ = rbuf_rkey;
@@ -268,10 +269,30 @@ Status WriteDuplexConnection::Close(){
   return this->ep_->Close();
 }
 StatusOr<ReceiveRegion> WriteDuplexConnection::Receive(){
-  return Status(StatusCode::NotImplemented);
+  auto wcStatus = this->ep_->PollRecvCq();
+  if (!wcStatus.ok()){
+    return wcStatus.status().Wrap("error polling receive cq");
+  }
+  struct ibv_wc wc = wcStatus.value();
+  uint32_t msg_len = wc.imm_data;
+  auto post_stat = this->rq_->PostMR(wc.wr_id);
+  if (!post_stat.ok()){
+    return post_stat.Wrap("error reposting recieve buffer");
+  }
+
+  // TODO(Fischi) out of order reading.
+  uint32_t read_offset = *this->buf_head_;
+  ReceiveRegion reg;
+  reg.addr = (void *)((uint64_t)this->buf_mr_->addr + read_offset);
+  reg.length = msg_len;
+ 
+  return reg;
 }
-Status WriteDuplexConnection::Free(ReceiveRegion){
-  return Status(StatusCode::NotImplemented);
+Status WriteDuplexConnection::Free(ReceiveRegion reg){
+  // TODO(fischi) How do we handle out of order frees?
+  // Get the new head after we freed. 
+  *this->buf_head_  =  (*this->buf_head_ + reg.length) % this->buf_size_;
+  return Status();
 }
 StatusOr<SendRegion> WriteDuplexConnection::GetMemoryRegion(size_t size){
   auto mrStatus =  this->allocator_->Alloc(size);
@@ -289,6 +310,8 @@ StatusOr<SendRegion> WriteDuplexConnection::GetMemoryRegion(size_t size){
 
 Status WriteDuplexConnection::Send(SendRegion region){
   //  Read the head position from remote
+  //  TODO(Fischi) Only check if needed?
+  //  TODO(Fischi) Block if necessary?
   auto stat = this->ep_->PostRead(0, this->rbuf_head_mr_->lkey, this->rbuf_head_mr_->addr, 
       sizeof(uint32_t), this->rbuf_head_vaddr_, this->rbuf_head_rkey_);
   if (!stat.ok()){
@@ -331,7 +354,12 @@ Status WriteDuplexConnection::Send(SendRegion region){
   return Status();
 }
 Status WriteDuplexConnection::Free(SendRegion region){
-  return Status(StatusCode::NotImplemented);
+  memory::Region mr = memory::Region();
+  mr.addr = region.addr;
+  mr.length = region.length;
+  mr.lkey = region.lkey;
+  mr.context = region.context;
+  return this->allocator_->Free(mr);
 }
 
 

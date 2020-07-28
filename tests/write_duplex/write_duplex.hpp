@@ -47,6 +47,7 @@ class WriteDuplexConnection : public Receiver {
     struct ibv_mr *buf_mr_;
     struct ibv_mr *buf_head_mr_;   
     uint32_t      *buf_head_;   
+    size_t        buf_size_;
 
 
     // Remote Buffer
