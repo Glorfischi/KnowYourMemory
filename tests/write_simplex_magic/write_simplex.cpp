@@ -27,7 +27,7 @@ namespace kym {
 namespace connection {
 
 // Max number of outstanding sends
-const int write_simplex_outstanding = 10;
+const int write_simplex_outstanding = 30;
 const size_t write_simplex_buf_size = 10*1024*1024;
 
 struct connectionInfo {
