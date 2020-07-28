@@ -41,6 +41,9 @@ Status Endpoint::Close() {
 ibv_pd Endpoint::GetPd(){
   return *this->id_->pd;
 }
+ibv_srq *Endpoint::GetSRQ(){
+  return this->id_->srq;
+}
 
 Status Endpoint::PostSendRaw(struct ibv_send_wr *wr , struct ibv_send_wr **bad_wr){
   int ret = ibv_post_send(this->id_->qp, wr, bad_wr);
@@ -182,7 +185,12 @@ Status Endpoint::PostRecv(uint64_t ctx, uint32_t lkey, void *addr, size_t size){
   wr.sg_list = &sge;
   wr.num_sge = 1;
 
-  int ret = ibv_post_recv(this->id_->qp, &wr, &bad);
+  int ret;
+  if(this->id_->srq != nullptr){
+    ret = ibv_post_srq_recv(this->id_->srq, &wr, &bad);
+  } else {
+    ret = ibv_post_recv(this->id_->qp, &wr, &bad);
+  }
   if (ret) {
     // TODO(Fischi) Map error codes
     return Status(StatusCode::Internal, "error posting receive buffer");
@@ -235,6 +243,16 @@ StatusOr<std::unique_ptr<Endpoint>> Listener::Accept(Options opts){
   conn_param.private_data_len = opts.private_data_len;
   conn_param.flow_control = opts.flow_control;
 
+  if (opts.use_srq && opts.qp_attr.srq == nullptr){
+    struct ibv_srq_init_attr srq_init_attr;
+    srq_init_attr.attr.max_sge = opts.qp_attr.cap.max_recv_sge;
+    srq_init_attr.attr.max_wr = opts.qp_attr.cap.max_recv_wr;
+    auto srq = ibv_create_srq(conn_id->pd, &srq_init_attr);
+    if (srq == nullptr){
+      return Status(StatusCode::Internal, "error " + std::to_string(errno) + " creating ibv_srq");
+    }
+  }
+
   ret = rdma_create_qp(conn_id, this->id_->pd, &opts.qp_attr);
   if (ret) {
     // TODO(Fischi) Map error codes
@@ -259,6 +277,7 @@ Listener::~Listener(){
 ibv_pd Listener::GetPd(){
   return *this->id_->pd;
 }
+
 
 Status Listener::Close(){
   int ret = rdma_destroy_id(this->id_);
@@ -290,10 +309,24 @@ StatusOr<std::unique_ptr<Endpoint>> Dial(std::string ip, int port, Options opts)
   struct rdma_cm_id *id;
 
   // setup endpoint, also creates qp
-  ret = rdma_create_ep(&id, addrinfo, opts.pd, &opts.qp_attr); 
+  ret = rdma_create_ep(&id, addrinfo, opts.pd, NULL); 
   if (ret) {
     // TODO(Fischi) Map error codes
     return Status(StatusCode::Internal, "Error " + std::to_string(errno) + " creating endpoint");
+  }
+  if (opts.use_srq && opts.qp_attr.srq == nullptr){
+    struct ibv_srq_init_attr srq_init_attr;
+    srq_init_attr.attr.max_sge = opts.qp_attr.cap.max_recv_sge;
+    srq_init_attr.attr.max_wr = opts.qp_attr.cap.max_recv_wr;
+    auto srq = ibv_create_srq(id->pd, &srq_init_attr);
+    if (srq == nullptr){
+      return Status(StatusCode::Internal, "error " + std::to_string(errno) + " creating ibv_srq");
+    }
+  }
+  ret = rdma_create_qp(id, id->pd, &opts.qp_attr);
+  if (ret) {
+    // TODO(Fischi) Map error codes
+    return Status(StatusCode::Internal, "dial: error getting creating qp");
   }
 
   // cleanup addrinfo, we don't need it anymore

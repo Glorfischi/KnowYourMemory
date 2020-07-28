@@ -25,6 +25,8 @@ namespace endpoint {
 struct Options {
   struct ibv_pd *pd;
   struct ibv_qp_init_attr  qp_attr;
+  
+  bool use_srq; // Wether to use a shared receive queue for receiving. If so and no srq is set in the qp_attr, one will be created using the corresponding capabilities of the qp_attr
 
   const void *private_data;
 	uint8_t private_data_len;
@@ -44,6 +46,7 @@ class Endpoint {
     Status Close();
 
     ibv_pd GetPd();
+    ibv_srq *GetSRQ();
 
     Status PostSendRaw(struct ibv_send_wr *wr, struct ibv_send_wr **bad_wr);
     Status PostSend(uint64_t ctx, uint32_t lkey, void *addr, size_t size);
