@@ -70,7 +70,7 @@ int main(int argc, char* argv[]) {
         return 1;
       }
       auto buf = buf_s.value();
-      std::cout << *(uint64_t *)buf.addr << std::endl;
+      //std::cout << *(uint64_t *)buf.addr << std::endl;
       auto free_s = conn->Free(buf_s.value());
       if (!free_s.ok()){
         std::cerr << free_s << std::endl;
@@ -89,7 +89,7 @@ int main(int argc, char* argv[]) {
     }
     auto conn = conn_s.value();
 
-    auto buf_s = conn->GetMemoryRegion(512*1024);
+    auto buf_s = conn->GetMemoryRegion(2*1024);
     if (!buf_s.ok()){
       std::cerr << "Error allocating send region " << buf_s.status().message() << std::endl;
       conn->Close();
@@ -100,7 +100,7 @@ int main(int argc, char* argv[]) {
     *(uint64_t *)buf.addr = 0;
     for(int i = 0; i<count; i++){
       *(uint64_t *)buf.addr += 1;
-      std::cout << "Sending " << i << std::endl;
+      //std::cout << "Sending " << i << std::endl;
       auto start = std::chrono::high_resolution_clock::now();
       auto send_s = conn->Send(buf);
       if (!send_s.ok()){
