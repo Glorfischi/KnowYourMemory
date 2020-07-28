@@ -61,11 +61,6 @@ int main(int argc, char* argv[]) {
     auto conn = conn_s.value();
 
     for(int i = 0; i<count; i++){
-      // TODO(Fischi) Remove this. For now we only test the sender
-      std::chrono::milliseconds timespan(1000); 
-      std::this_thread::sleep_for(timespan);
-      continue;
-
       auto start = std::chrono::high_resolution_clock::now();
       auto buf_s = conn->Receive();
       if (!buf_s.ok()){
@@ -75,7 +70,7 @@ int main(int argc, char* argv[]) {
         return 1;
       }
       auto buf = buf_s.value();
-      // std::cout << *(uint64_t *)buf.addr << std::endl;
+      std::cout << *(uint64_t *)buf.addr << std::endl;
       auto free_s = conn->Free(buf_s.value());
       if (!free_s.ok()){
         std::cerr << free_s << std::endl;
