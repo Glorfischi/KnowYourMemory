@@ -28,8 +28,9 @@ struct Options {
   
   bool use_srq; // Wether to use a shared receive queue for receiving. If so and no srq is set in the qp_attr, one will be created using the corresponding capabilities of the qp_attr
 
-  const void *private_data;
+  const void *private_data; // Private data set here will be accessible to the other endpoint through GetConnectionInfo
 	uint8_t private_data_len;
+
 	uint8_t responder_resources;
 	uint8_t initiator_depth;
 	uint8_t flow_control;
@@ -41,12 +42,17 @@ struct Options {
 class Endpoint {
   public:
     Endpoint(rdma_cm_id*);
+    Endpoint(rdma_cm_id* id, void *private_data, size_t private_data_len);
+
     ~Endpoint();
 
     Status Close();
 
     ibv_pd GetPd();
     ibv_srq *GetSRQ();
+
+    // Returns the length of the received private data on connection establishment and returns a pointer to it in buf
+    size_t GetConnectionInfo(void ** buf);
 
     Status PostSendRaw(struct ibv_send_wr *wr, struct ibv_send_wr **bad_wr);
     Status PostSend(uint64_t ctx, uint32_t lkey, void *addr, size_t size);
@@ -63,6 +69,9 @@ class Endpoint {
     StatusOr<struct ibv_wc> PollRecvCqOnce();
   private:
     rdma_cm_id *id_;
+    
+    void *private_data_;
+    size_t private_data_len_;
 };
 
 class Listener {

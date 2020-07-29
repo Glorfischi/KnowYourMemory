@@ -8,6 +8,7 @@
 
 #include <bits/stdint-uintn.h>
 #include <cstdio>
+#include <cstring>
 #include <iostream>
 #include <memory> // For smart pointers
 
@@ -24,8 +25,13 @@ namespace endpoint {
 
 Endpoint::Endpoint(rdma_cm_id *id) : id_(id){
 }
+Endpoint::Endpoint(rdma_cm_id* id, void *private_data, size_t private_data_len) : id_(id), private_data_(private_data), private_data_len_(private_data_len){
+}
 
 Endpoint::~Endpoint() {
+  if (this->private_data_){
+    free(this->private_data_);
+  }
   rdma_destroy_ep(this->id_);
 }
 
@@ -43,6 +49,10 @@ ibv_pd Endpoint::GetPd(){
 }
 ibv_srq *Endpoint::GetSRQ(){
   return this->id_->srq;
+}
+size_t Endpoint::GetConnectionInfo(void ** buf){
+  *buf = this->private_data_;
+  return this->private_data_len_;
 }
 
 Status Endpoint::PostSendRaw(struct ibv_send_wr *wr , struct ibv_send_wr **bad_wr){
@@ -228,11 +238,17 @@ StatusOr<std::unique_ptr<Endpoint>> Listener::Accept(Options opts){
   struct rdma_cm_id *conn_id;
 
   ret = rdma_get_request(this->id_, &conn_id);
-  if (ret) {
-    // TODO(Fischi) Map error codes
-    return Status(StatusCode::Internal, "accept: error getting request");
+  if (ret){
+    return Status(StatusCode::Internal, "accept: error getting connection id");
   }
-
+  // Set connection data
+  size_t private_data_len = conn_id->event->param.conn.private_data_len;
+  void * private_data;
+  if (private_data_len) {
+    private_data = calloc(1, private_data_len);
+    memcpy(private_data, conn_id->event->param.conn.private_data, private_data_len);
+  }
+  
   struct rdma_conn_param conn_param;
   conn_param.responder_resources = opts.responder_resources;  
   conn_param.initiator_depth =  opts.initiator_depth; 
@@ -258,14 +274,14 @@ StatusOr<std::unique_ptr<Endpoint>> Listener::Accept(Options opts){
     // TODO(Fischi) Map error codes
     return Status(StatusCode::Internal, "accept: error getting creating qp");
   }
-
+  
   ret = rdma_accept(conn_id, &conn_param);
   if (ret) {
-    // TODO(Fischi) Map error codes
     return Status(StatusCode::Internal, "accept: error accepting connection");
   }
 
-  return StatusOr<std::unique_ptr<Endpoint>>(std::make_unique<Endpoint>(conn_id));
+  
+  return StatusOr<std::unique_ptr<Endpoint>>(std::make_unique<Endpoint>(conn_id, private_data, private_data_len));
 }
 
 Listener::Listener(rdma_cm_id *id) : id_(id) {
@@ -350,8 +366,16 @@ StatusOr<std::unique_ptr<Endpoint>> Dial(std::string ip, int port, Options opts)
     // TODO(Fischi) Map error codes
     return Status(StatusCode::Internal, "Error connecting to remote");
   }
+
+  // Set connection data
+  size_t private_data_len = id->event->param.conn.private_data_len;
+  void * private_data;
+  if (private_data_len) {
+    private_data = calloc(1, private_data_len);
+    memcpy(private_data, id->event->param.conn.private_data, private_data_len);
+  }
   
-  return StatusOr<std::unique_ptr<Endpoint>>(std::make_unique<Endpoint>(id));
+  return StatusOr<std::unique_ptr<Endpoint>>(std::make_unique<Endpoint>(id, private_data, private_data_len));
 }
 
 StatusOr<std::unique_ptr<Listener>> Listen(std::string ip, int port){

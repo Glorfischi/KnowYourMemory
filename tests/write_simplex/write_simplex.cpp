@@ -73,8 +73,9 @@ StatusOr<std::unique_ptr<WriteSimplexSender>> DialWriteSimplex(std::string ip, i
   if (port == 0) {
     port = 18515;
   }
-
-  auto ep_stat = kym::endpoint::Dial(ip, port, default_write_simplex_snd_options);
+  
+  auto opts = default_write_simplex_snd_options;
+  auto ep_stat = kym::endpoint::Dial(ip, port, opts);
   if (!ep_stat.ok()){
     return ep_stat.status();
   }
@@ -248,7 +249,8 @@ StatusOr<std::unique_ptr<WriteSimplexListener>> ListenWriteSimplex(std::string i
 }
 
 StatusOr<std::unique_ptr<WriteSimplexReceiver>> WriteSimplexListener::Accept(){
-  auto epStatus = this->listener_->Accept(default_write_simplex_rcv_options);
+  auto opts = default_write_simplex_rcv_options;
+  auto epStatus = this->listener_->Accept(opts);
   if (!epStatus.ok()){
     return epStatus.status();
   }
