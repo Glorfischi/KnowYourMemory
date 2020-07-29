@@ -304,7 +304,7 @@ Status Listener::Close(){
   return Status();
 }
 
-StatusOr<std::unique_ptr<Endpoint>> Dial(std::string ip, int port, Options opts){
+StatusOr<std::unique_ptr<Endpoint>> Create(std::string ip, int port, Options opts){
   if (ip.empty()){
     return Status(StatusCode::InvalidArgument, "IP cannot be empty");
   }
@@ -318,7 +318,6 @@ StatusOr<std::unique_ptr<Endpoint>> Dial(std::string ip, int port, Options opts)
 
   ret = rdma_getaddrinfo(ip.c_str(), std::to_string(port).c_str(), &hints, &addrinfo);
   if (ret) {
-    // TODO(Fischi) Map error codes
     return Status(StatusCode::Internal, "Error getting address info");
   }
 
@@ -327,7 +326,6 @@ StatusOr<std::unique_ptr<Endpoint>> Dial(std::string ip, int port, Options opts)
   // setup endpoint, also creates qp
   ret = rdma_create_ep(&id, addrinfo, opts.pd, NULL); 
   if (ret) {
-    // TODO(Fischi) Map error codes
     return Status(StatusCode::Internal, "Error " + std::to_string(errno) + " creating endpoint");
   }
   if (opts.use_srq && opts.qp_attr.srq == nullptr){
@@ -341,7 +339,6 @@ StatusOr<std::unique_ptr<Endpoint>> Dial(std::string ip, int port, Options opts)
   }
   ret = rdma_create_qp(id, id->pd, &opts.qp_attr);
   if (ret) {
-    // TODO(Fischi) Map error codes
     return Status(StatusCode::Internal, "dial: error getting creating qp");
   }
 
@@ -349,6 +346,9 @@ StatusOr<std::unique_ptr<Endpoint>> Dial(std::string ip, int port, Options opts)
   rdma_freeaddrinfo(addrinfo);
 
 
+  return StatusOr<std::unique_ptr<Endpoint>>(std::make_unique<Endpoint>(id));
+}
+Status Endpoint::Connect(Options opts){
   struct rdma_conn_param conn_param;
   conn_param.responder_resources = opts.responder_resources;  
   conn_param.initiator_depth =  opts.initiator_depth; 
@@ -359,23 +359,30 @@ StatusOr<std::unique_ptr<Endpoint>> Dial(std::string ip, int port, Options opts)
   conn_param.private_data_len = opts.private_data_len;
   conn_param.flow_control = opts.flow_control;
 
-
   // connect to remote
-  ret = rdma_connect(id, &conn_param);
+  int ret = rdma_connect(this->id_, &conn_param);
   if (ret) {
-    // TODO(Fischi) Map error codes
     return Status(StatusCode::Internal, "Error connecting to remote");
   }
-
   // Set connection data
-  size_t private_data_len = id->event->param.conn.private_data_len;
-  void * private_data;
+  size_t private_data_len = this->id_->event->param.conn.private_data_len;
+  void * private_data = nullptr;
   if (private_data_len) {
     private_data = calloc(1, private_data_len);
-    memcpy(private_data, id->event->param.conn.private_data, private_data_len);
+    memcpy(private_data, this->id_->event->param.conn.private_data, private_data_len);
   }
-  
-  return StatusOr<std::unique_ptr<Endpoint>>(std::make_unique<Endpoint>(id, private_data, private_data_len));
+  this->private_data_ = private_data;
+  this->private_data_len_ = private_data_len;
+  return Status();
+}
+
+StatusOr<std::unique_ptr<Endpoint>> Dial(std::string ip, int port, Options opts){
+  auto ep_stat = Create(ip, port, opts);
+  if (!ep_stat.ok()){
+    return ep_stat.status().Wrap("error setting up endpoint");
+  }
+  auto ep = ep_stat.value();
+  return ep->Connect(opts);
 }
 
 StatusOr<std::unique_ptr<Listener>> Listen(std::string ip, int port){

@@ -46,6 +46,7 @@ class Endpoint {
 
     ~Endpoint();
 
+    Status Connect(Options opts);
     Status Close();
 
     ibv_pd GetPd();
@@ -88,6 +89,7 @@ class Listener {
     rdma_cm_id *id_;
 };
 
+StatusOr<std::unique_ptr<Endpoint>> Create(std::string ip, int port, Options opts);
 StatusOr<std::unique_ptr<Endpoint>> Dial(std::string ip, int port, Options opts);
 StatusOr<std::unique_ptr<Listener>> Listen(std::string ip, int port);
 

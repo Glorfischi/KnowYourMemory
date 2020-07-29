@@ -56,52 +56,13 @@ endpoint::Options default_write_duplex_options = {
 };
 
 
-Status sendCI(endpoint::Endpoint *ep, connectionInfo ci){
-  auto sendStatus = ep->PostInline(54, &ci, sizeof(ci)); 
-  if (!sendStatus.ok()){
-    return sendStatus;
-  }
-  auto wcStatus = ep->PollSendCq();
-  if (!wcStatus.ok()){
-    return wcStatus.status();
-  }
-  return Status();
-}
-StatusOr<connectionInfo> receiveCI(endpoint::Endpoint *ep){
-  // Getting info on ring buffer
-  auto pd = ep->GetPd();
-  char* buf = (char*)malloc(sizeof(connectionInfo));
-  struct ibv_mr * mr = ibv_reg_mr(&pd, buf, sizeof(connectionInfo), IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);  
-  auto rcv_stat = ep->PostRecv(54, mr->lkey, mr->addr, mr->length);
-  if (!rcv_stat.ok()){
-    return rcv_stat;
-  }
-  auto rcv_wc_stat = ep->PollRecvCq();
-  if (!rcv_wc_stat.ok()){
-    return rcv_wc_stat.status();
-  }
-  struct ibv_wc rcv_wc = rcv_wc_stat.value();
-  if (rcv_wc.wr_id != 54) {
-    // Bad race
-    return Status(StatusCode::Internal, "protocol missmatch");
-  }
-  connectionInfo ci = *(connectionInfo *)mr->addr;
-  free(mr->addr);
-  int ret = ibv_dereg_mr(mr);
-  if (ret) {
-    return Status(StatusCode::Unknown, "error dereg rcv mr");
-  }
-  return ci;
-}
-
-
 StatusOr<std::unique_ptr<WriteDuplexConnection>> DialWriteDuplex(std::string ip, int port){
   // Default to port 18515
   if (port == 0) {
     port = 18515;
   }
 
-  auto ep_stat = kym::endpoint::Dial(ip, port, default_write_duplex_options);
+  auto ep_stat = kym::endpoint::Create(ip, port, default_write_duplex_options);
   if (!ep_stat.ok()){
     return ep_stat.status();
   }
@@ -121,22 +82,19 @@ StatusOr<std::unique_ptr<WriteDuplexConnection>> DialWriteDuplex(std::string ip,
   uint32_t *rbuf_head = (uint32_t *)calloc(1, sizeof(uint32_t));
   struct ibv_mr *rbuf_head_mr = ibv_reg_mr(&pd, rbuf_head, sizeof(uint32_t), IBV_ACCESS_LOCAL_WRITE);  
 
-
-  auto ci_stat = receiveCI(ep.get());
-  if (!ci_stat.ok()){
-    return ci_stat.status().Wrap("error receiving connection info while dialing"); 
-  }
-  connectionInfo ci = ci_stat.value();
-
   connectionInfo local_ci;
   local_ci.buf_addr = (uint64_t)buf_mr->addr;
   local_ci.buf_key = buf_mr->lkey;
   local_ci.head_addr = (uint64_t)buf_head;
   local_ci.head_key = buf_head_mr->lkey;
-  auto stat = sendCI(ep.get(), local_ci);
-  if (!stat.ok()){
-    return stat.Wrap("error sending connection info while dialing"); 
-  }
+  auto opts = default_write_duplex_options;
+  opts.private_data = &local_ci;
+  opts.private_data_len = sizeof(local_ci);
+
+  auto conn_stat = ep->Connect(opts);
+
+  connectionInfo *rci;
+  ep->GetConnectionInfo((void**)&rci);
   
   auto rq_stat = endpoint::GetReceiveQueue(ep.get(), sizeof(uint32_t), write_duplex_outstanding);
   if (!rq_stat.ok()){
@@ -144,9 +102,8 @@ StatusOr<std::unique_ptr<WriteDuplexConnection>> DialWriteDuplex(std::string ip,
   }
   std::unique_ptr<endpoint::ReceiveQueue> rq = rq_stat.value();
 
-
   auto conn = std::make_unique<WriteDuplexConnection>(std::move(ep), buf_mr, buf_head_mr, std::move(rq), alloc,
-      rbuf_head_mr, ci.buf_addr, ci.buf_key, ci.head_addr, ci.head_key);
+      rbuf_head_mr, rci->buf_addr, rci->buf_key, rci->head_addr, rci->head_key);
 
   return std::move(conn);
 }
@@ -171,19 +128,14 @@ Status WriteDuplexListener::Close(){
   return this->listener_->Close();
 }
 StatusOr<std::unique_ptr<WriteDuplexConnection>> WriteDuplexListener::Accept(){
-  auto epStatus = this->listener_->Accept(default_write_duplex_options);
-  if (!epStatus.ok()){
-    return epStatus.status();
-  }
-  std::unique_ptr<endpoint::Endpoint> ep = epStatus.value();
-    
-    auto alloc = std::make_shared<memory::DumbAllocator>(ep->GetPd());
+  
+  auto pd = this->listener_->GetPd();
+  auto alloc = std::make_shared<memory::DumbAllocator>(pd);
 
   auto magic_stat = ringbuffer::GetMagicBuffer(write_duplex_buf_size);
   if (!magic_stat.ok()){
     return magic_stat.status().Wrap("error initialzing magic buffer while accepting");
   }
-  auto pd = ep->GetPd();
   struct ibv_mr *buf_mr = ibv_reg_mr(&pd, magic_stat.value(), 2 * write_duplex_buf_size, IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);  
   uint32_t *buf_head = (uint32_t *)calloc(1, sizeof(uint32_t));
   struct ibv_mr *buf_head_mr = ibv_reg_mr(&pd, buf_head, sizeof(uint32_t), IBV_ACCESS_REMOTE_READ | IBV_ACCESS_LOCAL_WRITE);  
@@ -196,15 +148,18 @@ StatusOr<std::unique_ptr<WriteDuplexConnection>> WriteDuplexListener::Accept(){
   local_ci.buf_key = buf_mr->lkey;
   local_ci.head_addr = (uint64_t)buf_head;
   local_ci.head_key = buf_head_mr->lkey;
-  auto stat = sendCI(ep.get(), local_ci);
-  if (!stat.ok()){
-    return stat.Wrap("error sending connection info while accepting"); 
+  auto opts = default_write_duplex_options;
+  opts.private_data = &local_ci;
+  opts.private_data_len = sizeof(local_ci);
+
+  auto epStatus = this->listener_->Accept(opts);
+  if (!epStatus.ok()){
+    return epStatus.status();
   }
-  auto ci_stat = receiveCI(ep.get());
-  if (!ci_stat.ok()){
-    return ci_stat.status().Wrap("error receiving connection info while accepting"); 
-  }
-  connectionInfo ci = ci_stat.value();
+  std::unique_ptr<endpoint::Endpoint> ep = epStatus.value();
+  connectionInfo *ci;
+  ep->GetConnectionInfo((void**)&ci);
+
 
   auto rq_stat = endpoint::GetReceiveQueue(ep.get(), sizeof(uint32_t), write_duplex_outstanding);
   if (!rq_stat.ok()){
@@ -213,7 +168,7 @@ StatusOr<std::unique_ptr<WriteDuplexConnection>> WriteDuplexListener::Accept(){
   std::unique_ptr<endpoint::ReceiveQueue> rq = rq_stat.value();
   
   auto conn = std::make_unique<WriteDuplexConnection>(std::move(ep), buf_mr, buf_head_mr, std::move(rq), alloc,
-      rbuf_head_mr, ci.buf_addr, ci.buf_key, ci.head_addr, ci.head_key);
+      rbuf_head_mr, ci->buf_addr, ci->buf_key, ci->head_addr, ci->head_key);
   return std::move(conn);
 }
 
