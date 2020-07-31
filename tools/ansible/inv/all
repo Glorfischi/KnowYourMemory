@@ -1,5 +1,10 @@
 RoCE-01 ansible_ssh_host=172.17.5.101 ansible_ssh_user=vagrant
 RoCE-02 ansible_ssh_host=172.17.5.102 ansible_ssh_user=vagrant
 
-[atomic-server]
+wg.glorfischi.xyz ansible_ssh_host=145.14.210.37 ansible_ssh_port=31521 ansible_ssh_user=fischi
+
+[rxe]
 RoCE-01
+
+[roce]
+wg.glorfischi.xyz

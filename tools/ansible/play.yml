@@ -1,7 +1,11 @@
 ---
-- hosts: all
+- hosts: rxe
   roles:
     - rxe
+
+- hosts: roce
+  roles:
+    - roce
 
 - hosts: all
   tasks:
