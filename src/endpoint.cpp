@@ -50,6 +50,13 @@ ibv_pd Endpoint::GetPd(){
 ibv_srq *Endpoint::GetSRQ(){
   return this->id_->srq;
 }
+struct ibv_cq *Endpoint::GetSendCQ(){
+  return this->id_->send_cq;
+}
+struct ibv_cq	*Endpoint::GetRecvCQ(){
+  return this->id_->recv_cq;
+}
+
 size_t Endpoint::GetConnectionInfo(void ** buf){
   *buf = this->private_data_;
   return this->private_data_len_;
@@ -382,7 +389,11 @@ StatusOr<std::unique_ptr<Endpoint>> Dial(std::string ip, int port, Options opts)
     return ep_stat.status().Wrap("error setting up endpoint");
   }
   auto ep = ep_stat.value();
-  return ep->Connect(opts);
+  auto stat = ep->Connect(opts);
+  if (!stat.ok()){
+    return stat;
+  }
+  return std::move(ep);
 }
 
 StatusOr<std::unique_ptr<Listener>> Listen(std::string ip, int port){
@@ -413,7 +424,7 @@ StatusOr<std::unique_ptr<Listener>> Listen(std::string ip, int port){
   ret = rdma_create_ep(&id, addrinfo, NULL, NULL); 
   if (ret) {
     // TODO(Fischi) Map error codes
-    return Status(StatusCode::Internal, "Error creating listening endpoint");
+    return Status(StatusCode::Internal, "Error " + std::to_string(errno) +" creating listening endpoint");
   }
 
   // cleanup addrinfo, we don't need it anymore

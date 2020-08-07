@@ -55,23 +55,21 @@ int main(int argc, char* argv[]) {
     auto ln = ln_s.value();
     auto conn_s = ln->Accept();
     if (!conn_s.ok()){
-      std::cerr << "Error accepting " << conn_s.status().message() << std::endl;
+      std::cerr << "Error accepting " << conn_s.message() << std::endl;
       return 1;
     }
-    auto conn = conn_s.value();
 
     for(int i = 0; i<count; i++){
       auto start = std::chrono::high_resolution_clock::now();
-      auto buf_s = conn->Receive();
+      auto buf_s = ln->Receive();
       if (!buf_s.ok()){
         std::cerr << "Error receiving buffer " << buf_s.status().message() << std::endl;
-        conn->Close();
         ln->Close();
         return 1;
       }
       auto buf = buf_s.value();
       //std::cout << *(uint64_t *)buf.addr << std::endl;
-      auto free_s = conn->Free(buf_s.value());
+      auto free_s = ln->Free(buf_s.value());
       if (!free_s.ok()){
         std::cerr << free_s << std::endl;
         return 1;
@@ -79,7 +77,6 @@ int main(int argc, char* argv[]) {
       auto finish = std::chrono::high_resolution_clock::now();
       latency_m.push_back(std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count()/1000.0);
     }
-    conn->Close();
     ln->Close();
   } else {
     auto conn_s = kym::connection::DialWriteAtomic(ip, 9999);
@@ -100,7 +97,7 @@ int main(int argc, char* argv[]) {
     *(uint64_t *)buf.addr = 0;
     for(int i = 0; i<count; i++){
       *(uint64_t *)buf.addr += 1;
-      //std::cout << "Sending " << i << std::endl;
+      std::cout << "Sending " << i << std::endl;
       auto start = std::chrono::high_resolution_clock::now();
       auto send_s = conn->Send(buf);
       if (!send_s.ok()){

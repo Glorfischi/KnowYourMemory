@@ -29,18 +29,15 @@ struct write_atomic_meta {
 };
 
 
-class WriteAtomicConnection : public Connection {
+class WriteAtomicSender : public Sender {
   public:
-    WriteAtomicConnection(std::unique_ptr<endpoint::Endpoint>, struct ibv_mr *buf_mr, struct ibv_mr *buf_meta_mr, 
-        std::shared_ptr<kym::endpoint::SharedReceiveQueue> rq, std::shared_ptr<memory::Allocator>, 
-        struct ibv_mr *rbuf_head_mr, uint64_t rbuf_vaddr_, uint32_t rbuf_rkey_,  
-        uint64_t rbuf_meta_vaddr_, uint32_t rbuf_meta_rkey_);
-    ~WriteAtomicConnection() = default;
+    WriteAtomicSender(std::unique_ptr<endpoint::Endpoint>, std::shared_ptr<memory::Allocator>, 
+        uint64_t rbuf_vaddr_, uint32_t rbuf_rkey_,  
+        uint64_t rbuf_meta_vaddr_, uint32_t rbuf_meta_rkey_,
+        struct ibv_mr *rbuf_meta_mr);
+    ~WriteAtomicSender() = default;
 
     Status Close();
-
-    StatusOr<ReceiveRegion> Receive();
-    Status Free(ReceiveRegion);
 
     StatusOr<SendRegion> GetMemoryRegion(size_t size);
     Status Send(SendRegion region);
@@ -48,15 +45,7 @@ class WriteAtomicConnection : public Connection {
   private:
     std::unique_ptr<endpoint::Endpoint> ep_;
     std::shared_ptr<memory::Allocator> allocator_;
-
-    std::shared_ptr<kym::endpoint::SharedReceiveQueue> srq_;
-
-    // Local Buffer
-    struct ibv_mr     *buf_mr_;
-    struct ibv_mr     *buf_meta_mr_;   
-    write_atomic_meta *buf_meta_;   
-    size_t             buf_size_;
-
+   
     // Remote Buffer
     uint64_t rbuf_vaddr_;
     uint32_t rbuf_rkey_;
@@ -69,18 +58,32 @@ class WriteAtomicConnection : public Connection {
     uint32_t rbuf_size_;
 };
 
-StatusOr<std::unique_ptr<WriteAtomicConnection>> DialWriteAtomic(std::string ip, int port);
 
-class WriteAtomicListener {
+StatusOr<std::unique_ptr<WriteAtomicSender>> DialWriteAtomic(std::string ip, int port);
+
+class WriteAtomicListener : Receiver {
   public:
-    WriteAtomicListener(std::unique_ptr<endpoint::Listener> listener);
+    WriteAtomicListener(std::unique_ptr<endpoint::Listener> listener,
+      struct ibv_mr     *buf_mr,
+      struct ibv_mr     *buf_meta_mr);
     ~WriteAtomicListener() = default;
 
     Status Close();
 
-    StatusOr<std::unique_ptr<WriteAtomicConnection>> Accept();
+    Status Accept();
+
+    StatusOr<ReceiveRegion> Receive();
+    Status Free(ReceiveRegion);
   private:
     std::unique_ptr<endpoint::Listener> listener_;
+    std::vector<std::unique_ptr<endpoint::Endpoint>> eps_;
+
+     // Local Buffer
+    struct ibv_mr     *buf_mr_;
+    struct ibv_mr     *buf_meta_mr_;   
+    write_atomic_meta *buf_meta_;   
+    size_t             buf_size_;
+
 };
 
 StatusOr<std::unique_ptr<WriteAtomicListener>> ListenWriteAtomic(std::string ip, int port);

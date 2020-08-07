@@ -50,54 +50,17 @@ namespace {
       },
       .qp_type = IBV_QPT_RC,
     },
+    .use_srq = true,
     .responder_resources = write_atomic_outstanding,
     .initiator_depth =  write_atomic_outstanding,
     .retry_count = 5,  
-    .rnr_retry_count = 7, 
+    .rnr_retry_count = 6, 
   };
 
-
-  Status sendCI(endpoint::Endpoint *ep, connectionInfo ci){
-    auto sendStatus = ep->PostInline(54, &ci, sizeof(ci)); 
-    if (!sendStatus.ok()){
-      return sendStatus;
-    }
-    auto wcStatus = ep->PollSendCq();
-    if (!wcStatus.ok()){
-      return wcStatus.status();
-    }
-    return Status();
-  }
-  StatusOr<connectionInfo> receiveCI(endpoint::Endpoint *ep){
-    // Getting info on ring buffer
-    auto pd = ep->GetPd();
-    char* buf = (char*)malloc(sizeof(connectionInfo));
-    struct ibv_mr * mr = ibv_reg_mr(&pd, buf, sizeof(connectionInfo), IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);  
-    auto rcv_stat = ep->PostRecv(54, mr->lkey, mr->addr, mr->length);
-    if (!rcv_stat.ok()){
-      return rcv_stat;
-    }
-    auto rcv_wc_stat = ep->PollRecvCq();
-    if (!rcv_wc_stat.ok()){
-      return rcv_wc_stat.status();
-    }
-    struct ibv_wc rcv_wc = rcv_wc_stat.value();
-    if (rcv_wc.wr_id != 54) {
-      // Bad race
-      return Status(StatusCode::Internal, "protocol missmatch");
-    }
-    connectionInfo ci = *(connectionInfo *)mr->addr;
-    free(mr->addr);
-    int ret = ibv_dereg_mr(mr);
-    if (ret) {
-      return Status(StatusCode::Unknown, "error dereg rcv mr");
-    }
-    return ci;
-  }
 }
 
 
-StatusOr<std::unique_ptr<WriteAtomicConnection>> DialWriteAtomic(std::string ip, int port){
+StatusOr<std::unique_ptr<WriteAtomicSender>> DialWriteAtomic(std::string ip, int port){
   // Default to port 18515
   if (port == 0) {
     port = 18515;
@@ -107,46 +70,18 @@ StatusOr<std::unique_ptr<WriteAtomicConnection>> DialWriteAtomic(std::string ip,
   if (!ep_stat.ok()){
     return ep_stat.status();
   }
-
   std::unique_ptr<endpoint::Endpoint> ep = ep_stat.value();
 
   auto alloc = std::make_shared<memory::DumbAllocator>(ep->GetPd());
 
-  auto magic_stat = ringbuffer::GetMagicBuffer(write_atomic_buf_size);
-  if (!magic_stat.ok()){
-    return magic_stat.status().Wrap("error initialzing magic buffer while dialing");
-  }
   auto pd = ep->GetPd();
-  struct ibv_mr *buf_mr = ibv_reg_mr(&pd, magic_stat.value(), 2 * write_atomic_buf_size, 
-      IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);  
-  struct write_atomic_meta *buf_meta = (struct write_atomic_meta *)calloc(1, sizeof(struct write_atomic_meta));
-  struct ibv_mr *buf_meta_mr = ibv_reg_mr(&pd, buf_meta, sizeof(struct write_atomic_meta),
-      IBV_ACCESS_REMOTE_READ | IBV_ACCESS_LOCAL_WRITE);  
   struct write_atomic_meta *rbuf_meta = (struct write_atomic_meta *)calloc(1, sizeof(struct write_atomic_meta));
   struct ibv_mr *rbuf_meta_mr = ibv_reg_mr(&pd, rbuf_meta, sizeof(struct write_atomic_meta), IBV_ACCESS_LOCAL_WRITE);  
 
+  connectionInfo *ci;
+  ep->GetConnectionInfo((void **)&ci);
 
-  auto ci_stat = receiveCI(ep.get());
-  if (!ci_stat.ok()){
-    return ci_stat.status().Wrap("error receiving connection info while dialing"); 
-  }
-  connectionInfo ci = ci_stat.value();
-
-  connectionInfo local_ci;
-  local_ci.buf_addr = (uint64_t)buf_mr->addr;
-  local_ci.buf_key = buf_mr->lkey;
-  local_ci.meta_addr = (uint64_t)buf_meta;
-  local_ci.meta_key = buf_meta_mr->lkey;
-  auto stat = sendCI(ep.get(), local_ci);
-  if (!stat.ok()){
-    return stat.Wrap("error sending connection info while dialing"); 
-  }
-
-  // TODO(fischi) Best case we somehow attach the srq to the ep. I'm not quite sure how to handle that otherwise.
-  std::shared_ptr<endpoint::SharedReceiveQueue> srq;
-
-  auto conn = std::make_unique<WriteAtomicConnection>(std::move(ep), buf_mr, buf_meta_mr, srq, alloc,
-      rbuf_meta_mr, ci.buf_addr, ci.buf_key, ci.meta_addr, ci.meta_key);
+  auto conn = std::make_unique<WriteAtomicSender>(std::move(ep), alloc, ci->buf_addr, ci->buf_key, ci->meta_addr, ci->meta_key, rbuf_meta_mr);
 
   return std::move(conn);
 }
@@ -161,74 +96,76 @@ StatusOr<std::unique_ptr<WriteAtomicListener>> ListenWriteAtomic(std::string ip,
     return ln_stat.status();
   }
   std::unique_ptr<endpoint::Listener> ln = ln_stat.value();
-  return std::make_unique<WriteAtomicListener>(std::move(ln));
-}
-
-
-WriteAtomicListener::WriteAtomicListener(std::unique_ptr<endpoint::Listener> listener): listener_(std::move(listener)){}
-
-Status WriteAtomicListener::Close(){
-  return this->listener_->Close();
-}
-StatusOr<std::unique_ptr<WriteAtomicConnection>> WriteAtomicListener::Accept(){
-  auto epStatus = this->listener_->Accept(default_write_atomic_options);
-  if (!epStatus.ok()){
-    return epStatus.status();
-  }
-  std::unique_ptr<endpoint::Endpoint> ep = epStatus.value();
-    
-    auto alloc = std::make_shared<memory::DumbAllocator>(ep->GetPd());
 
   auto magic_stat = ringbuffer::GetMagicBuffer(write_atomic_buf_size);
   if (!magic_stat.ok()){
     return magic_stat.status().Wrap("error initialzing magic buffer while accepting");
   }
-  auto pd = ep->GetPd();
-  struct ibv_mr *buf_mr = ibv_reg_mr(&pd, magic_stat.value(), 2 * write_atomic_buf_size, 
+  auto pd = ln->GetPd();
+  auto buf_mr = ibv_reg_mr(&pd, magic_stat.value(), 2 * write_atomic_buf_size, 
       IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);  
-  struct write_atomic_meta *buf_meta = (struct write_atomic_meta *)calloc(1, sizeof(struct write_atomic_meta));
-  struct ibv_mr *buf_meta_mr = ibv_reg_mr(&pd, buf_meta, sizeof(struct write_atomic_meta),
+  auto buf_meta = (struct write_atomic_meta *)calloc(1, sizeof(struct write_atomic_meta));
+  auto buf_meta_mr = ibv_reg_mr(&pd, buf_meta, sizeof(struct write_atomic_meta),
       IBV_ACCESS_REMOTE_READ | IBV_ACCESS_LOCAL_WRITE);  
-  struct write_atomic_meta *rbuf_meta = (struct write_atomic_meta *)calloc(1, sizeof(struct write_atomic_meta));
-  struct ibv_mr *rbuf_meta_mr = ibv_reg_mr(&pd, rbuf_meta, sizeof(struct write_atomic_meta), IBV_ACCESS_LOCAL_WRITE);  
 
-  connectionInfo local_ci;
-  local_ci.buf_addr = (uint64_t)buf_mr->addr;
-  local_ci.buf_key = buf_mr->lkey;
-  local_ci.meta_addr = (uint64_t)buf_meta;
-  local_ci.meta_key = buf_meta_mr->lkey;
-  
-  auto stat = sendCI(ep.get(), local_ci);
-  if (!stat.ok()){
-    return stat.Wrap("error sending connection info while accepting"); 
-  }
-  auto ci_stat = receiveCI(ep.get());
-  if (!ci_stat.ok()){
-    return ci_stat.status().Wrap("error receiving connection info while accepting"); 
-  }
-  connectionInfo ci = ci_stat.value();
-
-  // TODO(fischi) Best case we somehow attach the srq to the ep. I'm not quite sure how to handle that otherwise.
-  std::shared_ptr<endpoint::SharedReceiveQueue> srq;
-
-   
-  auto conn = std::make_unique<WriteAtomicConnection>(std::move(ep), buf_mr, buf_meta_mr, srq, alloc,
-      rbuf_meta_mr, ci.buf_addr, ci.buf_key, ci.meta_addr, ci.meta_key);
-  return std::move(conn);
+  return std::make_unique<WriteAtomicListener>(std::move(ln), buf_mr, buf_meta_mr);
 }
 
 
-WriteAtomicConnection::WriteAtomicConnection(std::unique_ptr<endpoint::Endpoint> ep, struct ibv_mr *buf_mr, struct ibv_mr *buf_meta_mr, 
-    std::shared_ptr<kym::endpoint::SharedReceiveQueue> srq, std::shared_ptr<memory::Allocator> allocator, struct ibv_mr *rbuf_meta_mr,
-    uint64_t rbuf_vaddr, uint32_t rbuf_rkey,  uint64_t rbuf_meta_vaddr, uint32_t rbuf_meta_rkey){
-  this->ep_ = std::move(ep);
-  this->srq_ = srq;
-  this->allocator_ = allocator;
-
+WriteAtomicListener::WriteAtomicListener(std::unique_ptr<endpoint::Listener> listener, struct ibv_mr *buf_mr, 
+    struct ibv_mr *buf_meta_mr):listener_(std::move(listener)){
   this->buf_mr_ = buf_mr;
+  this->buf_size_ = buf_mr->length/2;
+
   this->buf_meta_mr_ = buf_meta_mr;
   this->buf_meta_ = (struct write_atomic_meta *)buf_meta_mr->addr;
-  this->buf_size_ = write_atomic_buf_size;
+}
+
+Status WriteAtomicListener::Close(){
+  //TODO(fischi) Free
+  return this->listener_->Close();
+}
+Status WriteAtomicListener::Accept(){
+  auto opts = default_write_atomic_options;
+
+  connectionInfo local_ci;
+  local_ci.buf_addr = (uint64_t)this->buf_mr_->addr;
+  local_ci.buf_key = this->buf_mr_->lkey;
+  local_ci.meta_addr = (uint64_t)this->buf_meta_;
+  local_ci.meta_key = this->buf_meta_mr_->lkey;
+  
+  opts.private_data = &local_ci;
+  opts.private_data_len = sizeof(local_ci);
+
+  // If this is not the first endpoint we share the rq and recv cq
+  if (this->eps_.size() > 0){
+    opts.qp_attr.srq = this->eps_[0]->GetSRQ();
+    opts.qp_attr.recv_cq = this->eps_[0]->GetRecvCQ();
+  }
+
+  auto epStatus = this->listener_->Accept(opts);
+  if (!epStatus.ok()){
+    return epStatus.status();
+  }
+  std::unique_ptr<endpoint::Endpoint> ep = epStatus.value();
+  this->eps_.push_back(std::move(ep));
+
+  return Status();
+}
+StatusOr<ReceiveRegion> WriteAtomicListener::Receive(){
+  return Status(StatusCode::NotImplemented);
+}
+Status WriteAtomicListener::Free(ReceiveRegion reg){
+  return Status(StatusCode::NotImplemented);
+}
+
+
+
+
+WriteAtomicSender::WriteAtomicSender(std::unique_ptr<endpoint::Endpoint> ep, std::shared_ptr<memory::Allocator> allocator,
+    uint64_t rbuf_vaddr, uint32_t rbuf_rkey,  uint64_t rbuf_meta_vaddr, uint32_t rbuf_meta_rkey, struct ibv_mr *rbuf_meta_mr){
+  this->ep_ = std::move(ep);
+  this->allocator_ = allocator;
 
   this->rbuf_vaddr_ = rbuf_vaddr;
   this->rbuf_rkey_ = rbuf_rkey;
@@ -241,38 +178,16 @@ WriteAtomicConnection::WriteAtomicConnection(std::unique_ptr<endpoint::Endpoint>
   this->rbuf_size_ = write_atomic_buf_size;
 }
 
-Status WriteAtomicConnection::Close(){
-  int ret = ibv_dereg_mr(this->buf_meta_mr_);
-  if (ret){
-    return Status(StatusCode::Internal, "error " + std::to_string(ret) + " deregistering head mr");
-  }
-  free(buf_meta_mr_->addr);
-  ret = ibv_dereg_mr(this->rbuf_meta_mr_);
+Status WriteAtomicSender::Close(){
+  int ret = ibv_dereg_mr(this->rbuf_meta_mr_);
   if (ret){
     return Status(StatusCode::Internal, "error " + std::to_string(ret) + " deregistering remote head mr");
   }
   free(rbuf_meta_mr_->addr);
-  ret = ibv_dereg_mr(this->buf_mr_);
-  if (ret){
-    return Status(StatusCode::Internal, "error " + std::to_string(ret) + " deregistering ring buffer mr");
-  }
-  auto stat = ringbuffer::FreeMagicBuffer(this->buf_mr_->addr, write_atomic_buf_size);
-  if (!stat.ok()){
-    return stat;
-  }
-  stat = this->ep_->Close();
-  if (!stat.ok()){
-    return stat;
-  }
   return this->ep_->Close();
 }
-StatusOr<ReceiveRegion> WriteAtomicConnection::Receive(){
-  return Status(StatusCode::NotImplemented);
-}
-Status WriteAtomicConnection::Free(ReceiveRegion reg){
-  return Status(StatusCode::NotImplemented);
-}
-StatusOr<SendRegion> WriteAtomicConnection::GetMemoryRegion(size_t size){
+
+StatusOr<SendRegion> WriteAtomicSender::GetMemoryRegion(size_t size){
   auto mrStatus =  this->allocator_->Alloc(size);
   if (!mrStatus.ok()){
     return mrStatus.status();
@@ -286,10 +201,10 @@ StatusOr<SendRegion> WriteAtomicConnection::GetMemoryRegion(size_t size){
   return reg;
 }
 
-Status WriteAtomicConnection::Send(SendRegion region){
+Status WriteAtomicSender::Send(SendRegion region){
   return Status(StatusCode::NotImplemented);
 }
-Status WriteAtomicConnection::Free(SendRegion region){
+Status WriteAtomicSender::Free(SendRegion region){
   memory::Region mr = memory::Region();
   mr.addr = region.addr;
   mr.length = region.length;

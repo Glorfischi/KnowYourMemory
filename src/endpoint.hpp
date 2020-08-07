@@ -51,6 +51,9 @@ class Endpoint {
 
     ibv_pd GetPd();
     ibv_srq *GetSRQ();
+    struct ibv_cq *GetSendCQ();
+	  struct ibv_cq	*GetRecvCQ();
+
 
     // Returns the length of the received private data on connection establishment and returns a pointer to it in buf
     size_t GetConnectionInfo(void ** buf);
