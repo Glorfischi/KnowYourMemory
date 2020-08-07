@@ -72,3 +72,8 @@ In general *ScaleRPC* uses RDMA WRITEs to send both requests and responses.
 
 *Youmin Chen, Youyou Lu, and Jiwu Shu. 2019. Scalable RDMA RPC on Reliable Connection with Efficient Resource Sharing. In Proceedings of the Fourteenth EuroSys Conference 2019 (EuroSys ’19). Association for Computing Machinery, New York, NY, USA, Article 19, 1–14. DOI:https://doi.org/10.1145/3302424.3303968*
 
+## StRoM: smart remote memory
+
+This paper addresses (among other things) the problem of multiple round trip times for one sided RDMA verbs when accessing remote data structures. They develop a new FPGA based RoCE NIC that introduces two new RPC verbs that allow the execution of *kernels*, C/C++ code that can access local memory through DMA and respond to the client without intervention of the CPU.
+
+*David Sidler, Zeke Wang, Monica Chiosa, Amit Kulkarni, and Gustavo Alonso. 2020. StRoM: smart remote memory. In Proceedings of the Fifteenth European Conference on Computer Systems (EuroSys ’20). Association for Computing Machinery, New York, NY, USA, Article 29, 1–16. DOI:https://doi.org/10.1145/3342195.3387519*
