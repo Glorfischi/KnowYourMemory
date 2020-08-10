@@ -65,7 +65,9 @@ class WriteAtomicListener : Receiver {
   public:
     WriteAtomicListener(std::unique_ptr<endpoint::Listener> listener,
       struct ibv_mr     *buf_mr,
-      struct ibv_mr     *buf_meta_mr);
+      struct ibv_mr     *buf_meta_mr,
+      struct ibv_mr     *rcv_mr,
+      uint32_t rcv_bufs_count);
     ~WriteAtomicListener() = default;
 
     Status Close();
@@ -77,6 +79,11 @@ class WriteAtomicListener : Receiver {
   private:
     std::unique_ptr<endpoint::Listener> listener_;
     std::vector<std::unique_ptr<endpoint::Endpoint>> eps_;
+
+    // Receive buffers
+    struct ibv_mr *rcv_mr_;
+    char*          rcv_bufs_;
+    uint32_t       rcv_bufs_count_;
 
      // Local Buffer
     struct ibv_mr     *buf_mr_;

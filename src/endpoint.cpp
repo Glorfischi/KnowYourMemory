@@ -209,7 +209,6 @@ Status Endpoint::PostRecv(uint64_t ctx, uint32_t lkey, void *addr, size_t size){
     ret = ibv_post_recv(this->id_->qp, &wr, &bad);
   }
   if (ret) {
-    // TODO(Fischi) Map error codes
     return Status(StatusCode::Internal, "error posting receive buffer");
   }
   return Status();
@@ -274,6 +273,7 @@ StatusOr<std::unique_ptr<Endpoint>> Listener::Accept(Options opts){
     if (srq == nullptr){
       return Status(StatusCode::Internal, "error " + std::to_string(errno) + " creating ibv_srq");
     }
+    opts.qp_attr.srq = srq;
   }
 
   ret = rdma_create_qp(conn_id, this->id_->pd, &opts.qp_attr);
@@ -286,7 +286,7 @@ StatusOr<std::unique_ptr<Endpoint>> Listener::Accept(Options opts){
   if (ret) {
     return Status(StatusCode::Internal, "accept: error accepting connection");
   }
-
+  conn_id->srq = opts.qp_attr.srq;
   
   return StatusOr<std::unique_ptr<Endpoint>>(std::make_unique<Endpoint>(conn_id, private_data, private_data_len));
 }

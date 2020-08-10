@@ -68,6 +68,7 @@ int main(int argc, char* argv[]) {
         return 1;
       }
       auto buf = buf_s.value();
+      //std::cout << buf.length << std::endl;
       //std::cout << *(uint64_t *)buf.addr << std::endl;
       auto free_s = ln->Free(buf_s.value());
       if (!free_s.ok()){
@@ -93,6 +94,8 @@ int main(int argc, char* argv[]) {
       return 1;
     }
     auto buf = buf_s.value();
+    std::chrono::milliseconds timespan(1000);
+    std::this_thread::sleep_for(timespan); // Wait for connection to be ready
     
     *(uint64_t *)buf.addr = 0;
     for(int i = 0; i<count; i++){
@@ -110,8 +113,7 @@ int main(int argc, char* argv[]) {
       latency_m.push_back(std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count()/1000.0);
     }
 
-    std::chrono::milliseconds timespan(1000); // We need to wait for the last ack to come in. o/w reciever will fail. This is hacky..
-    std::this_thread::sleep_for(timespan);
+    std::this_thread::sleep_for(timespan); // Wait for all acks.
     conn->Free(buf);
     conn->Close();
 
