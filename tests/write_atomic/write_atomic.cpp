@@ -46,7 +46,7 @@ namespace {
         .max_recv_wr = write_atomic_outstanding,
         .max_send_sge = 1,
         .max_recv_sge = 1,
-        .max_inline_data = sizeof(connectionInfo),
+        .max_inline_data = 0,
       },
       .qp_type = IBV_QPT_RC,
     },
@@ -54,7 +54,7 @@ namespace {
     .responder_resources = write_atomic_outstanding,
     .initiator_depth =  write_atomic_outstanding,
     .retry_count = 5,  
-    .rnr_retry_count = 6, 
+    .rnr_retry_count = 2, 
   };
 
 }
@@ -106,11 +106,12 @@ StatusOr<std::unique_ptr<WriteAtomicListener>> ListenWriteAtomic(std::string ip,
       IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);  
   auto buf_meta = (struct write_atomic_meta *)calloc(1, sizeof(struct write_atomic_meta));
   auto buf_meta_mr = ibv_reg_mr(&pd, buf_meta, sizeof(struct write_atomic_meta),
-      IBV_ACCESS_REMOTE_READ | IBV_ACCESS_LOCAL_WRITE);  
+      IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_ATOMIC);  
   auto rcv_buf = (char *)calloc(write_atomic_outstanding, sizeof(char));
   auto rcv_mr = ibv_reg_mr(&pd, rcv_buf, write_atomic_outstanding * sizeof(char),
       IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);  
 
+  std::cout << "fa at: " << buf_meta << " len " << sizeof(struct write_atomic_meta) << std::endl;
 
   return std::make_unique<WriteAtomicListener>(std::move(ln), buf_mr, buf_meta_mr, rcv_mr, write_atomic_outstanding);
 }
@@ -159,20 +160,7 @@ Status WriteAtomicListener::Accept(){
   std::unique_ptr<endpoint::Endpoint> ep = epStatus.value();
   // If this is the first endpoint we share the rq and recv cq
   // FIXME(Fischi) This is uggly. We need to think about if we could integrate CQ management into the endpoint abstraction
-  // TODO(Fischi) Temporary stuff
   if (this->eps_.size() == 0){
-    /*for (int i = 0; i<this->rcv_bufs_count_; i++){
-      auto pd = this->listener_->GetPd();
-      auto rcv_buf = (char *)calloc(10240, sizeof(char));
-      auto rcv_mr = ibv_reg_mr(&pd, rcv_buf, 10240*sizeof(char),
-          IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);  
-      auto stat = ep->PostRecv(i, rcv_mr->lkey, rcv_buf, 10240); 
-      if (!stat.ok()){
-        return stat.Wrap("error initialzing receive buffers");
-      }
-    }*/
-
-
     for (int i = 0; i<this->rcv_bufs_count_; i++){
       auto stat = ep->PostRecv(i, this->rcv_mr_->lkey, this->rcv_bufs_ + i, 1); 
       if (!stat.ok()){
@@ -192,12 +180,10 @@ StatusOr<ReceiveRegion> WriteAtomicListener::Receive(){
   }
   struct ibv_wc wc = wcStatus.value();
 
-  // TODO(Fischi) repost
-  
-  /*auto status = this->eps_[0]->PostRecv(wc.wr_id, this->rcv_mr_->lkey, this->rcv_bufs_ + wc.wr_id, 1); 
+  auto status = this->eps_[0]->PostRecv(wc.wr_id, this->rcv_mr_->lkey, this->rcv_bufs_ + wc.wr_id, 1); 
   if (!status.ok()){
     return status;
-  }*/
+  }
 
   // TODO(Fischi) out of order reading.
   uint32_t read_offset = this->buf_meta_->head;
@@ -207,6 +193,7 @@ StatusOr<ReceiveRegion> WriteAtomicListener::Receive(){
   return reg;
 }
 Status WriteAtomicListener::Free(ReceiveRegion reg){
+  this->buf_meta_->head  =  (this->buf_meta_->head + reg.length) % this->buf_size_;
   return Status();
 }
 
@@ -253,13 +240,36 @@ StatusOr<SendRegion> WriteAtomicSender::GetMemoryRegion(size_t size){
 }
 
 Status WriteAtomicSender::Send(SendRegion region){
-  // std::cout << "Sending lkey " << region.lkey << " addr " << region.addr << std::endl;
+  if(region.length >= this->rbuf_size_){
+    return Status(StatusCode::InvalidArgument, "message too large");
+  }
+
+  //TODO(fischi) Get and set tail using fetch and add
+  std::cout << "fa on: " << (void *)this->rbuf_meta_vaddr_;
+  auto fetch_stat = this->ep_->PostFetchAndAdd(region.context, region.length, this->rbuf_meta_mr_->lkey, 
+      &this->rbuf_meta_->tail, this->rbuf_meta_vaddr_, this->rbuf_meta_rkey_);
+  if (!fetch_stat.ok()){
+    return fetch_stat;
+  }
+  auto wc_stat = this->ep_->PollSendCq();
+  if (!wc_stat.ok()){
+    return wc_stat.status().Wrap("error during fetch and add");
+  }
+
+  // FIXME(Fischi) We should NEVER fail in here. If we do the buffer is in an inconsistent state
+
+  while(this->rbuf_meta_->head + this->rbuf_size_ <= this->rbuf_meta_->tail + region.length){
+    // TODO(fischi) Get head. Maybe add some kind of backoff?
+  }
+
+  uint64_t write_off = this->rbuf_meta_->tail % this->rbuf_size_;
+
   auto send_stat = this->ep_->PostWriteWithImmidate(1, region.lkey, region.addr, region.length, 
-      this->rbuf_vaddr_, this->rbuf_rkey_, 0);
+      this->rbuf_meta_vaddr_ + write_off, this->rbuf_rkey_, 0);
   if (!send_stat.ok()){
     return send_stat;
   }
-  auto wc_stat = this->ep_->PollSendCq();
+  wc_stat = this->ep_->PollSendCq();
   if (!wc_stat.ok()){
     return wc_stat.status();
   }

@@ -176,6 +176,28 @@ Status Endpoint::PostWriteWithImmidate(uint64_t ctx, uint32_t lkey, void *addr, 
 
   return this->PostSendRaw(&wr, &bad);
 }
+
+Status Endpoint::PostFetchAndAdd(uint64_t ctx, uint64_t add, uint32_t lkey, uint64_t *addr, uint64_t remote_addr, uint32_t rkey){
+  std::cout << "uint " << sizeof(uint64_t) << std::endl;
+  struct ibv_sge sge;
+  sge.addr = (uintptr_t)addr;
+  sge.length = sizeof(uint64_t);
+  sge.lkey =  lkey;
+  struct ibv_send_wr wr, *bad;
+
+  wr.wr_id = ctx;
+  wr.next = NULL;
+  wr.sg_list = &sge;
+  wr.num_sge = 1;
+  wr.opcode = IBV_WR_ATOMIC_FETCH_AND_ADD;
+  wr.send_flags = IBV_SEND_SIGNALED;  
+  wr.wr.atomic.remote_addr = remote_addr;
+  wr.wr.atomic.rkey = rkey;
+  wr.wr.atomic.compare_add = add;
+
+  return this->PostSendRaw(&wr, &bad);
+}
+
 StatusOr<struct ibv_wc> Endpoint::PollSendCq(){
   struct ibv_wc wc;
   while(ibv_poll_cq(this->id_->qp->send_cq, 1, &wc) == 0){}
