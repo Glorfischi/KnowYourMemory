@@ -111,8 +111,6 @@ StatusOr<std::unique_ptr<WriteAtomicListener>> ListenWriteAtomic(std::string ip,
   auto rcv_mr = ibv_reg_mr(&pd, rcv_buf, write_atomic_outstanding * sizeof(char),
       IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);  
 
-  std::cout << "fa at: " << buf_meta << " len " << sizeof(struct write_atomic_meta) << std::endl;
-
   return std::make_unique<WriteAtomicListener>(std::move(ln), buf_mr, buf_meta_mr, rcv_mr, write_atomic_outstanding);
 }
 
@@ -186,14 +184,14 @@ StatusOr<ReceiveRegion> WriteAtomicListener::Receive(){
   }
 
   // TODO(Fischi) out of order reading.
-  uint32_t read_offset = this->buf_meta_->head;
+  uint32_t read_offset = this->buf_meta_->head % this->buf_size_;
   ReceiveRegion reg;
   reg.addr = (void *)((uint64_t)this->buf_mr_->addr + read_offset);
   reg.length = wc.byte_len;
   return reg;
 }
 Status WriteAtomicListener::Free(ReceiveRegion reg){
-  this->buf_meta_->head  =  (this->buf_meta_->head + reg.length) % this->buf_size_;
+  this->buf_meta_->head  =  (this->buf_meta_->head + reg.length);
   return Status();
 }
 
@@ -245,9 +243,8 @@ Status WriteAtomicSender::Send(SendRegion region){
   }
 
   //TODO(fischi) Get and set tail using fetch and add
-  std::cout << "fa on: " << (void *)this->rbuf_meta_vaddr_;
   auto fetch_stat = this->ep_->PostFetchAndAdd(region.context, region.length, this->rbuf_meta_mr_->lkey, 
-      &this->rbuf_meta_->tail, this->rbuf_meta_vaddr_, this->rbuf_meta_rkey_);
+      &this->rbuf_meta_->tail, (uint64_t)&((struct write_atomic_meta *)this->rbuf_meta_vaddr_)->tail, this->rbuf_meta_rkey_);
   if (!fetch_stat.ok()){
     return fetch_stat;
   }
@@ -259,13 +256,22 @@ Status WriteAtomicSender::Send(SendRegion region){
   // FIXME(Fischi) We should NEVER fail in here. If we do the buffer is in an inconsistent state
 
   while(this->rbuf_meta_->head + this->rbuf_size_ <= this->rbuf_meta_->tail + region.length){
-    // TODO(fischi) Get head. Maybe add some kind of backoff?
+    auto read_stat = this->ep_->PostRead(region.context, this->rbuf_meta_mr_->lkey, &this->rbuf_meta_->head, sizeof(this->rbuf_meta_->head),
+        (uint64_t)&((struct write_atomic_meta *)this->rbuf_meta_vaddr_)->head, this->rbuf_meta_rkey_);
+    if (!fetch_stat.ok()){
+      return fetch_stat;
+    }
+    auto wc_stat = this->ep_->PollSendCq();
+    if (!wc_stat.ok()){
+      return wc_stat.status().Wrap("error during reading head position");
+    }
+    // TODO(fischi) Maybe add some kind of backoff?
   }
 
   uint64_t write_off = this->rbuf_meta_->tail % this->rbuf_size_;
 
   auto send_stat = this->ep_->PostWriteWithImmidate(1, region.lkey, region.addr, region.length, 
-      this->rbuf_meta_vaddr_ + write_off, this->rbuf_rkey_, 0);
+      this->rbuf_vaddr_ + write_off, this->rbuf_rkey_, 0);
   if (!send_stat.ok()){
     return send_stat;
   }

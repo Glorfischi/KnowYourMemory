@@ -88,7 +88,7 @@ class WriteAtomicListener : Receiver {
      // Local Buffer
     struct ibv_mr     *buf_mr_;
     struct ibv_mr     *buf_meta_mr_;   
-    write_atomic_meta *buf_meta_;   
+    volatile write_atomic_meta *buf_meta_;   
     size_t             buf_size_;
 
 };

@@ -178,7 +178,6 @@ Status Endpoint::PostWriteWithImmidate(uint64_t ctx, uint32_t lkey, void *addr, 
 }
 
 Status Endpoint::PostFetchAndAdd(uint64_t ctx, uint64_t add, uint32_t lkey, uint64_t *addr, uint64_t remote_addr, uint32_t rkey){
-  std::cout << "uint " << sizeof(uint64_t) << std::endl;
   struct ibv_sge sge;
   sge.addr = (uintptr_t)addr;
   sge.length = sizeof(uint64_t);
