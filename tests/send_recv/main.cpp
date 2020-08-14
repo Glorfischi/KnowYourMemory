@@ -131,19 +131,38 @@ int main(int argc, char* argv[]) {
       std::cerr << "Error accepting for send_receive " << conn_s.status().message() << std::endl;
       return 1;
     }
+
+    // Create a cpu_set_t object representing a set of CPUs. Clear it and mark only CPU i as set.
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    CPU_SET(0, &cpuset);
+    int rc = pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
+    if (rc != 0) {
+      std::cerr << "Error calling pthread_setaffinity_np: " << rc << "\n";
+    }
+
     conn = conn_s.value();
 
     sr_test_lat_recv(std::move(conn), count);
     return 0;
   });
 
-  std::thread client_thread( [srq, ip, count] {
+  std::thread client_thread( [ip, count] {
     auto conn_s = kym::connection::DialSendReceive(ip, 9999);
     if (!conn_s.ok()){
       std::cerr << "Error dialing send_receive connection" << conn_s.status().message() << std::endl;
       return 1;
     }
     auto conn = conn_s.value();
+
+    // Create a cpu_set_t object representing a set of CPUs. Clear it and mark only CPU i as set.
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    CPU_SET(2, &cpuset);
+    int rc = pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
+    if (rc != 0) {
+      std::cerr << "Error calling pthread_setaffinity_np: " << rc << "\n";
+    }
 
     sr_test_lat_send(std::move(conn), count);
     return 0;

@@ -26,12 +26,15 @@
 
 namespace kym {
 namespace connection {
+namespace {
+
+const uint64_t inflight = 40;
 
 endpoint::Options defaultOptions = {
   .qp_attr = {
     .cap = {
-      .max_send_wr = 1,
-      .max_recv_wr = 10,
+      .max_send_wr = inflight,
+      .max_recv_wr = inflight,
       .max_send_sge = 1,
       .max_recv_sge = 1,
       .max_inline_data = 0,
@@ -40,9 +43,12 @@ endpoint::Options defaultOptions = {
   },
   .responder_resources = 0,
   .initiator_depth =  0,
-  .retry_count = 8,  
-  .rnr_retry_count = 8, 
+  .retry_count = 4,  
+  .rnr_retry_count = 0, 
 };
+
+
+}
 
 /*
  * Client Dial
@@ -63,7 +69,7 @@ StatusOr<std::unique_ptr<SendReceiveConnection>> DialSendReceive(std::string ip,
   auto allocator = std::make_shared<memory::DumbAllocator>(ep->GetPd());
 
   //TODO(Fischi) parameterize
-  auto rq_stat = endpoint::GetReceiveQueue(ep.get(), 8*1024, 10);
+  auto rq_stat = endpoint::GetReceiveQueue(ep.get(), 8*1024, inflight);
   if (!rq_stat.ok()){
     return rq_stat.status().Wrap("error creating receive queue while dialing");
   }
@@ -123,7 +129,7 @@ StatusOr<std::unique_ptr<SendReceiveListener>> ListenSharedReceive(std::string i
   std::unique_ptr<endpoint::Listener> ln = lnStatus.value();
 
   //TODO(Fischi) parameterize
-  auto srq_stat = endpoint::GetSharedReceiveQueue(ln->GetPd(), 8*1024, 10);
+  auto srq_stat = endpoint::GetSharedReceiveQueue(ln->GetPd(), 8*1024, inflight);
   if (!srq_stat.ok()){
     return srq_stat.status().Wrap("error creating shared receive queue");
   }
@@ -148,7 +154,7 @@ StatusOr<std::unique_ptr<SendReceiveConnection>> SendReceiveListener::Accept(){
 
   std::shared_ptr<endpoint::IReceiveQueue> rq;
   if (this->srq_ == nullptr){
-    auto rq_stat = endpoint::GetReceiveQueue(ep.get(), 8*1024, 10);
+    auto rq_stat = endpoint::GetReceiveQueue(ep.get(), 8*1024, inflight);
     if (!rq_stat.ok()){
       return rq_stat.status().Wrap("error creating receive queue while dialing");
     }
