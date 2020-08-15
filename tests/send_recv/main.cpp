@@ -1,12 +1,16 @@
 #include <cstdlib>
 #include <cstring>
 #include <exception>
+#include <fstream>
 #include <iostream>
 #include <memory>
 #include <ostream>
 #include <string>
 #include <thread>
 #include <chrono>
+
+
+
 
 #include "cxxopts.hpp"
 
@@ -18,7 +22,6 @@ cxxopts::ParseResult parse(int argc, char* argv[]) {
   cxxopts::Options options(argv[0], "sendrecv");
   try {
     options.add_options()
-      ("s,server", "Whether to act as a server", cxxopts::value<bool>())
       ("srq", "Whether to use a shard receive queue", cxxopts::value<bool>())
       ("i,address", "IP address to connect to", cxxopts::value<std::string>())
       ("n,count", "How many times to repeat measurement", cxxopts::value<int>()->default_value("1000"))
@@ -38,8 +41,8 @@ cxxopts::ParseResult parse(int argc, char* argv[]) {
 }
 
 
-void sr_test_lat_send(std::unique_ptr<kym::connection::Sender> conn, int count){
-  std::vector<float> latency_m;
+void sr_test_lat_send(std::unique_ptr<kym::connection::Sender> conn, int count, std::vector<float> *latency_m){
+  ;
   std::chrono::milliseconds timespan(1000); // This is because of a race condition...
   std::this_thread::sleep_for(timespan);
 
@@ -58,24 +61,17 @@ void sr_test_lat_send(std::unique_ptr<kym::connection::Sender> conn, int count){
       return;
     }
     auto finish = std::chrono::high_resolution_clock::now();
-    latency_m.push_back(std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count()/1000.0);
+    latency_m->push_back(std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count()/1000.0);
   }
   conn->Free(buf);
 
   std::this_thread::sleep_for(timespan);
 
-  auto n = count;
-  std::sort (latency_m.begin(), latency_m.end());
-  int q025 = (int)(n*0.025);
-  int q500 = (int)(n*0.5);
-  int q975 = (int)(n*0.975);
-  std::cout << "## Latency Sender" << std::endl;
-  std::cout << "q025" << "\t" << "q50" << "\t" << "q975" << std::endl;
-  std::cout << latency_m[q025] << "\t" << latency_m[q500] << "\t" << latency_m[q975] << std::endl;
-}
+  }
 
 void sr_test_lat_recv(std::unique_ptr<kym::connection::Receiver> conn, int count){
   std::vector<float> latency_m;
+  latency_m.reserve(count);
 
   for(int i = 0; i<count; i++){
     auto start = std::chrono::high_resolution_clock::now();
@@ -140,7 +136,6 @@ int main(int argc, char* argv[]) {
     if (rc != 0) {
       std::cerr << "Error calling pthread_setaffinity_np: " << rc << "\n";
     }
-
     conn = conn_s.value();
 
     sr_test_lat_recv(std::move(conn), count);
@@ -150,7 +145,7 @@ int main(int argc, char* argv[]) {
   std::thread client_thread( [ip, count] {
     auto conn_s = kym::connection::DialSendReceive(ip, 9999);
     if (!conn_s.ok()){
-      std::cerr << "Error dialing send_receive connection" << conn_s.status().message() << std::endl;
+      std::cerr << "Error dialing send_receive co_nection" << conn_s.status().message() << std::endl;
       return 1;
     }
     auto conn = conn_s.value();
@@ -164,7 +159,23 @@ int main(int argc, char* argv[]) {
       std::cerr << "Error calling pthread_setaffinity_np: " << rc << "\n";
     }
 
-    sr_test_lat_send(std::move(conn), count);
+    std::ofstream lat_file("data/sr_test_lat_send-" + std::to_string(count) + ".csv");
+    std::vector<float> latency_m;
+    latency_m.reserve(count);
+    sr_test_lat_send(std::move(conn), count, &latency_m);
+    for (float f : latency_m){
+      lat_file << f << "\n";
+    }
+    lat_file.close();
+
+    auto n = count;
+    std::sort (latency_m.begin(), latency_m.end());
+    int q025 = (int)(n*0.025);
+    int q500 = (int)(n*0.5);
+    int q975 = (int)(n*0.975);
+    std::cout << "## Latency Sender" << std::endl;
+    std::cout << "q025" << "\t" << "q50" << "\t" << "q975" << std::endl;
+    std::cout << latency_m[q025] << "\t" << latency_m[q500] << "\t" << latency_m[q975] << std::endl;
     return 0;
   });
 

@@ -5,6 +5,8 @@ compile_commands.json
 *.o
 bin/
 
+*.pdf
+*.png
 
 # TeX stuff
 *.aux
