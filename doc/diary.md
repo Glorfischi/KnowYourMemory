@@ -1,3 +1,86 @@
+## Week 7: Benchmarking
+2020-08-19
+
+### Finishing Atomic Connection
+
+With the updated RXE in debian testing that supports getting the number of written bytes from the `wc` I was able to get the
+atomic connect working, although only using softRoCE.
+
+### Latency testing
+
+I started to write benchmarks for the SendReceive Connection. I first cleaned up the current latency measurement and plotted 
+the resulting data using gnuplot. I found that especially the tail latency was very unpredictable. The 95th percentile ranges
+from less then 100 us to up to 5000 us running the same benchmark. I'm unsure what is causing this.
+
+### Throughput testing
+
+..
+
+## Week 6: Atomic Connection and move to actual hardware
+2020-08-12 70ea73bd3c0f69f67bca05dc4d8fe0d5dc23c782
+
+I started implementing the `write_atomic` connection, which is a ring buffer connection that shares the ring buffer for receiving
+from multiple sender. The sender initially increases the tail pointer atomically by the length of its message using `fetch and add`,
+effectively reserving the buffer space. A rough overview of the protocol can be found in the 
+connections [README](../tests/write_atomic/README.md)
+
+I also ran the existing code on the physical boadcom card, which lead to some minor bugs, but on the whole they worked.
+
+
+## Week 5: Physical Card and Related Work
+2020-08-05 ea911fa7471cc6f8641fec4c56ea60c7446438a5
+
+Most of this week as spend trying to set up the new physical broadcom NIC to work.
+
+I read quite a lot of papers getting a better grasp of the current state of research. I summarized some of them 
+[here](./related_work.md)
+
+Getting the broadcom card to work was quite a hassle. In the end I had to recompile my kernel to include `bnxt_re`
+driver, which is not included in the base debian kernel. I also head to move the NIC to another PCIe slot after peaking 
+at around `8 Gb/s` in the initial slot.
+
+I also the discovered to use of `private_data` when setting up the connection using `rdma_cma`. This allows us to exchange 
+arbitrary data on connection setup, greatly simplifying the setup.
+
+## Week 4: Two sided writes
+2020-07-29 c08855e56dcfe2b6fec8aeba0775d50d4e585fa7
+
+I implemented the `write_duplex` connection, which is a ring buffer connection that uses reads from the sending side to
+update the head position, this means the receiver does not have to make any outbound calls, which enables this protocol to 
+send and receive data using a single QP. A rough overview of the protocol can be found in the 
+connections [README](../tests/write_duplex/README.md)
+
+
+## Week 3: Circular Buffer
+2020-07-22 196e00423d9d339dc2d0b4eb2c8d3afdbd0a1dc9
+
+I realized that we should focus on benchmark implementations and some kind of working connections instead of library design.
+I split the code base into the `src` directory, containing common library code, and connection implementations in the `tests/`
+directory. The latter can be at times quite hacky.
+
+### Write Simplex
+
+I implemented the `write_simplex` connection, which is a ring buffer connection that uses sends at the receiving side to
+update the head position, which makes it inherently one sided. A rough overview of the protocol can be found in the 
+connections [README](../tests/write_simplex/README.md)
+
+### Magic Buffer
+
+When writing to the ring buffer through RDMA we cannot simply wrap around the end of the buffer. In the `write_simplex` 
+connection we "solved" this by skipping to the start of the buffer as soon as there is not enough space at the end of it.
+This potentially wastes a lot of space in the ring buffer. We could improve this by using two writes (or two SGEs) but 
+we used a so called "magic buffer".
+
+The idea of the magic buffer is to map the same physical memory region two times, adjacent to each other. This means if we
+write over the end of the first one we write to the start of the buffer and we do not have to waste space or split our 
+write request into two. I used [smcho-kr/magic-ring-buffer](https://github.com/smcho-kr/magic-ring-buffer) as a reference 
+for our implementation.
+
+Using this magic buffer I extended the `write_simplex` connection and got 
+[write\_simplex\_magic](../tests/write_simplex_magic/README.md)
+
+
+
 ## Week 2: Impoving my C++
 2020-07-15 f70c4cf159d056010e95a963e77d4bf2cf5d1bd5
 
