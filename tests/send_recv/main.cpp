@@ -9,8 +9,8 @@
 #include <thread>
 #include <chrono>
 
-
-
+#include <ctime>
+#include <iomanip>
 
 #include "cxxopts.hpp"
 
@@ -159,7 +159,13 @@ int main(int argc, char* argv[]) {
       std::cerr << "Error calling pthread_setaffinity_np: " << rc << "\n";
     }
 
-    std::ofstream lat_file("data/sr_test_lat_send-" + std::to_string(count) + ".csv");
+    auto t = std::time(nullptr);
+    auto tm = *std::localtime(&t);
+    std::stringstream tmstream;
+		tmstream << std::put_time(&tm, "%Y_%m_%d_%H_%M");
+    std::string tmstr = tmstream.str();
+
+    std::ofstream lat_file("data/sr_test_lat_send_N" + std::to_string(count) + "_" + tmstr + ".csv");
     std::vector<float> latency_m;
     latency_m.reserve(count);
     sr_test_lat_send(std::move(conn), count, &latency_m);
