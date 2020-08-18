@@ -27,13 +27,18 @@ namespace endpoint {
 /*
  * Common interface
  */
+struct mr {
+  void		    *addr;
+	size_t			length;
+};
+
 class IReceiveQueue {
   public:
     // Cleanup of receive buffers
     virtual Status Close() = 0;
 
     // Returns the MR corresponding to the work request id of a receive completion event.
-    virtual struct ibv_mr *GetMR(uint32_t wr_id) = 0;
+    virtual struct mr GetMR(uint32_t wr_id) = 0;
     // Reposts the MR corresponding to the work request id of a receive completion event.
     virtual Status PostMR(uint32_t wr_id) = 0;
 };
@@ -44,16 +49,17 @@ class IReceiveQueue {
  */
 class ReceiveQueue : public IReceiveQueue {
   public:
-    ReceiveQueue(Endpoint *ep, std::vector<ibv_mr*> mrs): ep_(ep), mrs_(mrs){}; 
+    ReceiveQueue(Endpoint *ep, ibv_mr* mr, size_t transfer_size): ep_(ep), mr_(mr), transfer_size_(transfer_size){}; 
     ~ReceiveQueue() = default;
 
     Status Close();
 
-    struct ibv_mr *GetMR(uint32_t wr_id);
+    struct mr GetMR(uint32_t wr_id);
     Status PostMR(uint32_t wr_id);
   private:
     Endpoint *ep_;
-    std::vector<ibv_mr*> mrs_;
+    ibv_mr* mr_;
+    size_t transfer_size_;
 };
 StatusOr<std::unique_ptr<ReceiveQueue>> GetReceiveQueue(Endpoint *ep, size_t transfer_size, size_t inflight);
 
@@ -69,7 +75,7 @@ class SharedReceiveQueue : public IReceiveQueue {
 
     Status Close();
 
-    struct ibv_mr *GetMR(uint32_t wr_id);
+    struct mr GetMR(uint32_t wr_id);
     Status PostMR(uint32_t wr_id);
 
     struct ibv_srq *GetSRQ();

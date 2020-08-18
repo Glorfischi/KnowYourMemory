@@ -240,10 +240,10 @@ StatusOr<ReceiveRegion> SendReceiveConnection::Receive(){
 
   struct ibv_wc wc = wcStatus.value();
 
-  struct ibv_mr *mr = this->rq_->GetMR(wc.wr_id);
+  struct endpoint::mr mr = this->rq_->GetMR(wc.wr_id);
   ReceiveRegion reg;
   reg.context = wc.wr_id;
-  reg.addr = mr->addr;
+  reg.addr = mr.addr;
   reg.length = wc.byte_len;
   return reg;
 }
