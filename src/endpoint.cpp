@@ -66,6 +66,7 @@ Status Endpoint::PostSendRaw(struct ibv_send_wr *wr , struct ibv_send_wr **bad_w
   int ret = ibv_post_send(this->id_->qp, wr, bad_wr);
   if (ret) {
     // TODO(Fischi) Map error codes
+    perror("SEND");
     return Status(StatusCode::Internal, "error  " + std::to_string(ret) + " sending");
   }
   return Status();
@@ -205,7 +206,8 @@ StatusOr<struct ibv_wc> Endpoint::PollSendCq(){
   while(ibv_poll_cq(this->id_->qp->send_cq, 1, &wc) == 0){}
   if (wc.status){
     // TODO(Fischi) Map error codes
-    return Status(StatusCode::Internal, "error " + std::to_string(wc.status) +  " polling send cq \n" + std::string(ibv_wc_status_str(wc.status)));
+    return Status(StatusCode::Internal, "error " + std::to_string(wc.status) +  " polling send cq for wr " 
+        + std::to_string(wc.wr_id ) +" \n" + std::string(ibv_wc_status_str(wc.status)));
   }
   return wc;
 }

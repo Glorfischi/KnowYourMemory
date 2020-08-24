@@ -126,7 +126,7 @@ void sr_test_bw_send(std::unique_ptr<kym::connection::SendReceiveConnection> con
   std::chrono::milliseconds timespan(1000); // This is because of a race condition...
   std::this_thread::sleep_for(timespan);
 
-  int batch_size = 20;
+  int batch_size = 13;
   std::vector<kym::connection::SendRegion> bufs;
   for (int i = 0; i<batch_size; i++){
     auto buf_s = conn->GetMemoryRegion(8*1024);

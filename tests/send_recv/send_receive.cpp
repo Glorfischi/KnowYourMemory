@@ -29,15 +29,15 @@ namespace kym {
 namespace connection {
 namespace {
 
-const uint64_t inflight = 40;
+const uint64_t inflight = 80;
 
 endpoint::Options defaultOptions = {
   .qp_attr = {
     .cap = {
-      .max_send_wr = inflight,
-      .max_recv_wr = inflight,
-      .max_send_sge = 1,
-      .max_recv_sge = 1,
+      .max_send_wr = 5*inflight,
+      .max_recv_wr = 5*inflight,
+      .max_send_sge = 5,
+      .max_recv_sge = 5,
       .max_inline_data = 0,
     },
     .qp_type = IBV_QPT_RC,
@@ -216,19 +216,39 @@ StatusOr<SendRegion> SendReceiveConnection::GetMemoryRegion(size_t size){
 Status SendReceiveConnection::Send(std::vector<SendRegion> regions){
   int i = 0;
   int batch_size = regions.size();
+  ibv_send_wr wrs[batch_size];
+  ibv_sge sges[batch_size];
+
   for ( auto region : regions){
-    bool signaled = (++i == batch_size);
-    auto sendStatus = this->ep_->PostSend(i, region.lkey, region.addr, region.length, signaled);
-    if (!sendStatus.ok()){
-      return sendStatus;
-    }
+    struct ibv_sge *sge = &sges[i];
+    ibv_send_wr *wr = &wrs[i];
+    bool last = (++i == batch_size);
+
+    sge->addr = (uintptr_t)region.addr;
+    sge->length = region.length;
+    sge->lkey =  region.lkey;
+
+    wr->wr_id = i+100;
+    wr->next = last ? NULL : &(wrs[i]);
+    wr->sg_list = sge;
+    wr->num_sge = 1;
+    wr->opcode = IBV_WR_SEND;
+
+    wr->send_flags = last ? IBV_SEND_SIGNALED : 0;  
   }
+
+  struct ibv_send_wr *bad;
+  auto sendStatus = this->ep_->PostSendRaw(&(wrs[0]), &bad);
+  if (!sendStatus.ok()){
+      return sendStatus;
+  }
+
   auto wcStatus = this->ep_->PollSendCq();
   if (!wcStatus.ok()){
     return wcStatus.status();
   }
   ibv_wc wc = wcStatus.value();
-  if (wc.wr_id != i){
+  if (wc.wr_id != i+100){
     return Status(StatusCode::Internal, "posible interleafing while sending a batch");
   }
   return Status();
