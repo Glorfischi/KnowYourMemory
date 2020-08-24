@@ -117,32 +117,37 @@ void sr_test_bw_recv(std::unique_ptr<kym::connection::Receiver> conn, int count)
   }
   auto finish = std::chrono::high_resolution_clock::now();
   auto dur = std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count()/1000.0;
-  auto bw = 2*(count-1)/dur;
+  auto bw = 8*(count-1)/dur;
   std::cout << "## Bandwidth receive" << std::endl;
   std::cout << 1000000*bw/1048576 << "GB/s" << std::endl;
 }
 
-void sr_test_bw_send(std::unique_ptr<kym::connection::Sender> conn, int count){
+void sr_test_bw_send(std::unique_ptr<kym::connection::SendReceiveConnection> conn, int count){
   std::chrono::milliseconds timespan(1000); // This is because of a race condition...
   std::this_thread::sleep_for(timespan);
 
-  auto buf_s = conn->GetMemoryRegion(2*1024);
-  if (!buf_s.ok()){
-    std::cerr << "Error allocating send region " << buf_s.status().message() << std::endl;
-    return;
-  }
-  auto buf = buf_s.value();
-  for(int i = 0; i<count; i++){
-    //(*(uint64_t*)buf.addr) = i; 
-    // std::cout << "send " << i << std::endl;
-    auto send_s = conn->Send(buf);
-    if (!send_s.ok()){
-      std::cerr << "Error sending buffer " << send_s.message() << std::endl;
-      conn->Free(buf);
+  int batch_size = 20;
+  std::vector<kym::connection::SendRegion> bufs;
+  for (int i = 0; i<batch_size; i++){
+    auto buf_s = conn->GetMemoryRegion(8*1024);
+    if (!buf_s.ok()){
+      std::cerr << "Error allocating send region " << buf_s.status().message() << std::endl;
       return;
     }
+    bufs.push_back(buf_s.value());
   }
-  conn->Free(buf);
+  for(int i = 0; i<count/batch_size; i++){
+    //(*(uint64_t*)buf.addr) = i; 
+    // std::cout << "send " << i << std::endl;
+    auto send_s = conn->Send(bufs);
+    if (!send_s.ok()){
+      std::cerr << "Error sending buffer " << send_s.message() << std::endl;
+      break;
+    }
+  }
+  for (auto buf : bufs){
+    conn->Free(buf);
+  }
 
   std::this_thread::sleep_for(timespan);
 }

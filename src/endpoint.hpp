@@ -60,6 +60,7 @@ class Endpoint {
 
     Status PostSendRaw(struct ibv_send_wr *wr, struct ibv_send_wr **bad_wr);
     Status PostSend(uint64_t ctx, uint32_t lkey, void *addr, size_t size);
+    Status PostSend(uint64_t ctx, uint32_t lkey, void *addr, size_t size, bool signaled);
     Status PostInline(uint64_t ctx, void *addr, size_t size);
     Status PostRead(uint64_t ctx, uint32_t lkey, void *addr, size_t size, uint64_t remote_addr, uint32_t rkey);
     Status PostWrite(uint64_t ctx, uint32_t lkey, void *addr, size_t size, uint64_t remote_addr, uint32_t rkey);

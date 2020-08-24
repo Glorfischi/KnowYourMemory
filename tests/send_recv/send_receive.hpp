@@ -39,6 +39,7 @@ class SendReceiveConnection : public Connection {
     Status Close();
 
     StatusOr<SendRegion> GetMemoryRegion(size_t size);
+    Status Send(std::vector<SendRegion> regions);
     Status Send(SendRegion region);
     Status Free(SendRegion region);
 

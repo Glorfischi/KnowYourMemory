@@ -15,6 +15,7 @@
 #include <rdma/rdma_cma.h>
 #include <rdma/rdma_verbs.h>
 #include <infiniband/verbs.h>
+#include <vector>
 
 #include "error.hpp"
 #include "endpoint.hpp"
@@ -43,7 +44,7 @@ endpoint::Options defaultOptions = {
   },
   .responder_resources = 0,
   .initiator_depth =  0,
-  .retry_count = 4,  
+  .retry_count = 0,  
   .rnr_retry_count = 0, 
 };
 
@@ -211,6 +212,26 @@ StatusOr<SendRegion> SendReceiveConnection::GetMemoryRegion(size_t size){
   reg.length = mr.length;
   reg.lkey = mr.lkey;
   return reg;
+}
+Status SendReceiveConnection::Send(std::vector<SendRegion> regions){
+  int i = 0;
+  int batch_size = regions.size();
+  for ( auto region : regions){
+    bool signaled = (++i == batch_size);
+    auto sendStatus = this->ep_->PostSend(i, region.lkey, region.addr, region.length, signaled);
+    if (!sendStatus.ok()){
+      return sendStatus;
+    }
+  }
+  auto wcStatus = this->ep_->PollSendCq();
+  if (!wcStatus.ok()){
+    return wcStatus.status();
+  }
+  ibv_wc wc = wcStatus.value();
+  if (wc.wr_id != i){
+    return Status(StatusCode::Internal, "posible interleafing while sending a batch");
+  }
+  return Status();
 }
 Status SendReceiveConnection::Send(SendRegion region){
   auto sendStatus = this->ep_->PostSend(0, region.lkey, region.addr, region.length);

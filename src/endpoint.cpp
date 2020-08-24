@@ -72,6 +72,9 @@ Status Endpoint::PostSendRaw(struct ibv_send_wr *wr , struct ibv_send_wr **bad_w
 }
 
 Status Endpoint::PostSend(uint64_t ctx, uint32_t lkey, void *addr, size_t size){
+  return PostSend(ctx, lkey, addr, size, true);
+}
+Status Endpoint::PostSend(uint64_t ctx, uint32_t lkey, void *addr, size_t size, bool signaled){
   struct ibv_sge sge;
   sge.addr = (uintptr_t)addr;
   sge.length = size;
@@ -84,7 +87,7 @@ Status Endpoint::PostSend(uint64_t ctx, uint32_t lkey, void *addr, size_t size){
   wr.num_sge = 1;
   wr.opcode = IBV_WR_SEND;
 
-  wr.send_flags = IBV_SEND_SIGNALED;  
+  wr.send_flags = signaled ? IBV_SEND_SIGNALED : 0;  
   return this->PostSendRaw( &wr, &bad);
 }
 Status Endpoint::PostInline(uint64_t ctx, void *addr, size_t size){
