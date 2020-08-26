@@ -24,8 +24,10 @@ namespace endpoint {
 
 
 Endpoint::Endpoint(rdma_cm_id *id) : id_(id){
+  // std::cout << "id " << id <<  " pd " << id->pd << " qp " << id->qp << " verbs " << id->verbs << std::endl; 
 }
 Endpoint::Endpoint(rdma_cm_id* id, void *private_data, size_t private_data_len) : id_(id), private_data_(private_data), private_data_len_(private_data_len){
+  // std::cout << "id " << id <<  " pd " << id->pd << " qp " << id->qp << " verbs " << id->verbs << std::endl; 
 }
 
 Endpoint::~Endpoint() {

@@ -187,7 +187,6 @@ SendReceiveConnection::SendReceiveConnection(std::shared_ptr<endpoint::Endpoint>
   this->ep_ = ep;
   this->rq_ = rq;
   this->rq_shared_ = rq_shared;
-  
 }
 
 Status SendReceiveConnection::Close() {
