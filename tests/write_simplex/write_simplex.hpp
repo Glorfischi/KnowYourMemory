@@ -2,6 +2,7 @@
 #ifndef KNY_WRITE_SIMPLEX_HPP_
 #define KNY_WRITE_SIMPLEX_HPP_
 
+#include <bits/stdint-uintn.h>
 #include <stddef.h>
 #include <string>
 #include <vector>
@@ -37,6 +38,8 @@ class WriteSimplexReceiver : public Receiver {
 
     struct ibv_mr *buf_mr_;
     uint32_t      buf_head_;   
+    uint32_t      buf_ack_head_;   
+    uint32_t      buf_max_unack_;
 };
 
 class WriteSimplexSender : public Sender {

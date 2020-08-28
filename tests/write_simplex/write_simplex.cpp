@@ -167,19 +167,15 @@ StatusOr<SendRegion> WriteSimplexSender::GetMemoryRegion(size_t size){
 Status WriteSimplexSender::Send(SendRegion region){
   // We poll the recieve queue. If we received an ack we can move the head and free space.
   auto wcStatus = this->ep_->PollRecvCqOnce();
-  while (wcStatus.ok() || this->ack_outstanding_ == write_simplex_outstanding){
+  while (wcStatus.ok()){
     // We will try again until the receive queue is empty. If there are already as many acks outstanding as 
-    // possible, we will block. Otherwise we might generate a receiver not ready error.
-    if (wcStatus.ok()){
-      struct ibv_wc wc = wcStatus.value();
-      struct ibv_mr *mr = this->ack_mrs_[wc.wr_id];
-      this->buf_head_ = *(uint32_t *)mr->addr;
-      this->buf_full_ = false;
-      auto repost_s = ep_->PostRecv(wc.wr_id, mr->lkey, mr->addr, mr->length); 
-      if (!repost_s.ok()){
-        return repost_s;
-      }
-      this->ack_outstanding_--;
+    struct ibv_wc wc = wcStatus.value();
+    struct ibv_mr *mr = this->ack_mrs_[wc.wr_id];
+    this->buf_head_ = *(uint32_t *)mr->addr;
+    this->buf_full_ = false;
+    auto repost_s = ep_->PostRecv(wc.wr_id, mr->lkey, mr->addr, mr->length); 
+    if (!repost_s.ok()){
+      return repost_s;
     }
     wcStatus = this->ep_->PollRecvCqOnce();
   }
@@ -219,7 +215,6 @@ Status WriteSimplexSender::Send(SendRegion region){
   if (!wc_stat.ok()){
     return wc_stat.status();
   }
-  this->ack_outstanding_++;
   return Status();
 }
 
@@ -305,6 +300,8 @@ WriteSimplexReceiver::WriteSimplexReceiver(std::shared_ptr<endpoint::Endpoint> e
     this->rcv_mrs_ = rcv_mrs;
     this->buf_mr_ = buf_mr;
     this->buf_head_ = 0;
+    this->buf_ack_head_ = 0;
+    this->buf_max_unack_ = buf_mr->length/8;
 }
 
 
@@ -351,14 +348,22 @@ Status WriteSimplexReceiver::Free(ReceiveRegion reg){
   // Get the new head after we freed. Either we read at the old head or at the beginning of the buffer
   this->buf_head_  = (this->buf_head_ + reg.length <= this->buf_mr_->length) ? this->buf_head_ + reg.length : reg.length;
 
-  auto sendStatus = this->ep_->PostInline(0, &this->buf_head_, sizeof(this->buf_head_)); 
-  if (!sendStatus.ok()){
-    return sendStatus.Wrap("error sending ack");
-  }
+  if (
+      (this->buf_ack_head_ < this->buf_head_ 
+       && this->buf_ack_head_ + this->buf_max_unack_ <= this->buf_head_ ) ||
+      (this->buf_ack_head_ > this->buf_head_ 
+       && (this->buf_mr_->length - this->buf_ack_head_) + this->buf_head_ >= this->buf_max_unack_)
+      ){
+    auto sendStatus = this->ep_->PostInline(0, &this->buf_head_, sizeof(this->buf_head_)); 
+    if (!sendStatus.ok()){
+      return sendStatus.Wrap("error sending ack");
+    }
 
-  auto wcStatus = this->ep_->PollSendCq();
-  if (!wcStatus.ok()){
-    return wcStatus.status().Wrap("error polling ack send cq");
+    auto wcStatus = this->ep_->PollSendCq();
+    if (!wcStatus.ok()){
+      return wcStatus.status().Wrap("error polling ack send cq");
+    }
+    this->buf_ack_head_ = this->buf_head_;
   }
   return Status();
 }

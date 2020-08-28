@@ -9,7 +9,7 @@ BINDIR = ./bin
 SRCPATH = $(PREFIX)/src
 
 BIN = $(BINDIR)/writesimplex
-SRCS=  ./main.cpp ./write_simplex.cpp $(SRCPATH)/endpoint.cpp $(SRCPATH)/mm/dumb_allocator.cpp 
+SRCS=  ./main.cpp ./write_simplex.cpp $(SRCPATH)/endpoint.cpp $(SRCPATH)/mm/dumb_allocator.cpp $(SRCPATH)/bench/bench.cpp
 OBJS= $(SRCS:.cpp=.o)
 
 all: $(OBJS)

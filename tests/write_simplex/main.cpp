@@ -12,20 +12,32 @@
 #include "cxxopts.hpp"
 
 #include "conn.hpp"
+#include "bench/bench.hpp"
 
 #include "write_simplex.hpp"
 
 cxxopts::ParseResult parse(int argc, char* argv[]) {
-  cxxopts::Options options(argv[0], "sendrecv");
+  cxxopts::Options options(argv[0], "writesimplex");
   try {
-    options.add_options()
-      ("s,server", "Whether to act as a server", cxxopts::value<bool>())
+  options.add_options()
+      ("bw", "Whether to test bandwidth", cxxopts::value<bool>())
+      ("lat", "Whether to test latency", cxxopts::value<bool>())
+      ("client", "Whether to as client only", cxxopts::value<bool>())
+      ("server", "Whether to as server only", cxxopts::value<bool>())
       ("i,address", "IP address to connect to", cxxopts::value<std::string>())
-      ("n,count", "How many times to repeat measurement", cxxopts::value<int>()->default_value("1000"))
+      ("n,iters",  "Number of exchanges" , cxxopts::value<int>()->default_value("1000"))
+      ("s,size",  "Size of message to exchange", cxxopts::value<int>()->default_value("1024"))
+      ("batch",  "Number of messages to send in a single batch. Only relevant for bandwidth benchmark", 
+       cxxopts::value<int>()->default_value("20"))
      ;
  
     auto result = options.parse(argc, argv);
     if (!result.count("address")) {
+      std::cerr << options.help({""}) << std::endl;
+      exit(1);
+    }
+    if (!result.count("lat") && !result.count("bw")) {
+      std::cerr << "Either perform latency or bandwidth benchmark" << std::endl;
       std::cerr << options.help({""}) << std::endl;
       exit(1);
     }
@@ -40,13 +52,23 @@ cxxopts::ParseResult parse(int argc, char* argv[]) {
 int main(int argc, char* argv[]) {
   auto flags = parse(argc,argv);
   std::string ip = flags["address"].as<std::string>();  
+
+  bool bw = flags["bw"].as<bool>();  
+  bool lat = flags["lat"].as<bool>();  
+
+  int count = flags["iters"].as<int>();  
+  int size = flags["size"].as<int>();  
+  int batch = flags["batch"].as<int>();  
+
   bool server = flags["server"].as<bool>();  
-  int count = flags["count"].as<int>();  
+  bool client = flags["client"].as<bool>();  
 
-  std::vector<float> latency_m;
+  std::vector<float> latency_us;
 
-  std::cout << "#### Testing WriteSimplex Latency ####" << std::endl;
-  if (server) {
+  std::cout << "#### Testing WriteSimplex ####" << std::endl;
+
+  std::thread server_thread;
+  if (server){
     auto ln_s = kym::connection::ListenWriteSimplex(ip, 9999);
     if (!ln_s.ok()){
       std::cerr << "Error listening for send_receive " << ln_s.status().message() << std::endl;
@@ -60,28 +82,14 @@ int main(int argc, char* argv[]) {
     }
     auto conn = conn_s.value();
 
-    for(int i = 0; i<count; i++){
-      auto start = std::chrono::high_resolution_clock::now();
-      auto buf_s = conn->Receive();
-      if (!buf_s.ok()){
-        std::cerr << "Error receiving buffer " << buf_s.status().message() << std::endl;
-        conn->Close();
-        ln->Close();
-        return 1;
-      }
-      auto buf = buf_s.value();
-      // std::cout << *(uint64_t *)buf.addr << std::endl;
-      auto free_s = conn->Free(buf_s.value());
-      if (!free_s.ok()){
-        std::cerr << free_s << std::endl;
-        return 1;
-      }
-      auto finish = std::chrono::high_resolution_clock::now();
-      latency_m.push_back(std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count()/1000.0);
-    }
+    test_lat_recv(conn.get(), count, &latency_us);
+    
     conn->Close();
     ln->Close();
-  } else {
+  } 
+  
+  std::thread client_thread;
+  if (client){
     auto conn_s = kym::connection::DialWriteSimplex(ip, 9999);
     if (!conn_s.ok()){
       std::cerr << "Error dialing send_receive connection" << conn_s.status().message() << std::endl;
@@ -89,43 +97,19 @@ int main(int argc, char* argv[]) {
     }
     auto conn = conn_s.value();
 
-    auto buf_s = conn->GetMemoryRegion(2048);
-    if (!buf_s.ok()){
-      std::cerr << "Error allocating send region " << buf_s.status().message() << std::endl;
-      conn->Close();
-      return 1;
-    }
-    auto buf = buf_s.value();
-    
-    *(uint64_t *)buf.addr = 0;
-    for(int i = 0; i<count; i++){
-      *(uint64_t *)buf.addr += 1;
-      auto start = std::chrono::high_resolution_clock::now();
-      auto send_s = conn->Send(buf);
-      if (!send_s.ok()){
-        std::cerr << "Error sending buffer " << send_s.message() << std::endl;
-        conn->Free(buf);
-        conn->Close();
-        return 1;
-      }
-      auto finish = std::chrono::high_resolution_clock::now();
-      latency_m.push_back(std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count()/1000.0);
-    }
+    test_lat_send(conn.get(), count, size, &latency_us);
 
     std::chrono::milliseconds timespan(1000); // We need to wait for the last ack to come in. o/w reciever will fail. This is hacky..
     std::this_thread::sleep_for(timespan);
-    conn->Free(buf);
-    conn->Close();
-
-
+    //conn->Close();
   } 
   auto n = count;
-  std::sort (latency_m.begin(), latency_m.end());
+  std::sort (latency_us.begin(), latency_us.end());
   int q025 = (int)(n*0.025);
   int q500 = (int)(n*0.5);
   int q975 = (int)(n*0.975);
   std::cout << "q025" << "\t" << "q50" << "\t" << "q975" << std::endl;
-  std::cout << latency_m[q025] << "\t" << latency_m[q500] << "\t" << latency_m[q975] << std::endl;
+  std::cout << latency_us[q025] << "\t" << latency_us[q500] << "\t" << latency_us[q975] << std::endl;
   
   return 0;
 }
