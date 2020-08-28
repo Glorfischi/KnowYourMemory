@@ -70,7 +70,7 @@ StatusOr<std::unique_ptr<ReceiveQueue>> GetReceiveQueue(Endpoint *ep, size_t tra
  */
 class SharedReceiveQueue : public IReceiveQueue {
   public:
-    SharedReceiveQueue(struct ibv_srq *srq, std::vector<ibv_mr*> mrs): srq_(srq), mrs_(mrs){}; 
+    SharedReceiveQueue(struct ibv_srq *srq, ibv_mr* mr, size_t transfer_size): srq_(srq), mr_(mr), transfer_size_(transfer_size){}; 
     ~SharedReceiveQueue() = default;
 
     Status Close();
@@ -81,7 +81,8 @@ class SharedReceiveQueue : public IReceiveQueue {
     struct ibv_srq *GetSRQ();
   private:
     struct ibv_srq *srq_;
-    std::vector<ibv_mr*> mrs_;
+    ibv_mr* mr_;
+    size_t transfer_size_;
 };
 StatusOr<std::shared_ptr<SharedReceiveQueue>> GetSharedReceiveQueue(struct ibv_pd pd, size_t transfer_size, size_t inflight);
 

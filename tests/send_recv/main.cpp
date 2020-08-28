@@ -54,7 +54,7 @@ cxxopts::ParseResult parse(int argc, char* argv[]) {
 }
 
 
-void sr_test_lat_send(std::unique_ptr<kym::connection::Sender> conn, int count, int size, std::vector<float> *latency_m){
+void sr_test_lat_send(std::shared_ptr<kym::connection::Sender> conn, int count, int size, std::vector<float> *latency_m){
   std::chrono::milliseconds timespan(1000); // This is because of a race condition...
   std::this_thread::sleep_for(timespan);
 
@@ -80,7 +80,7 @@ void sr_test_lat_send(std::unique_ptr<kym::connection::Sender> conn, int count, 
   std::this_thread::sleep_for(timespan);
 }
 
-void sr_test_lat_recv(std::unique_ptr<kym::connection::Receiver> conn, int count){
+void sr_test_lat_recv(std::shared_ptr<kym::connection::Receiver> conn, int count){
   std::vector<float> latency_m;
   latency_m.reserve(count);
 
@@ -106,7 +106,7 @@ void sr_test_lat_recv(std::unique_ptr<kym::connection::Receiver> conn, int count
   std::cout << latency_m[q025] << "\t" << latency_m[q500] << "\t" << latency_m[q975] << std::endl;
 }
 
-void sr_test_bw_recv(std::unique_ptr<kym::connection::Receiver> conn, int count, int size){
+void sr_test_bw_recv(std::shared_ptr<kym::connection::Receiver> conn, int count, int size){
   auto buf_s = conn->Receive();
   if (!buf_s.ok()){
     std::cerr << "Error receiving buffer " << buf_s.status().message() << std::endl;
@@ -131,7 +131,7 @@ void sr_test_bw_recv(std::unique_ptr<kym::connection::Receiver> conn, int count,
   std::cout << 1000000.0*bw/1024/1024/1024 << "GB/s" << std::endl;
 }
 
-void sr_test_bw_send(std::unique_ptr<kym::connection::SendReceiveConnection> conn, int count, int size, int batch){
+void sr_test_bw_send(std::shared_ptr<kym::connection::SendReceiveConnection> conn, int count, int size, int batch){
   std::chrono::milliseconds timespan(1000); // This is because of a race condition...
   std::this_thread::sleep_for(timespan);
 
@@ -185,7 +185,7 @@ int main(int argc, char* argv[]) {
 
   if (!client){
     server_thread = std::thread( [srq, bw, lat, ip, count, size] {
-      std::unique_ptr<kym::connection::SendReceiveConnection> conn;
+      std::shared_ptr<kym::connection::SendReceiveConnection> conn;
       std::unique_ptr<kym::connection::SendReceiveListener> ln;
       if (srq){
         auto ln_s = kym::connection::ListenSharedReceive(ip, 9999);
@@ -219,10 +219,12 @@ int main(int argc, char* argv[]) {
       conn = conn_s.value();
 
       if (bw) {
-        sr_test_bw_recv(std::move(conn), count, size);
+        sr_test_bw_recv(conn, count, size);
       } else if (lat) {
-        sr_test_lat_recv(std::move(conn), count);
+        sr_test_lat_recv(conn, count);
       }
+      conn->Close();
+      ln->Close();
       return 0;
     });
   }
@@ -235,12 +237,12 @@ int main(int argc, char* argv[]) {
         std::cerr << "Error dialing send_receive co_nection" << conn_s.status().message() << std::endl;
         return 1;
       }
-      auto conn = conn_s.value();
+      std::shared_ptr<kym::connection::SendReceiveConnection> conn = conn_s.value();
 
       // Create a cpu_set_t object representing a set of CPUs. Clear it and mark only CPU i as set.
       cpu_set_t cpuset;
       CPU_ZERO(&cpuset);
-      CPU_SET(2, &cpuset);
+      CPU_SET(1, &cpuset);
       int rc = pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
       if (rc != 0) {
         std::cerr << "Error calling pthread_setaffinity_np: " << rc << "\n";
@@ -248,7 +250,7 @@ int main(int argc, char* argv[]) {
       }
 
       if (bw) {
-        sr_test_bw_send(std::move(conn), count, size, batch);
+        sr_test_bw_send(conn, count, size, batch);
       } else {
         auto t = std::time(nullptr);
         auto tm = *std::localtime(&t);
@@ -260,7 +262,7 @@ int main(int argc, char* argv[]) {
         std::vector<float> latency_m;
         latency_m.reserve(count);
 
-        sr_test_lat_send(std::move(conn), count, size, &latency_m);
+        sr_test_lat_send(conn, count, size, &latency_m);
         for (float f : latency_m){
           lat_file << f << "\n";
         }
@@ -275,6 +277,7 @@ int main(int argc, char* argv[]) {
         std::cout << "q025" << "\t" << "q50" << "\t" << "q975" << std::endl;
         std::cout << latency_m[q025] << "\t" << latency_m[q500] << "\t" << latency_m[q975] << std::endl;
       }
+      conn->Close();
       return 0;
     });
   }

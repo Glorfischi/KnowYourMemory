@@ -164,7 +164,7 @@ StatusOr<std::unique_ptr<SendReceiveConnection>> SendReceiveListener::Accept(){
     rq = this->srq_;
   }
 
-  auto conn = std::make_unique<SendReceiveConnection>(ep, rq, false, allocator);
+  auto conn = std::make_unique<SendReceiveConnection>(ep, rq, this->srq_ != nullptr, allocator);
 
   return StatusOr<std::unique_ptr<SendReceiveConnection>>(std::move(conn));
 
@@ -176,6 +176,9 @@ SendReceiveListener::SendReceiveListener(std::unique_ptr<endpoint::Listener> lis
 
 
 Status SendReceiveListener::Close() {
+  if (this->srq_ != nullptr){
+    this->srq_->Close();
+  }
   return this->listener_->Close();
 }
 /*
