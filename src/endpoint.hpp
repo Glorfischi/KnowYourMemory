@@ -90,14 +90,14 @@ class Listener {
 
     ibv_pd GetPd();
 
-    StatusOr<std::unique_ptr<Endpoint>> Accept(Options opts);
+    StatusOr<Endpoint *> Accept(Options opts);
   private:
     rdma_cm_id *id_;
 };
 
-StatusOr<std::unique_ptr<Endpoint>> Create(std::string ip, int port, Options opts);
-StatusOr<std::unique_ptr<Endpoint>> Dial(std::string ip, int port, Options opts);
-StatusOr<std::unique_ptr<Listener>> Listen(std::string ip, int port);
+StatusOr<Endpoint *> Create(std::string ip, int port, Options opts);
+StatusOr<Endpoint *> Dial(std::string ip, int port, Options opts);
+StatusOr<Listener *> Listen(std::string ip, int port);
 
 }
 }

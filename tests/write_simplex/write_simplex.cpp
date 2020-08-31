@@ -27,12 +27,13 @@ namespace connection {
 const int write_simplex_outstanding = 10;
 const size_t write_simplex_buf_size = 10*1024*1024;
 
+namespace {
 struct connectionInfo {
   uint64_t addr;
   uint32_t key;
 };
 
-endpoint::Options default_write_simplex_snd_options = {
+endpoint::Options default_snd_options = {
   .qp_attr = {
     .cap = {
       .max_send_wr = write_simplex_outstanding,
@@ -48,7 +49,7 @@ endpoint::Options default_write_simplex_snd_options = {
   .retry_count = 8,  
   .rnr_retry_count = 7, 
 };
-endpoint::Options default_write_simplex_rcv_options = {
+endpoint::Options default_rcv_options = {
   .qp_attr = {
     .cap = {
       .max_send_wr = write_simplex_outstanding,
@@ -64,23 +65,22 @@ endpoint::Options default_write_simplex_rcv_options = {
   .retry_count = 8,  
   .rnr_retry_count = 7, 
 };
+}
 
 
-
-
-StatusOr<std::unique_ptr<WriteSimplexSender>> DialWriteSimplex(std::string ip, int port){
+StatusOr<WriteSimplexSender *> DialWriteSimplex(std::string ip, int port){
   // Default to port 18515
   if (port == 0) {
     port = 18515;
   }
   
-  auto opts = default_write_simplex_snd_options;
+  auto opts = default_snd_options;
   auto ep_stat = kym::endpoint::Dial(ip, port, opts);
   if (!ep_stat.ok()){
     return ep_stat.status();
   }
 
-  std::shared_ptr<endpoint::Endpoint> ep = ep_stat.value();
+  endpoint::Endpoint *ep = ep_stat.value();
 
   // Getting info on ring buffer
   auto pd = ep->GetPd();
@@ -118,13 +118,13 @@ StatusOr<std::unique_ptr<WriteSimplexSender>> DialWriteSimplex(std::string ip, i
     auto regStatus = ep->PostRecv(i, mr->lkey, mr->addr, transfer_size); 
     ack_mrs.push_back(mr);
   }
-  auto alloc = std::make_shared<memory::DumbAllocator>(ep->GetPd());
+  auto alloc = new memory::DumbAllocator(ep->GetPd());
 
-  auto sndr = std::make_unique<WriteSimplexSender>(ep, alloc, ack_mrs, ci.addr, ci.key);
-  return std::move(sndr);
+  auto sndr = new WriteSimplexSender(ep, alloc, ack_mrs, ci.addr, ci.key);
+  return sndr;
 }
 
-WriteSimplexSender::WriteSimplexSender(std::shared_ptr<endpoint::Endpoint> ep, std::shared_ptr<memory::Allocator> allocator,
+WriteSimplexSender::WriteSimplexSender(endpoint::Endpoint *ep, memory::Allocator *allocator,
     std::vector<struct ibv_mr *> ack_mrs, uint64_t buf_vaddr, uint32_t buf_rkey){
   this->ep_ = ep;
   this->allocator_ = allocator;
@@ -140,6 +140,10 @@ WriteSimplexSender::WriteSimplexSender(std::shared_ptr<endpoint::Endpoint> ep, s
   this->ack_outstanding_ = 0;
 }
 
+WriteSimplexSender::~WriteSimplexSender(){
+  delete this->ep_;
+  delete this->allocator_;
+}
 Status WriteSimplexSender::Close(){
   for (auto mr : this->ack_mrs_){
     free(mr->addr);
@@ -229,7 +233,7 @@ Status WriteSimplexSender::Free(SendRegion region){
 
 
 
-StatusOr<std::unique_ptr<WriteSimplexListener>> ListenWriteSimplex(std::string ip, int port){
+StatusOr<WriteSimplexListener *> ListenWriteSimplex(std::string ip, int port){
   // Default to port 18515
   if (port == 0) {
     port = 18515;
@@ -239,17 +243,17 @@ StatusOr<std::unique_ptr<WriteSimplexListener>> ListenWriteSimplex(std::string i
   if (!ln_stat.ok()){
     return ln_stat.status();
   }
-  std::unique_ptr<endpoint::Listener> ln = ln_stat.value();
-  return std::make_unique<WriteSimplexListener>(std::move(ln));
+  endpoint::Listener *ln = ln_stat.value();
+  return new WriteSimplexListener(ln);
 }
 
-StatusOr<std::unique_ptr<WriteSimplexReceiver>> WriteSimplexListener::Accept(){
-  auto opts = default_write_simplex_rcv_options;
+StatusOr<WriteSimplexReceiver *> WriteSimplexListener::Accept(){
+  auto opts = default_rcv_options;
   auto epStatus = this->listener_->Accept(opts);
   if (!epStatus.ok()){
     return epStatus.status();
   }
-  std::shared_ptr<endpoint::Endpoint> ep = epStatus.value();
+  endpoint::Endpoint *ep = epStatus.value();
 
   auto pd = ep->GetPd();
   size_t buf_size = write_simplex_buf_size;
@@ -281,19 +285,21 @@ StatusOr<std::unique_ptr<WriteSimplexReceiver>> WriteSimplexListener::Accept(){
   }
 
 
-  auto rcvr = std::make_unique<WriteSimplexReceiver>(ep, buf_mr, rcv_mrs);
-  return std::move(rcvr);
+  auto rcvr = new WriteSimplexReceiver(ep, buf_mr, rcv_mrs);
+  return rcvr;
 }
 
-WriteSimplexListener::WriteSimplexListener(std::unique_ptr<endpoint::Listener> listener) : listener_(std::move(listener)) {}
-
+WriteSimplexListener::WriteSimplexListener(endpoint::Listener *listener) : listener_(listener) {}
+WriteSimplexListener::~WriteSimplexListener(){
+  delete this->listener_;
+}
 
 Status WriteSimplexListener::Close() {
   return this->listener_->Close();
 }
 
 
-WriteSimplexReceiver::WriteSimplexReceiver(std::shared_ptr<endpoint::Endpoint> ep, struct ibv_mr *buf_mr, 
+WriteSimplexReceiver::WriteSimplexReceiver(endpoint::Endpoint *ep, struct ibv_mr *buf_mr, 
     std::vector<struct ibv_mr *> rcv_mrs){
     this->ep_ = ep;
     
@@ -304,6 +310,9 @@ WriteSimplexReceiver::WriteSimplexReceiver(std::shared_ptr<endpoint::Endpoint> e
     this->buf_max_unack_ = buf_mr->length/8;
 }
 
+WriteSimplexReceiver::~WriteSimplexReceiver(){
+  delete this->ep_;
+}
 
 Status WriteSimplexReceiver::Close(){
   free(this->buf_mr_->addr);

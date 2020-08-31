@@ -54,7 +54,7 @@ cxxopts::ParseResult parse(int argc, char* argv[]) {
 }
 
 
-void sr_test_lat_send(std::shared_ptr<kym::connection::Sender> conn, int count, int size, std::vector<float> *latency_m){
+void sr_test_lat_send(kym::connection::Sender *conn, int count, int size, std::vector<float> *latency_m){
   std::chrono::milliseconds timespan(1000); // This is because of a race condition...
   std::this_thread::sleep_for(timespan);
 
@@ -80,7 +80,7 @@ void sr_test_lat_send(std::shared_ptr<kym::connection::Sender> conn, int count, 
   std::this_thread::sleep_for(timespan);
 }
 
-void sr_test_lat_recv(std::shared_ptr<kym::connection::Receiver> conn, int count){
+void sr_test_lat_recv(kym::connection::Receiver *conn, int count){
   std::vector<float> latency_m;
   latency_m.reserve(count);
 
@@ -106,7 +106,7 @@ void sr_test_lat_recv(std::shared_ptr<kym::connection::Receiver> conn, int count
   std::cout << latency_m[q025] << "\t" << latency_m[q500] << "\t" << latency_m[q975] << std::endl;
 }
 
-void sr_test_bw_recv(std::shared_ptr<kym::connection::Receiver> conn, int count, int size){
+void sr_test_bw_recv(kym::connection::Receiver *conn, int count, int size){
   auto buf_s = conn->Receive();
   if (!buf_s.ok()){
     std::cerr << "Error receiving buffer " << buf_s.status().message() << std::endl;
@@ -131,7 +131,7 @@ void sr_test_bw_recv(std::shared_ptr<kym::connection::Receiver> conn, int count,
   std::cout << 1000000.0*bw/1024/1024/1024 << "GB/s" << std::endl;
 }
 
-void sr_test_bw_send(std::shared_ptr<kym::connection::SendReceiveConnection> conn, int count, int size, int batch){
+void sr_test_bw_send(kym::connection::SendReceiveConnection *conn, int count, int size, int batch){
   std::chrono::milliseconds timespan(1000); // This is because of a race condition...
   std::this_thread::sleep_for(timespan);
 
@@ -185,8 +185,8 @@ int main(int argc, char* argv[]) {
 
   if (!client){
     server_thread = std::thread( [srq, bw, lat, ip, count, size] {
-      std::shared_ptr<kym::connection::SendReceiveConnection> conn;
-      std::unique_ptr<kym::connection::SendReceiveListener> ln;
+      kym::connection::SendReceiveConnection *conn;
+      kym::connection::SendReceiveListener *ln;
       if (srq){
         auto ln_s = kym::connection::ListenSharedReceive(ip, 9999);
         if (!ln_s.ok()){
@@ -237,7 +237,7 @@ int main(int argc, char* argv[]) {
         std::cerr << "Error dialing send_receive co_nection" << conn_s.status().message() << std::endl;
         return 1;
       }
-      std::shared_ptr<kym::connection::SendReceiveConnection> conn = conn_s.value();
+      kym::connection::SendReceiveConnection *conn = conn_s.value();
 
       // Create a cpu_set_t object representing a set of CPUs. Clear it and mark only CPU i as set.
       cpu_set_t cpuset;

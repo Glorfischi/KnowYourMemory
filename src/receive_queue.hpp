@@ -34,6 +34,7 @@ struct mr {
 
 class IReceiveQueue {
   public:
+    virtual ~IReceiveQueue() = default;
     // Cleanup of receive buffers
     virtual Status Close() = 0;
 
@@ -61,7 +62,7 @@ class ReceiveQueue : public IReceiveQueue {
     ibv_mr* mr_;
     size_t transfer_size_;
 };
-StatusOr<std::unique_ptr<ReceiveQueue>> GetReceiveQueue(Endpoint *ep, size_t transfer_size, size_t inflight);
+StatusOr<ReceiveQueue *> GetReceiveQueue(Endpoint *ep, size_t transfer_size, size_t inflight);
 
 
 
@@ -84,7 +85,7 @@ class SharedReceiveQueue : public IReceiveQueue {
     ibv_mr* mr_;
     size_t transfer_size_;
 };
-StatusOr<std::shared_ptr<SharedReceiveQueue>> GetSharedReceiveQueue(struct ibv_pd pd, size_t transfer_size, size_t inflight);
+StatusOr<SharedReceiveQueue *> GetSharedReceiveQueue(struct ibv_pd pd, size_t transfer_size, size_t inflight);
 
 
 

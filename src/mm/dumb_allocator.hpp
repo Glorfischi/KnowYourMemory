@@ -24,6 +24,7 @@ namespace memory {
 
 class DumbAllocator : public Allocator {
   public:
+    ~DumbAllocator() = default;
     DumbAllocator(struct ibv_pd pd);
 
     StatusOr<Region> Alloc(size_t size);

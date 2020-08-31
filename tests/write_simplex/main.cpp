@@ -82,7 +82,7 @@ int main(int argc, char* argv[]) {
     }
     auto conn = conn_s.value();
 
-    test_lat_recv(conn.get(), count, &latency_us);
+    test_lat_recv(conn, count, &latency_us);
     
     conn->Close();
     ln->Close();
@@ -97,11 +97,11 @@ int main(int argc, char* argv[]) {
     }
     auto conn = conn_s.value();
 
-    test_lat_send(conn.get(), count, size, &latency_us);
+    test_lat_send(conn, count, size, &latency_us);
 
     std::chrono::milliseconds timespan(1000); // We need to wait for the last ack to come in. o/w reciever will fail. This is hacky..
     std::this_thread::sleep_for(timespan);
-    //conn->Close();
+    conn->Close();
   } 
   auto n = count;
   std::sort (latency_us.begin(), latency_us.end());

@@ -267,7 +267,7 @@ StatusOr<ibv_wc> Endpoint::PollRecvCqOnce(){
 }
 
 
-StatusOr<std::unique_ptr<Endpoint>> Listener::Accept(Options opts){
+StatusOr<Endpoint *> Listener::Accept(Options opts){
   int ret;
   struct rdma_cm_id *conn_id;
 
@@ -316,7 +316,7 @@ StatusOr<std::unique_ptr<Endpoint>> Listener::Accept(Options opts){
   }
   conn_id->srq = opts.qp_attr.srq;
   
-  return StatusOr<std::unique_ptr<Endpoint>>(std::make_unique<Endpoint>(conn_id, private_data, private_data_len));
+  return new Endpoint(conn_id, private_data, private_data_len);
 }
 
 Listener::Listener(rdma_cm_id *id) : id_(id) {
@@ -339,7 +339,7 @@ Status Listener::Close(){
   return Status();
 }
 
-StatusOr<std::unique_ptr<Endpoint>> Create(std::string ip, int port, Options opts){
+StatusOr<Endpoint *> Create(std::string ip, int port, Options opts){
   if (ip.empty()){
     return Status(StatusCode::InvalidArgument, "IP cannot be empty");
   }
@@ -381,7 +381,7 @@ StatusOr<std::unique_ptr<Endpoint>> Create(std::string ip, int port, Options opt
   rdma_freeaddrinfo(addrinfo);
 
 
-  return StatusOr<std::unique_ptr<Endpoint>>(std::make_unique<Endpoint>(id));
+  return new Endpoint(id);
 }
 Status Endpoint::Connect(Options opts){
   struct rdma_conn_param conn_param;
@@ -411,7 +411,7 @@ Status Endpoint::Connect(Options opts){
   return Status();
 }
 
-StatusOr<std::unique_ptr<Endpoint>> Dial(std::string ip, int port, Options opts){
+StatusOr<Endpoint *> Dial(std::string ip, int port, Options opts){
   auto ep_stat = Create(ip, port, opts);
   if (!ep_stat.ok()){
     return ep_stat.status().Wrap("error setting up endpoint");
@@ -424,7 +424,7 @@ StatusOr<std::unique_ptr<Endpoint>> Dial(std::string ip, int port, Options opts)
   return std::move(ep);
 }
 
-StatusOr<std::unique_ptr<Listener>> Listen(std::string ip, int port){
+StatusOr<Listener *> Listen(std::string ip, int port){
   int ret;
   struct rdma_addrinfo hints;
   struct rdma_addrinfo *addrinfo;
@@ -464,7 +464,7 @@ StatusOr<std::unique_ptr<Listener>> Listen(std::string ip, int port){
     return Status(StatusCode::Internal, "listening failed");
   }
 
-  return StatusOr<std::unique_ptr<Listener>>(std::make_unique<Listener>(id));
+  return new Listener(id);
 }
 
 }

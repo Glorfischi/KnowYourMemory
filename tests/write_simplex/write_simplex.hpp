@@ -24,15 +24,15 @@ namespace connection {
 
 class WriteSimplexReceiver : public Receiver {
   public:
-    WriteSimplexReceiver(std::shared_ptr<endpoint::Endpoint>, struct ibv_mr *buf_mr, std::vector<struct ibv_mr*> rcv_mrs);
-    ~WriteSimplexReceiver() = default;
+    WriteSimplexReceiver(endpoint::Endpoint *, struct ibv_mr *buf_mr, std::vector<struct ibv_mr*> rcv_mrs);
+    ~WriteSimplexReceiver();
 
     Status Close();
 
     StatusOr<ReceiveRegion> Receive();
     Status Free(ReceiveRegion);
   private:
-    std::shared_ptr<endpoint::Endpoint> ep_;
+    endpoint::Endpoint *ep_;
 
     std::vector<struct ibv_mr *> rcv_mrs_; // Posted buffers to receive events for incomming messages
 
@@ -44,9 +44,9 @@ class WriteSimplexReceiver : public Receiver {
 
 class WriteSimplexSender : public Sender {
   public:
-    WriteSimplexSender(std::shared_ptr<endpoint::Endpoint>, std::shared_ptr<memory::Allocator>,
+    WriteSimplexSender(endpoint::Endpoint *, memory::Allocator *,
         std::vector<struct ibv_mr *> ack_mrs, uint64_t buf_vaddr_, uint32_t buf_rkey_);
-    ~WriteSimplexSender() = default;
+    ~WriteSimplexSender();
 
     Status Close();
 
@@ -54,13 +54,13 @@ class WriteSimplexSender : public Sender {
     Status Send(SendRegion region);
     Status Free(SendRegion region);
   private:
-    std::shared_ptr<endpoint::Endpoint> ep_;
+    endpoint::Endpoint *ep_;
 
     std::vector<struct ibv_mr *> ack_mrs_; // Posted buffers to receive read acknowledgements to
     int ack_outstanding_; // Number of outstaning acks. If equal to number of buffers, we cannot send until we receive
 
 
-    std::shared_ptr<memory::Allocator> allocator_;
+    memory::Allocator *allocator_;
 
     uint64_t buf_vaddr_;
     uint32_t buf_rkey_;
@@ -72,21 +72,21 @@ class WriteSimplexSender : public Sender {
 };
 
 // For now, client is sender and server is receiver.
-StatusOr<std::unique_ptr<WriteSimplexSender>> DialWriteSimplex(std::string ip, int port);
+StatusOr<WriteSimplexSender *> DialWriteSimplex(std::string ip, int port);
 
 class WriteSimplexListener {
   public:
-    WriteSimplexListener(std::unique_ptr<endpoint::Listener> listener);
-    ~WriteSimplexListener() = default;
+    WriteSimplexListener(endpoint::Listener *listener);
+    ~WriteSimplexListener();
 
     Status Close();
 
-    StatusOr<std::unique_ptr<WriteSimplexReceiver>> Accept();
+    StatusOr<WriteSimplexReceiver *> Accept();
   private:
-    std::unique_ptr<endpoint::Listener> listener_;
+    endpoint::Listener *listener_;
 };
 
-StatusOr<std::unique_ptr<WriteSimplexListener>> ListenWriteSimplex(std::string ip, int port);
+StatusOr<WriteSimplexListener *> ListenWriteSimplex(std::string ip, int port);
 
 
 
