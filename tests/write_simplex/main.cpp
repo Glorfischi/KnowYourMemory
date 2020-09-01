@@ -25,6 +25,7 @@ cxxopts::ParseResult parse(int argc, char* argv[]) {
       ("client", "Whether to as client only", cxxopts::value<bool>())
       ("server", "Whether to as server only", cxxopts::value<bool>())
       ("i,address", "IP address to connect to", cxxopts::value<std::string>())
+      ("source", "source IP address", cxxopts::value<std::string>()->default_value(""))
       ("n,iters",  "Number of exchanges" , cxxopts::value<int>()->default_value("1000"))
       ("s,size",  "Size of message to exchange", cxxopts::value<int>()->default_value("1024"))
       ("batch",  "Number of messages to send in a single batch. Only relevant for bandwidth benchmark", 
@@ -52,6 +53,7 @@ cxxopts::ParseResult parse(int argc, char* argv[]) {
 int main(int argc, char* argv[]) {
   auto flags = parse(argc,argv);
   std::string ip = flags["address"].as<std::string>();  
+  std::string src = flags["source"].as<std::string>();  
 
   bool bw = flags["bw"].as<bool>();  
   bool lat = flags["lat"].as<bool>();  
@@ -90,7 +92,7 @@ int main(int argc, char* argv[]) {
   
   std::thread client_thread;
   if (client){
-    auto conn_s = kym::connection::DialWriteSimplex(ip, 9999);
+    auto conn_s = kym::connection::DialWriteSimplex(ip, 9999, src);
     if (!conn_s.ok()){
       std::cerr << "Error dialing send_receive connection" << conn_s.status().message() << std::endl;
       return 1;

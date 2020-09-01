@@ -69,12 +69,18 @@ endpoint::Options default_rcv_options = {
 
 
 StatusOr<WriteSimplexSender *> DialWriteSimplex(std::string ip, int port){
+  return DialWriteSimplex(ip, port, "");
+}
+StatusOr<WriteSimplexSender *> DialWriteSimplex(std::string ip, int port, std::string src){
   // Default to port 18515
   if (port == 0) {
     port = 18515;
   }
   
   auto opts = default_snd_options;
+  if (!src.empty()){
+    opts.src = src.c_str();
+  }
   auto ep_stat = kym::endpoint::Dial(ip, port, opts);
   if (!ep_stat.ok()){
     return ep_stat.status();

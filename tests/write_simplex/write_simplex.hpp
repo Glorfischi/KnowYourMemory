@@ -73,6 +73,7 @@ class WriteSimplexSender : public Sender {
 
 // For now, client is sender and server is receiver.
 StatusOr<WriteSimplexSender *> DialWriteSimplex(std::string ip, int port);
+StatusOr<WriteSimplexSender *> DialWriteSimplex(std::string ip, int port, std::string src);
 
 class WriteSimplexListener {
   public:
