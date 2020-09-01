@@ -55,7 +55,9 @@ class SendReceiveConnection : public Connection, public BatchSender {
 };
 
 StatusOr<SendReceiveConnection *> DialSendReceive(std::string ip, int port);
+StatusOr<SendReceiveConnection *> DialSendReceive(std::string ip, int port, std::string src);
 StatusOr<SendReceiveConnection *> DialSendReceive(std::string ip, int port, endpoint::IReceiveQueue *rq);
+StatusOr<SendReceiveConnection *> DialSendReceive(std::string ip, int port, std::string src, endpoint::IReceiveQueue *rq);
 
 class SendReceiveListener {
   public:

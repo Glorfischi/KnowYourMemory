@@ -31,6 +31,8 @@ struct Options {
   const void *private_data; // Private data set here will be accessible to the other endpoint through GetConnectionInfo
 	uint8_t private_data_len;
 
+  const char *src; // Source ip to send from. Only relevant for client connections
+
 	uint8_t responder_resources;
 	uint8_t initiator_depth;
 	uint8_t flow_control;

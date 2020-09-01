@@ -56,12 +56,20 @@ endpoint::Options defaultOptions = {
  */
 
 StatusOr<SendReceiveConnection *> DialSendReceive(std::string ip, int port){
+  return DialSendReceive(ip, port, NULL);
+}
+
+StatusOr<SendReceiveConnection *> DialSendReceive(std::string ip, int port, std::string src){
   // Default to port 18515
   if (port == 0) {
     port = 18515;
   }
 
-  auto epStatus = kym::endpoint::Dial(ip, port, defaultOptions);
+  auto opts = defaultOptions;
+  if (!src.empty()){
+    opts.src = src.c_str();
+  }
+  auto epStatus = kym::endpoint::Dial(ip, port, opts);
   if (!epStatus.ok()){
     return epStatus.status();
   }
@@ -82,12 +90,19 @@ StatusOr<SendReceiveConnection *> DialSendReceive(std::string ip, int port){
 }
 
 StatusOr<SendReceiveConnection *> DialSendReceive(std::string ip, int port, endpoint::IReceiveQueue * rq){
+  return DialSendReceive(ip, port, NULL, rq);
+}
+StatusOr<SendReceiveConnection *> DialSendReceive(std::string ip, int port, std::string src, endpoint::IReceiveQueue * rq){
   // Default to port 18515
   if (port == 0) {
     port = 18515;
   }
 
-  auto epStatus = kym::endpoint::Dial(ip, port, defaultOptions);
+  auto opts = defaultOptions;
+  if (!src.empty()){
+    opts.src = src.c_str();
+  }
+  auto epStatus = kym::endpoint::Dial(ip, port, opts);
   if (!epStatus.ok()){
     return epStatus.status();
   }

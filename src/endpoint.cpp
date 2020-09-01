@@ -22,11 +22,40 @@
 namespace kym {
 namespace endpoint {
 
+int get_rdma_addr(const char *src, const char *dst, const char *port,
+		  struct rdma_addrinfo *hints, struct rdma_addrinfo **rai){
+	struct rdma_addrinfo rai_hints, *res;
+	int ret;
+
+	if (hints->ai_flags & RAI_PASSIVE)
+		return rdma_getaddrinfo(src, port, hints, rai);
+
+	rai_hints = *hints;
+	if (src) {
+		rai_hints.ai_flags |= RAI_PASSIVE;
+		ret = rdma_getaddrinfo(src, NULL, &rai_hints, &res);
+		if (ret)
+			return ret;
+
+		rai_hints.ai_src_addr = res->ai_src_addr;
+		rai_hints.ai_src_len = res->ai_src_len;
+		rai_hints.ai_flags &= ~RAI_PASSIVE;
+	}
+
+	ret = rdma_getaddrinfo(dst, port, &rai_hints, rai);
+	if (src)
+		rdma_freeaddrinfo(res);
+
+	return ret;
+}
+
 
 Endpoint::Endpoint(rdma_cm_id *id) : id_(id){
+  // std::cout << "dev " << id->verbs->device->name << std::endl;
   // std::cout << "id " << id <<  " pd " << id->pd << " qp " << id->qp << " verbs " << id->verbs << std::endl; 
 }
 Endpoint::Endpoint(rdma_cm_id* id, void *private_data, size_t private_data_len) : id_(id), private_data_(private_data), private_data_len_(private_data_len){
+  // std::cout << "dev " << id->verbs->device->name << std::endl;
   // std::cout << "id " << id <<  " pd " << id->pd << " qp " << id->qp << " verbs " << id->verbs << std::endl; 
 }
 
@@ -351,7 +380,7 @@ StatusOr<Endpoint *> Create(std::string ip, int port, Options opts){
   memset(&hints, 0, sizeof hints);
   hints.ai_port_space = RDMA_PS_TCP;
 
-  ret = rdma_getaddrinfo(ip.c_str(), std::to_string(port).c_str(), &hints, &addrinfo);
+  ret = get_rdma_addr(opts.src, ip.c_str(), std::to_string(port).c_str(), &hints, &addrinfo);
   if (ret) {
     return Status(StatusCode::Internal, "Error getting address info");
   }
@@ -379,7 +408,6 @@ StatusOr<Endpoint *> Create(std::string ip, int port, Options opts){
 
   // cleanup addrinfo, we don't need it anymore
   rdma_freeaddrinfo(addrinfo);
-
 
   return new Endpoint(id);
 }
@@ -421,7 +449,7 @@ StatusOr<Endpoint *> Dial(std::string ip, int port, Options opts){
   if (!stat.ok()){
     return stat;
   }
-  return std::move(ep);
+  return ep;
 }
 
 StatusOr<Listener *> Listen(std::string ip, int port){
@@ -433,7 +461,7 @@ StatusOr<Listener *> Listen(std::string ip, int port){
   hints.ai_port_space = RDMA_PS_TCP;
   hints.ai_flags = RAI_PASSIVE;
 
-  ret = rdma_getaddrinfo(ip.c_str(), std::to_string(port).c_str(), &hints, &addrinfo);
+  ret = get_rdma_addr(ip.c_str(), NULL, std::to_string(port).c_str(), &hints, &addrinfo);
   if (ret) {
     // TODO(Fischi) Map error codes
     return Status(StatusCode::Internal, "Error getting address info");
