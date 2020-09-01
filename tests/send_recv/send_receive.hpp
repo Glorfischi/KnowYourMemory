@@ -30,7 +30,7 @@
 namespace kym {
 namespace connection {
 
-class SendReceiveConnection : public Connection {
+class SendReceiveConnection : public Connection, public BatchSender {
   public:
     SendReceiveConnection(endpoint::Endpoint *, endpoint::IReceiveQueue *, 
         bool rq_shared, memory::Allocator *);
