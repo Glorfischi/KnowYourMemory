@@ -29,13 +29,13 @@ struct Options {
   bool use_srq; // Wether to use a shared receive queue for receiving. If so and no srq is set in the qp_attr, one will be created using the corresponding capabilities of the qp_attr
 
   const void *private_data; // Private data set here will be accessible to the other endpoint through GetConnectionInfo
-	uint8_t private_data_len;
+  uint8_t private_data_len;
 
-	uint8_t responder_resources;
-	uint8_t initiator_depth;
-	uint8_t flow_control;
-	uint8_t retry_count;		/* ignored when accepting */
-	uint8_t rnr_retry_count;
+  uint8_t responder_resources;
+  uint8_t initiator_depth;
+  uint8_t flow_control;
+  uint8_t retry_count;    /* ignored when accepting */
+  uint8_t rnr_retry_count;
 };
 
 
@@ -52,7 +52,7 @@ class Endpoint {
     ibv_pd GetPd();
     ibv_srq *GetSRQ();
     struct ibv_cq *GetSendCQ();
-	  struct ibv_cq	*GetRecvCQ();
+    struct ibv_cq *GetRecvCQ();
 
 
     // Returns the length of the received private data on connection establishment and returns a pointer to it in buf

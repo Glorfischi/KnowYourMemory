@@ -32,18 +32,28 @@ namespace {
 const uint64_t inflight = 80;
 
 endpoint::Options defaultOptions = {
+  .pd = NULL,
   .qp_attr = {
+    .qp_context = NULL,
+    .send_cq = NULL,
+    .recv_cq = NULL,
+    .srq = NULL,
     .cap = {
       .max_send_wr = 5*inflight,
       .max_recv_wr = 5*inflight,
-      .max_send_sge = 5,
-      .max_recv_sge = 5,
+      .max_send_sge = 1,
+      .max_recv_sge = 1,
       .max_inline_data = 0,
     },
     .qp_type = IBV_QPT_RC,
+    .sq_sig_all = 0,
   },
+  .use_srq = false,
+  .private_data = NULL,
+  .private_data_len = 0,
   .responder_resources = 0,
   .initiator_depth =  0,
+  .flow_control = 0,
   .retry_count = 0,  
   .rnr_retry_count = 0, 
 };
