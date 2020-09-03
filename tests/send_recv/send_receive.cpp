@@ -255,7 +255,7 @@ Status SendReceiveConnection::Send(std::vector<SendRegion> regions){
     sge->length = region.length;
     sge->lkey =  region.lkey;
 
-    wr->wr_id = i+100;
+    wr->wr_id = i;
     wr->next = last ? NULL : &(wrs[i]);
     wr->sg_list = sge;
     wr->num_sge = 1;
@@ -275,7 +275,7 @@ Status SendReceiveConnection::Send(std::vector<SendRegion> regions){
     return wcStatus.status();
   }
   ibv_wc wc = wcStatus.value();
-  if (wc.wr_id != i+100){
+  if (wc.wr_id != i){
     return Status(StatusCode::Internal, "posible interleafing while sending a batch");
   }
   return Status();

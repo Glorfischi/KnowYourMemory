@@ -65,7 +65,6 @@ int main(int argc, char* argv[]) {
   bool server = flags["server"].as<bool>();  
   bool client = flags["client"].as<bool>();  
 
-  std::vector<float> latency_us;
 
   std::cout << "#### Testing WriteSimplex ####" << std::endl;
 
@@ -84,7 +83,37 @@ int main(int argc, char* argv[]) {
     }
     auto conn = conn_s.value();
 
-    test_lat_recv(conn, count, &latency_us);
+    if (lat){
+      std::vector<float> latency_us;
+      test_lat_recv(conn, count, &latency_us);
+      auto n = count;
+      std::sort (latency_us.begin(), latency_us.end());
+      int q025 = (int)(n*0.025);
+      int q500 = (int)(n*0.5);
+      int q975 = (int)(n*0.975);
+      std::cout << "q025" << "\t" << "q50" << "\t" << "q975" << std::endl;
+      std::cout << latency_us[q025] << "\t" << latency_us[q500] << "\t" << latency_us[q975] << std::endl;
+    } else {
+      std::vector<float> bw_bps;
+      auto stat = test_bw_batch_recv(conn, count, size, batch, &bw_bps);
+      if (!stat.ok()){
+        std::cerr << "Error running benchmark: " << stat << std::endl;
+        return 1;
+      }
+      auto n = bw_bps.size();
+      std::sort (bw_bps.begin(), bw_bps.end());
+      int q025 = (int)(n*0.025);
+      int q500 = (int)(n*0.5);
+      int q975 = (int)(n*0.975);
+      float sum = 0;
+      for (float b : bw_bps){
+        sum += b;
+      }
+      std::cout << "## Bandwidth Receiver (MB/s)" << std::endl;
+      std::cout << "mean: " << (sum/n)/(1024*1024) << std::endl;
+      std::cout << "q025" << "\t" << "q50" << "\t" << "q975" << std::endl;
+      std::cout << bw_bps[q025]/(1024*1024) << "\t" << bw_bps[q500]/(1024*1024) << "\t" << bw_bps[q975]/(1024*1024) << std::endl;
+    }
     
     conn->Close();
     ln->Close();
@@ -99,20 +128,43 @@ int main(int argc, char* argv[]) {
     }
     auto conn = conn_s.value();
 
-    test_lat_send(conn, count, size, &latency_us);
+    if (lat) {
+      std::vector<float> latency_us;
+      test_lat_send(conn, count, size, &latency_us);
+      auto n = count;
+      std::sort (latency_us.begin(), latency_us.end());
+      int q025 = (int)(n*0.025);
+      int q500 = (int)(n*0.5);
+      int q975 = (int)(n*0.975);
+      std::cout << "q025" << "\t" << "q50" << "\t" << "q975" << std::endl;
+      std::cout << latency_us[q025] << "\t" << latency_us[q500] << "\t" << latency_us[q975] << std::endl;
+    } else {
+      std::vector<float> bw_bps;
+      auto stat = test_bw_batch_send(conn, count, size, batch, &bw_bps);
+      if (!stat.ok()){
+        std::cerr << "Error running benchmark: " << stat << std::endl;
+        return 1;
+      }
+       auto n = bw_bps.size();
+      std::sort (bw_bps.begin(), bw_bps.end());
+      int q025 = (int)(n*0.025);
+      int q500 = (int)(n*0.5);
+      int q975 = (int)(n*0.975);
+      float sum = 0;
+      for (float b : bw_bps){
+        sum += b;
+      }
+      std::cout << "## Bandwidth Sender (MB/s)" << std::endl;
+      std::cout << "mean: " << (sum/n)/(1024*1024) << std::endl;
+      std::cout << "q025" << "\t" << "q50" << "\t" << "q975" << std::endl;
+      std::cout << bw_bps[q025]/(1024*1024) << "\t" << bw_bps[q500]/(1024*1024) << "\t" << bw_bps[q975]/(1024*1024) << std::endl;
+    }
 
     std::chrono::milliseconds timespan(1000); // We need to wait for the last ack to come in. o/w reciever will fail. This is hacky..
     std::this_thread::sleep_for(timespan);
     conn->Close();
   } 
-  auto n = count;
-  std::sort (latency_us.begin(), latency_us.end());
-  int q025 = (int)(n*0.025);
-  int q500 = (int)(n*0.5);
-  int q975 = (int)(n*0.975);
-  std::cout << "q025" << "\t" << "q50" << "\t" << "q975" << std::endl;
-  std::cout << latency_us[q025] << "\t" << latency_us[q500] << "\t" << latency_us[q975] << std::endl;
-  
+   
   return 0;
 }
  

@@ -42,7 +42,7 @@ class WriteSimplexReceiver : public Receiver {
     uint32_t      buf_max_unack_;
 };
 
-class WriteSimplexSender : public Sender {
+class WriteSimplexSender : public Sender, public BatchSender {
   public:
     WriteSimplexSender(endpoint::Endpoint *, memory::Allocator *,
         std::vector<struct ibv_mr *> ack_mrs, uint64_t buf_vaddr_, uint32_t buf_rkey_);
@@ -52,6 +52,7 @@ class WriteSimplexSender : public Sender {
 
     StatusOr<SendRegion> GetMemoryRegion(size_t size);
     Status Send(SendRegion region);
+    Status Send(std::vector<SendRegion> regions);
     Status Free(SendRegion region);
   private:
     endpoint::Endpoint *ep_;

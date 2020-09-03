@@ -174,6 +174,11 @@ StatusOr<SendRegion> WriteSimplexSender::GetMemoryRegion(size_t size){
   reg.lkey = mr.lkey;
   return reg;
 }
+
+Status WriteSimplexSender::Send(std::vector<SendRegion> regions){
+  return Status(StatusCode::NotImplemented);
+}
+
 Status WriteSimplexSender::Send(SendRegion region){
   // We poll the recieve queue. If we received an ack we can move the head and free space.
   auto wcStatus = this->ep_->PollRecvCqOnce();
