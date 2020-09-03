@@ -1,6 +1,6 @@
 #include "write_simplex.hpp"
 
-#include <bits/stdint-uintn.h>
+#include <cstdint>
 #include <iostream>
 #include <ostream>
 #include <stddef.h>

@@ -1,6 +1,6 @@
 #include "write_duplex.hpp"
 
-#include <bits/stdint-uintn.h>
+#include <cstdint>
 #include <cstdlib>
 #include <iostream>
 #include <ostream>

@@ -6,7 +6,7 @@
 
 #include "endpoint.hpp"
 
-#include <bits/stdint-uintn.h>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <iostream>

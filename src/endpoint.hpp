@@ -10,7 +10,7 @@
 #ifndef KNY_ENDPOINT_HPP
 #define KNY_ENDPOINT_HPP
 
-#include <bits/stdint-uintn.h>
+#include <cstdint>
 #include <memory> // For smart pointers
 
 #include <rdma/rdma_cma.h>

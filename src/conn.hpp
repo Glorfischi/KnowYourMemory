@@ -10,7 +10,7 @@
 #ifndef KNY_CONN_HPP_
 #define KNY_CONN_HPP_
 
-#include <bits/stdint-uintn.h>
+#include <cstdint>
 #include <stddef.h>
 #include <vector>
 

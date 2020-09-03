@@ -1,6 +1,6 @@
 #include "dumb_allocator.hpp"
 
-#include <bits/stdint-uintn.h>
+#include <cstdint>
 #include <cstddef>
 #include <cstdlib>
 #include <iostream>

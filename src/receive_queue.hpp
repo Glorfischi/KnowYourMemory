@@ -10,7 +10,7 @@
 #ifndef KNY_RECEIVE_QUEUE_HPP_
 #define KNY_RECEIVE_QUEUE_HPP_
 
-#include <bits/stdint-uintn.h>
+#include <cstdint>
 #include <memory>
 #include <stddef.h>
 

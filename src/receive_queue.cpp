@@ -9,7 +9,7 @@
 
 # include "receive_queue.hpp"
 
-#include <bits/stdint-uintn.h>
+#include <cstdint>
 #include <memory>
 #include <ostream>
 #include <stddef.h>

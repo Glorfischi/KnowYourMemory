@@ -2,7 +2,7 @@
 #ifndef KNY_WRITE_ATOMIC_HPP
 #define KNY_WRITE_ATOMIC_HPP
 
-#include <bits/stdint-uintn.h>
+#include <cstdint>
 #include <stddef.h>
 #include <string>
 #include <vector>

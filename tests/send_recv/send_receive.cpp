@@ -2,7 +2,7 @@
 
 #include <assert.h>
 
-#include <bits/stdint-uintn.h>
+#include <cstdint>
 #include <cstddef>
 #include <cstdlib>
 #include <cstring>

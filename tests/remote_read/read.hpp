@@ -10,7 +10,7 @@
 #ifndef KNY_CONN_READ_H_
 #define KNY_CONN_READ_H_
 
-#include <bits/stdint-uintn.h>
+#include <cstdint>
 #include <stddef.h>
 #include <string>
 #include <vector>
