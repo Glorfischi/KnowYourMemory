@@ -75,6 +75,9 @@ Status Endpoint::Close() {
   return Status();
 }
 
+ibv_context *Endpoint::GetContext(){
+  return this->id_->verbs;
+}
 ibv_pd Endpoint::GetPd(){
   return *this->id_->pd;
 }
@@ -356,6 +359,9 @@ Listener::~Listener(){
 
 ibv_pd Listener::GetPd(){
   return *this->id_->pd;
+}
+ibv_context *Listener::GetContext(){
+  return this->id_->verbs;
 }
 
 

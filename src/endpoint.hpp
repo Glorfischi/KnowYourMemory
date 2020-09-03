@@ -51,6 +51,7 @@ class Endpoint {
     Status Connect(Options opts);
     Status Close();
 
+    ibv_context *GetContext();
     ibv_pd GetPd();
     ibv_srq *GetSRQ();
     struct ibv_cq *GetSendCQ();
@@ -90,6 +91,7 @@ class Listener {
 
     Status Close();
 
+    ibv_context *GetContext();
     ibv_pd GetPd();
 
     StatusOr<Endpoint *> Accept(Options opts);
