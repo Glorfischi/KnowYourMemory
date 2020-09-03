@@ -21,8 +21,7 @@ local:  $(OBJS)
 clean:
 	@echo "##### CLEAN-UP #####"
 	-rm -f $(OBJS)
-	-rm -f $(BIN)
-	-rm -f $(PLOT)
+	-rm -f $(BINDIR)/local
 	@echo "####################"
 	@echo
 
