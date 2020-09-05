@@ -33,7 +33,8 @@ int main(int argc, char* argv[]) {
 
   struct ibv_context *ctx = ln->GetContext();
   struct ibv_alloc_dm_attr attr = {};
-  attr.length = 128;
+  int len = 1024;
+  attr.length = len;
   auto dm = ibv_alloc_dm(ctx, &attr);
   if (dm == nullptr) {
     std::cerr << "Error registering memory " << errno << std::endl;
@@ -59,6 +60,37 @@ int main(int argc, char* argv[]) {
     return 1;
   }
   std::cout << "     got  " << dst << std::endl;
+
+
+  std::cout << "#### Testing copy speed ####" << std::endl;
+  void *data = malloc(len); 
+  void *buf = malloc(len); 
+  void *data_dst = malloc(len); 
+  auto start = std::chrono::high_resolution_clock::now();
+  ret = ibv_memcpy_to_dm(dm, 0, data, len);
+  if (ret != 0) {
+    std::cerr << "Error copying to DM " << ret << std::endl;
+    perror("error");
+    return 1;
+  }
+  ret = dm->memcpy_from_dm(&data_dst, dm, 0, len);
+  if (ret != 0) {
+    std::cerr << "Error copying from DM " << ret << std::endl;
+    perror("error");
+    return 1;
+  }
+  auto finish = std::chrono::high_resolution_clock::now();
+  auto lat = std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count();
+  std::cout << "     Copying " << len << " bytes to and from DM took " << lat << " ns" << std::endl;
+
+  start = std::chrono::high_resolution_clock::now();
+  memcpy(buf, data, len);
+  memcpy(data_dst, buf, len);
+  finish = std::chrono::high_resolution_clock::now();
+  lat = std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count();
+  std::cout << "     Copying " << len << " bytes to and from DRAM took " << lat << " ns" << std::endl;
+
+  free(data);
 
   ret = ibv_free_dm(dm);
   if (ret != 0) {

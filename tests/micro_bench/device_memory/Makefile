@@ -8,13 +8,18 @@ CXXFLAGS = $(CFLAGS)
 BINDIR = ./bin
 SRCPATH = $(PREFIX)/src
 
-SRCS =  ./local.cpp $(SRCPATH)/endpoint.cpp 
+SRCS =  $(SRCPATH)/endpoint.cpp 
 
 OBJS = $(SRCS:.cpp=.o)
 
-local:  $(OBJS)
+local:  ./local.o $(OBJS)
 	mkdir -pm 755 $(BINDIR)
-	$(CC) $(CFLAGS) -o $(BINDIR)/local $(OBJS) $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $(BINDIR)/local ./local.o $(OBJS) $(LDFLAGS)
+
+write:  ./write.o $(OBJS)
+	mkdir -pm 755 $(BINDIR)
+	$(CC) $(CFLAGS) -o $(BINDIR)/write ./write.o $(OBJS) $(LDFLAGS)
+
 
 
 

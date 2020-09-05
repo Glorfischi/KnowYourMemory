@@ -53,6 +53,7 @@ class Endpoint {
 
     ibv_context *GetContext();
     ibv_pd GetPd();
+    ibv_pd *GetPdP();
     ibv_srq *GetSRQ();
     struct ibv_cq *GetSendCQ();
 	  struct ibv_cq	*GetRecvCQ();
@@ -93,6 +94,7 @@ class Listener {
 
     ibv_context *GetContext();
     ibv_pd GetPd();
+    ibv_pd *GetPdP();
 
     StatusOr<Endpoint *> Accept(Options opts);
   private:

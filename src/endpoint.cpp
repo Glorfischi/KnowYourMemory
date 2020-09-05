@@ -81,6 +81,9 @@ ibv_context *Endpoint::GetContext(){
 ibv_pd Endpoint::GetPd(){
   return *this->id_->pd;
 }
+ibv_pd *Endpoint::GetPdP(){
+  return this->id_->pd;
+}
 ibv_srq *Endpoint::GetSRQ(){
   return this->id_->srq;
 }
@@ -360,6 +363,9 @@ Listener::~Listener(){
 ibv_pd Listener::GetPd(){
   return *this->id_->pd;
 }
+ibv_pd *Listener::GetPdP(){
+  return this->id_->pd;
+}
 ibv_context *Listener::GetContext(){
   return this->id_->verbs;
 }
@@ -431,7 +437,7 @@ Status Endpoint::Connect(Options opts){
   // connect to remote
   int ret = rdma_connect(this->id_, &conn_param);
   if (ret) {
-    return Status(StatusCode::Internal, "Error connecting to remote");
+    return Status(StatusCode::Internal, "Error " + std::to_string(ret) + " connecting to remote");
   }
   // Set connection data
   size_t private_data_len = this->id_->event->param.conn.private_data_len;
