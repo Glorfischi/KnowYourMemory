@@ -99,7 +99,7 @@ int main(int argc, char* argv[]) {
     return 1;
   }
   struct ibv_mr *src_mr = ibv_reg_mr(pd, src, 1024, IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);
-  if (ram_mr == nullptr) {
+  if (src_mr == nullptr) {
     std::cerr << "Error registering src mr" << errno << std::endl;
     perror("error");
     free(src);

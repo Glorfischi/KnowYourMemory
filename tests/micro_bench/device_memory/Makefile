@@ -20,6 +20,10 @@ write:  ./write.o $(OBJS)
 	mkdir -pm 755 $(BINDIR)
 	$(CC) $(CFLAGS) -o $(BINDIR)/write ./write.o $(OBJS) $(LDFLAGS)
 
+atomic:  ./atomic.o $(OBJS)
+	mkdir -pm 755 $(BINDIR)
+	$(CC) $(CFLAGS) -o $(BINDIR)/atomic ./atomic.o $(OBJS) $(LDFLAGS)
+
 
 
 

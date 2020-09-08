@@ -103,7 +103,7 @@ Status Endpoint::PostSendRaw(struct ibv_send_wr *wr , struct ibv_send_wr **bad_w
   int ret = ibv_post_send(this->id_->qp, wr, bad_wr);
   if (ret) {
     // TODO(Fischi) Map error codes
-    perror("SEND");
+    perror("SEND Error");
     return Status(StatusCode::Internal, "error  " + std::to_string(ret) + " sending");
   }
   return Status();
