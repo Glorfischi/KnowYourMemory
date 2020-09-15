@@ -13,6 +13,8 @@ namespace memory {
 
 DumbAllocator::DumbAllocator(struct ibv_pd pd): pd_(pd){
 }
+DumbAllocator::DumbAllocator(struct ibv_pd *pd): pd_(*pd){
+}
 
 StatusOr<Region> DumbAllocator::Alloc(size_t size){
   void *buf = malloc(size);
