@@ -29,7 +29,7 @@ class Acknowledger {
 
 class AckReceiver {
   public:
-    virtual ~AckReceiver() = 0;
+    virtual ~AckReceiver() = default;
     virtual kym::Status Close() = 0;
 
     virtual kym::StatusOr<uint32_t> Get() = 0;
@@ -54,7 +54,7 @@ class SendAcknowledger : public Acknowledger {
 };
 StatusOr<SendAcknowledger *> GetSendAcknowledger(endpoint::Endpoint *ep);
 
-class SendAckReceiver {
+class SendAckReceiver : public AckReceiver {
   public:
     SendAckReceiver(endpoint::Endpoint *ep, endpoint::IReceiveQueue *rq) : ep_(ep), rq_(rq){}
     ~SendAckReceiver();

@@ -194,16 +194,15 @@ WriteConnection::~WriteConnection(){
  *  CONNECTION SETUP
  *
  */
-Status initReceiver(WriteOpts opts, ringbuffer::Buffer **rbuf, Acknowledger **ack){
+Status initReceiver(struct ibv_pd *pd, WriteOpts opts, ringbuffer::Buffer **rbuf, Acknowledger **ack){
   switch (opts.acknowledger) {
     case kAcknowledgerRead:
       return Status(StatusCode::NotImplemented, "read acknowledger not implemented");
       break;
     case kAcknowledgerSend:
-      return Status(StatusCode::NotImplemented, "send acknowledger not implemented");
       break;
     default:
-      return Status(StatusCode::InvalidArgument, "unkown allocator option");
+      return Status(StatusCode::InvalidArgument, "unkown acknowledger option");
   }
   switch (opts.buffer) {
     case kBufferBasic:
@@ -218,6 +217,29 @@ Status initReceiver(WriteOpts opts, ringbuffer::Buffer **rbuf, Acknowledger **ac
   return Status();
 }
 
+Status connectReceiver(endpoint::Endpoint * ep, conn_details det, ringbuffer::Buffer **rbuf, Acknowledger **ack){
+  auto opts = det.opts;
+  switch (opts.acknowledger) {
+    case kAcknowledgerRead:
+      return Status(StatusCode::NotImplemented, "read acknowledger not implemented");
+      break;
+    case kAcknowledgerSend:
+      {
+        auto sa_s = GetSendAcknowledger(ep);
+        if (!sa_s.ok()){
+          return sa_s.status().Wrap("error setting up send acknowledger");
+        }
+        *ack = sa_s.value();
+      }
+      break;
+    default:
+      return Status(StatusCode::InvalidArgument, "unkown acknowledger option");
+  }
+  return Status();
+}
+
+
+
 
 Status initSender(ibv_pd *pd, WriteOpts opts, memory::Allocator **alloc){
   switch (opts.allocator) {
@@ -230,17 +252,24 @@ Status initSender(ibv_pd *pd, WriteOpts opts, memory::Allocator **alloc){
   return Status();
 }
 
-Status connectSender(conn_details det, ringbuffer::RemoteBuffer **rbuf, AckReceiver **ack){
+Status connectSender(endpoint::Endpoint * ep, conn_details det, ringbuffer::RemoteBuffer **rbuf, AckReceiver **ack){
   auto opts = det.opts;
   switch (opts.acknowledger) {
     case kAcknowledgerRead:
       return Status(StatusCode::NotImplemented, "read acknowledger not implemented");
       break;
     case kAcknowledgerSend:
+      {
+        auto sa_s = GetSendAckReceiver(ep);
+        if (!sa_s.ok()){
+          return sa_s.status().Wrap("error setting up send acknowledger");
+        }
+        *ack = sa_s.value();
+      }
       return Status(StatusCode::NotImplemented, "send acknowledger not implemented");
       break;
     default:
-      return Status(StatusCode::InvalidArgument, "unkown allocator option");
+      return Status(StatusCode::InvalidArgument, "unkown acknowledger option");
   }
   switch (opts.buffer) {
     case kBufferBasic:
@@ -316,7 +345,7 @@ StatusOr<WriteSender *> WriteListener::AcceptSender(WriteOpts opts){
   AckReceiver *ack;
   ringbuffer::RemoteBuffer *rbuf;
 
-  stat = connectSender(*remote_conn_details, &rbuf, &ack);
+  stat = connectSender(ep, *remote_conn_details, &rbuf, &ack);
   if (!stat.ok()){
     ep->Close();
     return stat.Wrap("error setting up connection details");
@@ -333,7 +362,7 @@ StatusOr<WriteReceiver *> WriteListener::AcceptReceiver(WriteOpts opts){
   conn_details local_conn_details;
   local_conn_details.opts = opts;
 
-  auto stat = initReceiver(opts, &rbuf, &ack);
+  auto stat = initReceiver(this->listener_->GetPdP(), opts, &rbuf, &ack);
   if (!stat.ok()){
     return stat.Wrap("Error initalizing connection details");
   }
@@ -358,6 +387,11 @@ StatusOr<WriteReceiver *> WriteListener::AcceptReceiver(WriteOpts opts){
     ep->Close();
     return Status(StatusCode::InvalidArgument, "remote options missmatch");
   }
+  stat = connectReceiver(ep, *remote_conn_details, &rbuf, &ack);
+  if (!stat.ok()){
+    ep->Close();
+    return stat.Wrap("Error connecting receiver");
+  }
 
   return new WriteReceiver(ep, rbuf, ack);
 }
@@ -369,7 +403,7 @@ StatusOr<WriteConnection *> WriteListener::AcceptConnection(WriteOpts opts){
 
   memory::Allocator *alloc;
 
-  auto stat = initReceiver(opts, &rbuf, &ack);
+  auto stat = initReceiver(this->listener_->GetPdP(), opts, &rbuf, &ack);
   if (!stat.ok()){
     return stat.Wrap("Error initalizing receiver details");
   }
@@ -406,10 +440,15 @@ StatusOr<WriteConnection *> WriteListener::AcceptConnection(WriteOpts opts){
   AckReceiver *ackRcv;
   ringbuffer::RemoteBuffer *remote_rbuf;
 
-  stat = connectSender(*remote_conn_details, &remote_rbuf, &ackRcv);
+  stat = connectSender(ep, *remote_conn_details, &remote_rbuf, &ackRcv);
   if (!stat.ok()){
     ep->Close();
     return stat.Wrap("error setting up sender details");
+  }
+  stat = connectReceiver(ep, *remote_conn_details, &rbuf, &ack);
+  if (!stat.ok()){
+    ep->Close();
+    return stat.Wrap("Error connecting receiver");
   }
 
   auto sndr = new WriteSender(ep, alloc, remote_rbuf, ackRcv);
@@ -464,7 +503,7 @@ StatusOr<WriteSender*> DialWriteSender(std::string ip, int port, WriteOpts opts)
   AckReceiver *ack;
   ringbuffer::RemoteBuffer *rbuf;
 
-  stat = connectSender(*remote_conn_details, &rbuf, &ack);
+  stat = connectSender(ep, *remote_conn_details, &rbuf, &ack);
   if (!stat.ok()){
     ep->Close();
     return stat.Wrap("error setting up connection details");
@@ -489,7 +528,7 @@ StatusOr<WriteReceiver*> DialWriteReceiver(std::string ip, int port, WriteOpts o
   }
   endpoint::Endpoint *ep = ep_s.value();
   
-  auto stat = initReceiver(opts, &rbuf, &ack);
+  auto stat = initReceiver(ep->GetPdP(), opts, &rbuf, &ack);
   if (!stat.ok()){
     return stat.Wrap("Error initalizing connection details");
   }
@@ -511,6 +550,11 @@ StatusOr<WriteReceiver*> DialWriteReceiver(std::string ip, int port, WriteOpts o
     ep->Close();
     return Status(StatusCode::InvalidArgument, "remote options missmatch");
   }
+  stat = connectReceiver(ep, *remote_conn_details, &rbuf, &ack);
+  if (!stat.ok()){
+    ep->Close();
+    return stat.Wrap("Error connecting receiver");
+  }
 
   return new WriteReceiver(ep, rbuf, ack);
 }
@@ -530,7 +574,7 @@ StatusOr<WriteConnection*> DialWriteConnection(std::string ip, int port, WriteOp
   }
   endpoint::Endpoint *ep = ep_s.value();
 
-  auto stat = initReceiver(opts, &rbuf, &ack);
+  auto stat = initReceiver(ep->GetPdP(), opts, &rbuf, &ack);
   if (!stat.ok()){
     return stat.Wrap("Error initalizing receiver details");
   }
@@ -565,10 +609,15 @@ StatusOr<WriteConnection*> DialWriteConnection(std::string ip, int port, WriteOp
   AckReceiver *ackRcv;
   ringbuffer::RemoteBuffer *remote_rbuf;
 
-  stat = connectSender(*remote_conn_details, &remote_rbuf, &ackRcv);
+  stat = connectSender(ep, *remote_conn_details, &remote_rbuf, &ackRcv);
   if (!stat.ok()){
     ep->Close();
     return stat.Wrap("error setting up sender details");
+  }
+  stat = connectReceiver(ep, *remote_conn_details, &rbuf, &ack);
+  if (!stat.ok()){
+    ep->Close();
+    return stat.Wrap("Error connecting receiver");
   }
 
   auto sndr = new WriteSender(ep, alloc, remote_rbuf, ackRcv);
