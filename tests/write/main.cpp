@@ -3,6 +3,7 @@
 #include <cstring>
 #include <exception>
 #include <fstream>
+#include <ios>
 #include <iostream>
 #include <memory>
 #include <ostream>
@@ -88,7 +89,10 @@ int main(int argc, char* argv[]) {
     kym::connection::WriteListener *ln = ln_s.value();
 
     kym::connection::WriteOpts opts;
+    opts.raw = 0;
+    std::cout << "opts: " << std::hex << opts.raw << std::endl;
     opts.acknowledger = kym::connection::kAcknowledgerSend;
+    opts.buffer = kym::connection::kBufferBasic;
     auto conn_s = ln->AcceptReceiver(opts);
     if (!conn_s.ok()){
       std::cerr << "Error Accpeting  " << conn_s.status() << std::endl;

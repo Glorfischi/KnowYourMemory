@@ -1,3 +1,7 @@
+#ifndef KNY_RINGBUFFER_HPP_
+#define KNY_RINGBUFFER_HPP_
+
+#include <bits/stdint-uintn.h>
 #include <cstddef>
 #include <list>
 
@@ -48,10 +52,10 @@ class RemoteBuffer {
     virtual uint32_t GetTail() = 0;
     // Returns the write address if you want to write len bytes to the buffer without updating the tail
     // Can return an error if there is not enough free space
-    virtual StatusOr<uint32_t>GetWriteAddr(uint32_t len) = 0;
+    virtual StatusOr<uint64_t>GetWriteAddr(uint32_t len) = 0;
     // Returns the write address if you want to write len bytes to the buffer and updates the tail accordingly
     // Can return an error if there is not enough free space
-    virtual StatusOr<uint32_t>Write(uint32_t len) = 0;
+    virtual StatusOr<uint64_t>Write(uint32_t len) = 0;
 
 };
 
@@ -86,11 +90,12 @@ class BasicRemoteBuffer : public RemoteBuffer {
     uint32_t GetKey();
     uint32_t GetTail();
 
-    StatusOr<uint32_t>GetWriteAddr(uint32_t len);
-    StatusOr<uint32_t>Write(uint32_t len);
+    StatusOr<uint64_t>GetWriteAddr(uint32_t len);
+    StatusOr<uint64_t>Write(uint32_t len);
   private:
     struct ibv_mr *mr_;
 
+    uint64_t addr_;
     uint32_t length_;
     uint32_t head_;
     uint32_t tail_;
@@ -100,7 +105,51 @@ class BasicRemoteBuffer : public RemoteBuffer {
 
 
 class MagicRingBuffer : public Buffer {
+  public:
+    MagicRingBuffer(struct ibv_mr *mr);
+    Status Close();
+
+    BufferContext GetContext();
+    void *GetReadPtr();
+
+    void *Read(uint32_t len);
+    uint32_t Free(void *addr);
+  private:
+    struct ibv_mr *mr_;
+    void *addr_;
+
+    uint32_t head_;
+    std::list<uint32_t> outstanding_;
+    
+    uint32_t read_ptr_;
+    uint32_t length_;
+};
+StatusOr<MagicRingBuffer*> NewMagicRingBuffer(struct ibv_pd *pd, uint32_t size);
+
+class MagicRemoteBuffer : public RemoteBuffer {
+  public:
+    MagicRemoteBuffer(BufferContext ctx);
+
+    void UpdateHead(uint32_t head);
+    
+    uint32_t GetKey();
+    uint32_t GetTail();
+
+    StatusOr<uint64_t>GetWriteAddr(uint32_t len);
+    StatusOr<uint64_t>Write(uint32_t len);
+  private:
+
+    uint64_t addr_;
+    uint32_t length_;
+    uint32_t key_;
+
+    uint32_t head_;
+    uint32_t tail_;
+    bool full_;
+
 };
 
 }
 }
+
+#endif // KNY_RINGBUFFER_HPP_

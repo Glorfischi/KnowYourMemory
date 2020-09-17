@@ -5,14 +5,17 @@
 #include "endpoint.hpp"
 #include "error.hpp"
 #include "mm.hpp"
+#include "ring_buffer/ring_buffer.hpp"
 
 #include "mm/dumb_allocator.hpp"
+#include <bits/stdint-uintn.h>
 
 
 namespace kym {
 namespace connection {
 
 namespace {
+  uint32_t write_buf_size = 4*1024*1024;
   struct conn_details {
     WriteOpts opts; // 2 Bytes
     ringbuffer::BufferContext buffer_ctx; // 16 Bytes
@@ -102,7 +105,7 @@ Status WriteSender::Send(SendRegion reg){
       return addr_s.status();
     }
   }
-  uint32_t addr = addr_s.value();
+  uint64_t addr = addr_s.value();
 
   auto stat = this->ep_->PostWrite(reg.context, reg.lkey,(void *)((size_t)reg.addr - sizeof(uint32_t)), 
       reg.length + sizeof(uint32_t), addr, this->rbuf_->GetKey());
@@ -177,8 +180,14 @@ Status initReceiver(struct ibv_pd *pd, WriteOpts opts, ringbuffer::Buffer **rbuf
       return Status(StatusCode::NotImplemented, "basic buffer not implemented");
       break;
     case kBufferMagic:
-      return Status(StatusCode::NotImplemented, "magic buffer not implemented");
-      break;
+      {
+        auto rbuf_s = ringbuffer::NewMagicRingBuffer(pd, write_buf_size); 
+        if (!rbuf_s.ok()){
+          return rbuf_s.status().Wrap("error setting up magic receive buffer");
+        }
+        *rbuf = rbuf_s.value();
+        break;
+      }
     default:
       return Status(StatusCode::InvalidArgument, "unkown buffer option");
   }
@@ -233,9 +242,8 @@ Status connectSender(endpoint::Endpoint * ep, conn_details det, ringbuffer::Remo
           return sa_s.status().Wrap("error setting up send acknowledger");
         }
         *ack = sa_s.value();
+        break;
       }
-      return Status(StatusCode::NotImplemented, "send acknowledger not implemented");
-      break;
     default:
       return Status(StatusCode::InvalidArgument, "unkown acknowledger option");
   }
@@ -244,8 +252,10 @@ Status connectSender(endpoint::Endpoint * ep, conn_details det, ringbuffer::Remo
       return Status(StatusCode::NotImplemented, "basic buffer not implemented");
       break;
     case kBufferMagic:
-      return Status(StatusCode::NotImplemented, "magic buffer not implemented");
-      break;
+      {
+        *rbuf = new ringbuffer::MagicRemoteBuffer(det.buffer_ctx);
+        break;
+      }
     default:
       return Status(StatusCode::InvalidArgument, "unkown buffer option");
   }
