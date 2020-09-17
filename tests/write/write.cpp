@@ -90,7 +90,6 @@ StatusOr<SendRegion> WriteSender::GetMemoryRegion(size_t size){
 }
 
 Status WriteSender::Send(SendRegion reg){
-  uint32_t tail = this->rbuf_->GetTail();
   auto addr_s = this->rbuf_->GetWriteAddr(reg.length);
   if (!addr_s.ok()){
     auto head_s = this->ack_->Get();
@@ -105,43 +104,8 @@ Status WriteSender::Send(SendRegion reg){
   }
   uint32_t addr = addr_s.value();
 
-  struct ibv_sge sge;
-  sge.addr = ((size_t)reg.addr - sizeof(uint32_t));
-  sge.length = reg.length + sizeof(uint32_t);
-  sge.lkey =  reg.lkey;
-  struct ibv_send_wr wr, *bad;
-
-  wr.wr_id = reg.context;
-  wr.next = NULL;
-  wr.sg_list = &sge;
-  wr.num_sge = 1;
-  wr.opcode = IBV_WR_RDMA_WRITE;
-  wr.send_flags = IBV_SEND_SIGNALED;  
-  wr.wr.rdma.remote_addr = addr;
-  wr.wr.rdma.rkey = this->rbuf_->GetKey();
-
-  struct ibv_send_wr head_wr;
-  struct ibv_sge head_sge;
-
-  if (tail != addr){
-    // We need to split the write
-    sge.addr = ((size_t)reg.addr - sizeof(uint32_t));
-    sge.length = reg.length + sizeof(uint32_t);
-    sge.lkey =  reg.lkey;
-
-    head_wr.wr_id = reg.context;
-    head_wr.next = NULL;
-    head_wr.sg_list = &head_sge;
-    head_wr.num_sge = 1;
-    head_wr.opcode = IBV_WR_RDMA_WRITE;
-    head_wr.send_flags = IBV_SEND_SIGNALED;  
-    head_wr.wr.rdma.remote_addr = tail;
-    head_wr.wr.rdma.rkey = this->rbuf_->GetKey();
-
-    wr.next = &head_wr;
-    wr.send_flags = 0;
-  }
-  auto stat = this->ep_->PostSendRaw(&wr, &bad);
+  auto stat = this->ep_->PostWrite(reg.context, reg.lkey,(void *)((size_t)reg.addr - sizeof(uint32_t)), 
+      reg.length + sizeof(uint32_t), addr, this->rbuf_->GetKey());
   if (!stat.ok()){
     return stat;
   }
@@ -317,6 +281,9 @@ WriteListener::~WriteListener(){
 
 
 StatusOr<WriteSender *> WriteListener::AcceptSender(WriteOpts opts){
+  if (opts.sender == kSenderWrite && opts.buffer == kBufferBasic) {
+      return Status(StatusCode::InvalidArgument, "write sender with basic buffer not supported");
+  }
   memory::Allocator *alloc;
 
   conn_details local_conn_details;
@@ -360,6 +327,10 @@ StatusOr<WriteSender *> WriteListener::AcceptSender(WriteOpts opts){
 }
 
 StatusOr<WriteReceiver *> WriteListener::AcceptReceiver(WriteOpts opts){
+  if (opts.sender == kSenderWrite && opts.buffer == kBufferBasic) {
+      return Status(StatusCode::InvalidArgument, "write sender with basic buffer not supported");
+  }
+
   ringbuffer::Buffer *rbuf;
   Acknowledger *ack;
 
@@ -401,6 +372,13 @@ StatusOr<WriteReceiver *> WriteListener::AcceptReceiver(WriteOpts opts){
 }
 
 StatusOr<WriteConnection *> WriteListener::AcceptConnection(WriteOpts opts){
+  if (opts.sender == kSenderWrite && opts.buffer == kBufferBasic) {
+      return Status(StatusCode::InvalidArgument, "write sender with basic buffer not supported");
+  }
+  if (opts.sender == kSenderWriteImm && opts.acknowledger == kAcknowledgerSend) {
+      return Status(StatusCode::InvalidArgument, "duplex connection with WriteImm and Send Acknowledger not supported");
+  }
+
   ringbuffer::Buffer *rbuf;
   Acknowledger *ack;
 
@@ -470,6 +448,10 @@ StatusOr<WriteConnection *> WriteListener::AcceptConnection(WriteOpts opts){
 
 
 StatusOr<WriteSender*> DialWriteSender(std::string ip, int port, WriteOpts opts){
+  if (opts.sender == kSenderWrite && opts.buffer == kBufferBasic) {
+      return Status(StatusCode::InvalidArgument, "write sender with basic buffer not supported");
+  }
+
   memory::Allocator *alloc;
 
   conn_details local_conn_details;
@@ -518,6 +500,10 @@ StatusOr<WriteSender*> DialWriteSender(std::string ip, int port, WriteOpts opts)
 
 
 StatusOr<WriteReceiver*> DialWriteReceiver(std::string ip, int port, WriteOpts opts){
+  if (opts.sender == kSenderWrite && opts.buffer == kBufferBasic) {
+      return Status(StatusCode::InvalidArgument, "write sender with basic buffer not supported");
+  }
+
   ringbuffer::Buffer *rbuf;
   Acknowledger *ack;
 
@@ -565,6 +551,13 @@ StatusOr<WriteReceiver*> DialWriteReceiver(std::string ip, int port, WriteOpts o
 
 
 StatusOr<WriteConnection*> DialWriteConnection(std::string ip, int port, WriteOpts opts){
+  if (opts.sender == kSenderWrite && opts.buffer == kBufferBasic) {
+      return Status(StatusCode::InvalidArgument, "write sender with basic buffer not supported");
+  }
+  if (opts.sender == kSenderWriteImm && opts.acknowledger == kAcknowledgerSend) {
+      return Status(StatusCode::InvalidArgument, "duplex connection with WriteImm and Send Acknowledger not supported");
+  }
+
   ringbuffer::Buffer *rbuf;
   Acknowledger *ack;
 
