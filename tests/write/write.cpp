@@ -51,7 +51,7 @@ StatusOr<ReceiveRegion> WriteReceiver::Receive(){
 }
 
 Status WriteReceiver::Free(ReceiveRegion reg){
-  uint32_t head = this->rbuf_->Free(reg.addr, reg.length);
+  uint32_t head = this->rbuf_->Free(reg.addr);
   this->ack_->Ack(head);
   return Status(StatusCode::NotImplemented);
 }
@@ -146,7 +146,11 @@ Status WriteSender::Send(SendRegion reg){
     return stat;
   }
   auto wc_s = this->ep_->PollRecvCq();
-  return wc_s.status();
+  if (!wc_s.ok()){
+    return wc_s.status();
+  }
+  this->rbuf_->Write(reg.length);
+  return Status();
 }
 
 Status WriteSender::Send(std::vector<SendRegion> regions){

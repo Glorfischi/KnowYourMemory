@@ -1,6 +1,9 @@
-#include "error.hpp"
-#include <bits/stdint-uintn.h>
 #include <cstddef>
+#include <list>
+
+#include <infiniband/verbs.h> 
+
+#include "error.hpp"
 
 namespace kym {
 namespace ringbuffer {
@@ -11,6 +14,7 @@ namespace ringbuffer {
 struct BufferContext {
   uint32_t data[4];
 };
+
 class Buffer {
   public:
     virtual ~Buffer() = default;
@@ -22,12 +26,12 @@ class Buffer {
     virtual BufferContext GetContext() = 0;
     // Returns the current read pointer without updating it
     // There is always at least 4 bytes of usable space directly after the read pointer
-    virtual void *GetReadPtr();
+    virtual void *GetReadPtr() = 0;
 
     // Reads len bytes and updates the read pointer
     virtual void *Read(uint32_t len) = 0;
     // Frees the memory region and returns the new header position
-    virtual uint32_t Free(void *addr, uint32_t len) = 0; // TODO(fischi) I guess this might fail?
+    virtual uint32_t Free(void *addr) = 0; // TODO(fischi) I guess this might fail?
 };
 
 class RemoteBuffer {
@@ -35,24 +39,66 @@ class RemoteBuffer {
     virtual ~RemoteBuffer() = default;
 
     // Updates the head position to the new value
-    virtual void UpdateHead(uint32_t head);
+    virtual void UpdateHead(uint32_t head) = 0;
     
     // Return the rkey of the MR
-    virtual uint32_t GetKey();
+    virtual uint32_t GetKey() = 0;
     // Returns the current tail  
     // There is always at least 4 bytes of usable space directly after the tail
-    virtual uint32_t GetTail();
+    virtual uint32_t GetTail() = 0;
     // Returns the write address if you want to write len bytes to the buffer without updating the tail
     // Can return an error if there is not enough free space
-    virtual StatusOr<uint32_t>GetWriteAddr(uint32_t len);
+    virtual StatusOr<uint32_t>GetWriteAddr(uint32_t len) = 0;
     // Returns the write address if you want to write len bytes to the buffer and updates the tail accordingly
     // Can return an error if there is not enough free space
-    virtual StatusOr<uint32_t>Write(uint32_t len);
+    virtual StatusOr<uint32_t>Write(uint32_t len) = 0;
 
 };
 
+// simple ring buffer that jumps to the front of the buffer if there is not enough space to contigously write 
+// NOT THREAD SAFE
 class BasicRingBuffer : public Buffer {
+  public:
+    Status Close();
+
+    BufferContext GetContext();
+    void *GetReadPtr();
+
+    void *Read(uint32_t len);
+    uint32_t Free(void *addr);
+  private:
+    uint32_t add(uint32_t offset, uint32_t length);
+
+    struct ibv_mr *mr_;
+    void *addr_;
+
+    uint32_t head_;
+    std::list<uint32_t> outstanding_;
+    
+    uint32_t read_ptr_;
+    uint32_t length_;
+
 };
+class BasicRemoteBuffer : public RemoteBuffer {
+  public:
+    void UpdateHead(uint32_t head);
+    
+    uint32_t GetKey();
+    uint32_t GetTail();
+
+    StatusOr<uint32_t>GetWriteAddr(uint32_t len);
+    StatusOr<uint32_t>Write(uint32_t len);
+  private:
+    struct ibv_mr *mr_;
+
+    uint32_t length_;
+    uint32_t head_;
+    uint32_t tail_;
+    bool full_;
+
+};
+
+
 class MagicRingBuffer : public Buffer {
 };
 

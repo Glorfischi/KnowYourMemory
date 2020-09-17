@@ -88,6 +88,7 @@ int main(int argc, char* argv[]) {
     kym::connection::WriteListener *ln = ln_s.value();
 
     kym::connection::WriteOpts opts;
+    opts.acknowledger = kym::connection::kAcknowledgerSend;
     auto conn_s = ln->AcceptReceiver(opts);
     if (!conn_s.ok()){
       std::cerr << "Error Accpeting  " << conn_s.status() << std::endl;
