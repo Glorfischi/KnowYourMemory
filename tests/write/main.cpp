@@ -90,6 +90,7 @@ int main(int argc, char* argv[]) {
 
     kym::connection::WriteOpts opts;
     opts.raw = 0;
+    opts.sender = kym::connection::kSenderWriteImm;
     opts.acknowledger = kym::connection::kAcknowledgerRead;
     opts.buffer = kym::connection::kBufferMagic;
     auto conn_s = ln->AcceptReceiver(opts);
@@ -116,6 +117,7 @@ int main(int argc, char* argv[]) {
   if(client){
     kym::connection::WriteOpts opts;
     opts.raw = 0;
+    opts.sender = kym::connection::kSenderWriteImm;
     opts.acknowledger = kym::connection::kAcknowledgerRead;
     opts.buffer = kym::connection::kBufferMagic;
     auto conn_s = kym::connection::DialWriteSender(ip, 9999, opts);
@@ -124,14 +126,14 @@ int main(int argc, char* argv[]) {
       return 1;
     }
     kym::connection::WriteSender *snd = conn_s.value();
-
+    std::chrono::milliseconds timespan(1000); // Make sure we received all acks
+    std::this_thread::sleep_for(timespan);
     std::vector<float> latency_us;
     auto stat = test_lat_send(snd, count, size, &latency_us);
     if (!stat.ok()){
       std::cerr << "Error running benchmark: " << stat << std::endl;
       return 1;
     }
-    std::chrono::milliseconds timespan(1000); // Make sure we received all acks
     std::this_thread::sleep_for(timespan);
     snd->Close();
     delete snd;

@@ -20,6 +20,7 @@
 #include "mm.hpp"
 
 #include "acknowledge.hpp"
+#include "receive_queue.hpp"
 #include "ring_buffer/ring_buffer.hpp"
 
 namespace kym {
@@ -55,7 +56,7 @@ class WriteReceiver : public Receiver {
 
     StatusOr<ReceiveRegion> Receive();
     Status Free(ReceiveRegion);
-  private:
+  protected:
     endpoint::Endpoint *ep_;
     ringbuffer::Buffer *rbuf_;
     Acknowledger *ack_;
@@ -77,11 +78,32 @@ class WriteSender : public Sender, public BatchSender {
     Status Send(SendRegion region);
     Status Send(std::vector<SendRegion> regions);
     Status Free(SendRegion region);
-  private:
+  protected:
     endpoint::Endpoint *ep_;
     memory::Allocator *alloc_;
     ringbuffer::RemoteBuffer *rbuf_;
     AckReceiver *ack_;
+};
+
+class WriteImmReceiver : public WriteReceiver {
+  public:
+    WriteImmReceiver(endpoint::Endpoint *ep, ringbuffer::Buffer *rbuf, Acknowledger *ack, endpoint::IReceiveQueue *rq)
+      : WriteReceiver(ep, rbuf, ack), rq_(rq) {};
+    StatusOr<ReceiveRegion> Receive();
+    Status Free(ReceiveRegion);
+  private:
+    endpoint::IReceiveQueue *rq_;
+};
+
+class WriteImmSender : public WriteSender {
+  public:
+    WriteImmSender(endpoint::Endpoint *ep, memory::Allocator *alloc, ringbuffer::RemoteBuffer *rbuf, AckReceiver *ack) 
+      : WriteSender(ep, alloc, rbuf, ack) {};
+
+    StatusOr<SendRegion> GetMemoryRegion(size_t size);
+    Status Send(SendRegion region);
+    Status Send(std::vector<SendRegion> regions);
+    Status Free(SendRegion region);
 };
 
 class WriteConnection : public Connection {

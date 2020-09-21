@@ -5,6 +5,7 @@
 #include "endpoint.hpp"
 #include "error.hpp"
 #include "mm.hpp"
+#include "receive_queue.hpp"
 #include "ring_buffer/ring_buffer.hpp"
 
 #include "mm/dumb_allocator.hpp"
@@ -18,6 +19,7 @@ namespace connection {
 
 namespace {
   uint32_t write_buf_size = 16*1024;
+  uint8_t inflight = 30;
   struct conn_details {
     WriteOpts opts; // 2 Bytes
     ringbuffer::BufferContext buffer_ctx; // 16 Bytes
@@ -27,20 +29,24 @@ namespace {
   endpoint::Options write_connection_opts{
   .qp_attr = {
     .cap = {
-      .max_send_wr = 10,
-      .max_recv_wr = 10,
+      .max_send_wr = inflight,
+      .max_recv_wr = inflight,
       .max_send_sge = 1,
       .max_recv_sge = 1,
       .max_inline_data = 4,
     },
     .qp_type = IBV_QPT_RC,
   },
-  .responder_resources = 10,
-  .initiator_depth =  10,
+  .responder_resources = inflight,
+  .initiator_depth =  inflight,
   .retry_count = 5,  
   .rnr_retry_count = 2, 
   };
 }
+
+/*
+ * Write sender
+ */
 
 WriteReceiver::WriteReceiver(endpoint::Endpoint *ep, ringbuffer::Buffer *rbuf, Acknowledger *ack) 
   : ep_(ep), rbuf_(rbuf), ack_(ack){
@@ -178,6 +184,103 @@ WriteConnection::~WriteConnection(){
   delete this->rcv_;
   delete this->snd_;
 }
+
+
+/*
+ * WriteImm
+ */ 
+
+StatusOr<ReceiveRegion> WriteImmReceiver::Receive(){
+  ReceiveRegion reg;
+
+  auto wcStatus = this->ep_->PollRecvCq();
+  if (!wcStatus.ok()){
+    return wcStatus.status().Wrap("error polling receive cq");
+  }
+  struct ibv_wc wc = wcStatus.value();
+  uint32_t msg_len = wc.imm_data;
+
+  auto stat = this->rq_->PostMR(wc.wr_id);
+  if (!stat.ok()){
+    return stat.Wrap("error reposting mr");
+  }
+  void *addr = this->rbuf_->Read(msg_len);
+  reg.addr = addr;
+  reg.length = msg_len;
+  reg.context = 0;
+  return reg;
+}
+
+Status WriteImmReceiver::Free(ReceiveRegion reg){
+  uint32_t head = this->rbuf_->Free(reg.addr);
+  this->ack_->Ack(head);
+  if ((head > this->acked_ && head - this->acked_ > this->max_unacked_)
+      || (head < this->acked_ && head + (this->length_ - this->acked_) > this->max_unacked_)){
+    auto stat = this->ack_->Flush();
+    if (!stat.ok()){
+      return stat;
+    }
+    this->acked_ = head;
+  }
+
+  return Status();
+}
+
+StatusOr<SendRegion> WriteImmSender::GetMemoryRegion(size_t size){
+  SendRegion reg;
+  auto buf_s = this->alloc_->Alloc(size); // Add 2 bytes for legth of buffer
+  if (!buf_s.ok()){
+    return buf_s.status();
+  }
+  auto buf = buf_s.value();
+  reg.addr = buf.addr;
+  reg.length = size;
+  reg.lkey = buf.lkey;
+  reg.context = buf.context;
+  return reg;
+}
+
+Status WriteImmSender::Send(SendRegion reg){
+  uint32_t len = reg.length;
+  auto addr_s = this->rbuf_->GetWriteAddr(len);
+  if (!addr_s.ok()){
+    auto head_s = this->ack_->Get();
+    if (!head_s.ok()){
+      return addr_s.status().Wrap(head_s.status().message());
+    }
+    this->rbuf_->UpdateHead(head_s.value());
+    addr_s = this->rbuf_->GetWriteAddr(len);
+    if (!addr_s.ok()){
+      return addr_s.status();
+    }
+  }
+  uint64_t addr = addr_s.value();
+
+  auto stat = this->ep_->PostWriteWithImmidate(reg.context, reg.lkey, reg.addr, len, addr, this->rbuf_->GetKey(), len);
+  if (!stat.ok()){
+    return stat;
+  }
+  auto wc_s = this->ep_->PollSendCq();
+  if (!wc_s.ok()){
+    return wc_s.status();
+  }
+  this->rbuf_->Write(len);
+  return Status();
+}
+
+Status WriteImmSender::Send(std::vector<SendRegion> regions){
+  return Status(StatusCode::NotImplemented);
+}
+
+Status WriteImmSender::Free(SendRegion region){
+  memory::Region mr = memory::Region();
+  mr.addr = region.addr;
+  mr.length = region.length;
+  mr.lkey = region.lkey;
+  mr.context = region.context;
+  return this->alloc_->Free(mr);
+}
+
 
 
 /*
@@ -366,8 +469,15 @@ StatusOr<WriteSender *> WriteListener::AcceptSender(WriteOpts opts){
     ep->Close();
     return stat.Wrap("error setting up connection details");
   }
+  switch (opts.sender) {
+    case kSenderWrite:
+      return new WriteSender(ep, alloc, rbuf, ack);
+    case kSenderWriteImm:
+      return new WriteImmSender(ep, alloc, rbuf, ack);
+    default:
+      return Status(StatusCode::InvalidArgument, "unkown sender option");
+  }
 
-  return new WriteSender(ep, alloc, rbuf, ack);
 
 }
 
@@ -413,7 +523,20 @@ StatusOr<WriteReceiver *> WriteListener::AcceptReceiver(WriteOpts opts){
     return stat.Wrap("Error connecting receiver");
   }
 
-  return new WriteReceiver(ep, rbuf, ack);
+  switch (opts.sender) {
+    case kSenderWrite:
+      return new WriteReceiver(ep, rbuf, ack);
+    case kSenderWriteImm:
+      {
+        auto rq_s = endpoint::GetReceiveQueue(ep, 8, inflight); 
+        if (!rq_s.ok()){
+          return rq_s.status().Wrap("error setting up receive queue");
+        }
+        return new WriteImmReceiver(ep, rbuf, ack, rq_s.value());
+      }
+    default:
+      return Status(StatusCode::InvalidArgument, "unkown sender option");
+  }
 }
 
 StatusOr<WriteConnection *> WriteListener::AcceptConnection(WriteOpts opts){
@@ -462,7 +585,24 @@ StatusOr<WriteConnection *> WriteListener::AcceptConnection(WriteOpts opts){
     return Status(StatusCode::InvalidArgument, "remote options missmatch");
   }
 
-  auto rcvr = new WriteReceiver(ep, rbuf, ack);
+  WriteReceiver *rcvr = new WriteReceiver(ep, rbuf, ack);
+  switch (opts.sender) {
+    case kSenderWrite:
+      {
+        rcvr = new WriteReceiver(ep, rbuf, ack);
+        break;
+      }
+    case kSenderWriteImm:
+      {
+        auto rq_s = endpoint::GetReceiveQueue(ep, 8, inflight); 
+        if (!rq_s.ok()){
+          return rq_s.status().Wrap("error setting up receive queue");
+        }
+        rcvr = new WriteImmReceiver(ep, rbuf, ack, rq_s.value());
+      }
+    default:
+      return Status(StatusCode::InvalidArgument, "unkown sender option");
+  }
 
   AckReceiver *ackRcv;
   ringbuffer::RemoteBuffer *remote_rbuf;
@@ -478,8 +618,17 @@ StatusOr<WriteConnection *> WriteListener::AcceptConnection(WriteOpts opts){
     return stat.Wrap("Error connecting receiver");
   }
 
-  auto sndr = new WriteSender(ep, alloc, remote_rbuf, ackRcv);
+  WriteSender *sndr;
+  switch (opts.sender) {
+    case kSenderWrite:
+      sndr = new WriteSender(ep, alloc, remote_rbuf, ackRcv);
+    case kSenderWriteImm:
+      sndr = new WriteImmSender(ep, alloc, remote_rbuf, ackRcv);
+    default:
+      return Status(StatusCode::InvalidArgument, "unkown sender option");
+  }
 
+  
   return new WriteConnection(sndr, rcvr);
 }
 
@@ -539,8 +688,14 @@ StatusOr<WriteSender*> DialWriteSender(std::string ip, int port, WriteOpts opts)
     ep->Close();
     return stat.Wrap("error setting up connection details");
   }
-
-  return new WriteSender(ep, alloc, rbuf, ack);
+  switch (opts.sender) {
+    case kSenderWrite:
+      return new WriteSender(ep, alloc, rbuf, ack);
+    case kSenderWriteImm:
+      return new WriteImmSender(ep, alloc, rbuf, ack);
+    default:
+      return Status(StatusCode::InvalidArgument, "unkown sender option");
+  }
 }
 
 
@@ -590,8 +745,20 @@ StatusOr<WriteReceiver*> DialWriteReceiver(std::string ip, int port, WriteOpts o
     ep->Close();
     return stat.Wrap("Error connecting receiver");
   }
-
-  return new WriteReceiver(ep, rbuf, ack);
+  switch (opts.sender) {
+    case kSenderWrite:
+      return new WriteReceiver(ep, rbuf, ack);
+    case kSenderWriteImm:
+      {
+        auto rq_s = endpoint::GetReceiveQueue(ep, 8, inflight); 
+        if (!rq_s.ok()){
+          return rq_s.status().Wrap("error setting up receive queue");
+        }
+        return new WriteImmReceiver(ep, rbuf, ack, rq_s.value());
+      }
+    default:
+      return Status(StatusCode::InvalidArgument, "unkown sender option");
+  }
 }
 
 
@@ -646,7 +813,24 @@ StatusOr<WriteConnection*> DialWriteConnection(std::string ip, int port, WriteOp
     return Status(StatusCode::InvalidArgument, "remote options missmatch");
   }
 
-  auto rcvr = new WriteReceiver(ep, rbuf, ack);
+  WriteReceiver *rcvr = new WriteReceiver(ep, rbuf, ack);
+  switch (opts.sender) {
+    case kSenderWrite:
+      {
+        rcvr = new WriteReceiver(ep, rbuf, ack);
+        break;
+      }
+    case kSenderWriteImm:
+      {
+        auto rq_s = endpoint::GetReceiveQueue(ep, 8, inflight); 
+        if (!rq_s.ok()){
+          return rq_s.status().Wrap("error setting up receive queue");
+        }
+        rcvr = new WriteImmReceiver(ep, rbuf, ack, rq_s.value());
+      }
+    default:
+      return Status(StatusCode::InvalidArgument, "unkown sender option");
+  }
 
   AckReceiver *ackRcv;
   ringbuffer::RemoteBuffer *remote_rbuf;
@@ -662,7 +846,15 @@ StatusOr<WriteConnection*> DialWriteConnection(std::string ip, int port, WriteOp
     return stat.Wrap("Error connecting receiver");
   }
 
-  auto sndr = new WriteSender(ep, alloc, remote_rbuf, ackRcv);
+  WriteSender *sndr;
+  switch (opts.sender) {
+    case kSenderWrite:
+      sndr = new WriteSender(ep, alloc, remote_rbuf, ackRcv);
+    case kSenderWriteImm:
+      sndr = new WriteImmSender(ep, alloc, remote_rbuf, ackRcv);
+    default:
+      return Status(StatusCode::InvalidArgument, "unkown sender option");
+  }
 
   return new WriteConnection(sndr, rcvr);
 
