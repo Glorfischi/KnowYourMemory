@@ -10,7 +10,9 @@ SRCPATH = $(PREFIX)/src
 
 BIN = $(BINDIR)/write
 SRCS=  ./main.cpp ./write.cpp ./acknowledge.cpp $(SRCPATH)/endpoint.cpp $(SRCPATH)/mm/dumb_allocator.cpp \
-			 $(SRCPATH)/bench/bench.cpp  $(SRCPATH)/receive_queue.cpp
+			 $(SRCPATH)/bench/bench.cpp  $(SRCPATH)/receive_queue.cpp $(SRCPATH)/ring_buffer/ring_buffer.cpp  \
+			 $(SRCPATH)/ring_buffer/magic_buffer.cpp
+
 OBJS= $(SRCS:.cpp=.o)
 
 all: $(OBJS)

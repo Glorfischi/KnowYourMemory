@@ -32,7 +32,7 @@ cxxopts::ParseResult parse(int argc, char* argv[]) {
       ("i,address", "IP address to connect to", cxxopts::value<std::string>())
       ("source", "source IP address", cxxopts::value<std::string>()->default_value(""))
       ("n,iters",  "Number of exchanges" , cxxopts::value<int>()->default_value("1000"))
-      ("s,size",  "Size of message to exchange", cxxopts::value<int>()->default_value("1024"))
+      ("s,size",  "Size of message to exchange", cxxopts::value<int>()->default_value("60"))
       ("batch",  "Number of messages to send in a single batch. Only relevant for bandwidth benchmark", cxxopts::value<int>()->default_value("20"))
      ;
  
@@ -90,17 +90,21 @@ int main(int argc, char* argv[]) {
 
     kym::connection::WriteOpts opts;
     opts.raw = 0;
-    std::cout << "opts: " << std::hex << opts.raw << std::endl;
     opts.acknowledger = kym::connection::kAcknowledgerSend;
-    opts.buffer = kym::connection::kBufferBasic;
+    opts.buffer = kym::connection::kBufferMagic;
     auto conn_s = ln->AcceptReceiver(opts);
     if (!conn_s.ok()){
-      std::cerr << "Error Accpeting  " << conn_s.status() << std::endl;
+      std::cerr << "Error Accepting  " << conn_s.status() << std::endl;
       return 1;
     }
     kym::connection::WriteReceiver *rcv = conn_s.value();
 
-    // TODO(fischi) use connection
+    std::vector<float> latency_us;
+    auto stat = test_lat_recv(rcv, count, &latency_us);
+    if (!stat.ok()){
+      std::cerr << "Error running benchmark: " << stat << std::endl;
+      return 1;
+    }
 
     rcv->Close();
     delete rcv;
@@ -111,6 +115,9 @@ int main(int argc, char* argv[]) {
 
   if(client){
     kym::connection::WriteOpts opts;
+    opts.raw = 0;
+    opts.acknowledger = kym::connection::kAcknowledgerSend;
+    opts.buffer = kym::connection::kBufferMagic;
     auto conn_s = kym::connection::DialWriteSender(ip, 9999, opts);
     if (!conn_s.ok()){
       std::cerr << "Error Dialing  " << conn_s.status() << std::endl;
@@ -118,10 +125,25 @@ int main(int argc, char* argv[]) {
     }
     kym::connection::WriteSender *snd = conn_s.value();
 
-    // TODO(fischi) use connection
-    
+    std::vector<float> latency_us;
+    auto stat = test_lat_send(snd, count, size, &latency_us);
+    if (!stat.ok()){
+      std::cerr << "Error running benchmark: " << stat << std::endl;
+      return 1;
+    }
+    std::chrono::milliseconds timespan(1000); // Make sure we received all acks
+    std::this_thread::sleep_for(timespan);
     snd->Close();
     delete snd;
+    auto n = count;
+    std::sort (latency_us.begin(), latency_us.end());
+    int q025 = (int)(n*0.025);
+    int q500 = (int)(n*0.5);
+    int q975 = (int)(n*0.975);
+    std::cout << "## Latency Sender" << std::endl;
+    std::cout << "q025" << "\t" << "q50" << "\t" << "q975" << std::endl;
+    std::cout << latency_us[q025] << "\t" << latency_us[q500] << "\t" << latency_us[q975] << std::endl;
+
     return 0;
   }
 

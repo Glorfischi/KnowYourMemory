@@ -334,6 +334,7 @@ StatusOr<Endpoint *> Listener::Accept(Options opts){
     srq_init_attr.attr.max_wr = opts.qp_attr.cap.max_recv_wr;
     auto srq = ibv_create_srq(conn_id->pd, &srq_init_attr);
     if (srq == nullptr){
+      perror("error");
       return Status(StatusCode::Internal, "error " + std::to_string(errno) + " creating ibv_srq");
     }
     opts.qp_attr.srq = srq;
@@ -342,12 +343,14 @@ StatusOr<Endpoint *> Listener::Accept(Options opts){
   ret = rdma_create_qp(conn_id, this->id_->pd, &opts.qp_attr);
   if (ret) {
     // TODO(Fischi) Map error codes
-    return Status(StatusCode::Internal, "accept: error getting creating qp");
+    perror("ERROR");
+    return Status(StatusCode::Internal, "accept: error " + std::to_string(ret) + " getting creating qp");
   }
   
   ret = rdma_accept(conn_id, &conn_param);
   if (ret) {
-    return Status(StatusCode::Internal, "accept: error accepting connection");
+    perror("ERROR");
+    return Status(StatusCode::Internal, "accept: error " + std::to_string(ret) + " accepting connection");
   }
   conn_id->srq = opts.qp_attr.srq;
   

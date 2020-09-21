@@ -2,6 +2,7 @@
 #include "acknowledge.hpp"
 #include "error.hpp"
 #include "receive_queue.hpp"
+#include <algorithm>
 #include <bits/stdint-uintn.h>
 
 namespace kym {
@@ -20,7 +21,7 @@ void SendAcknowledger::Ack(uint32_t offset){
 };
 
 Status SendAcknowledger::Flush(){
-  auto stat = this->ep_->PostImmidate(0, this->curr_offset_);
+  auto stat = this->ep_->PostInline(0, &this->curr_offset_, sizeof(uint32_t));
   if (!stat.ok()){
     return stat;
   }
@@ -65,6 +66,22 @@ StatusOr<uint32_t> SendAckReceiver::Get(){
   auto stat = this->rq_->PostMR(wc.wr_id);
   if (!stat.ok()){
     return stat;
+  }
+
+  while (true) {
+    auto wc_s = this->ep_->PollRecvCqOnce();
+    if (!wc_s.ok()){
+      break;
+    }
+    struct ibv_wc wc = wcStatus.value();
+
+    auto mr  = this->rq_->GetMR(wc.wr_id);
+    offset = *(uint32_t *)mr.addr;
+
+    auto stat = this->rq_->PostMR(wc.wr_id);
+    if (!stat.ok()){
+      return stat;
+    }
   }
   return offset;
 }

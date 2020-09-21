@@ -9,13 +9,15 @@
 
 #include "mm/dumb_allocator.hpp"
 #include <bits/stdint-uintn.h>
+#include <cstddef>
+#include <iostream>
 
 
 namespace kym {
 namespace connection {
 
 namespace {
-  uint32_t write_buf_size = 4*1024*1024;
+  uint32_t write_buf_size = 4*1024;
   struct conn_details {
     WriteOpts opts; // 2 Bytes
     ringbuffer::BufferContext buffer_ctx; // 16 Bytes
@@ -29,34 +31,50 @@ namespace {
       .max_recv_wr = 10,
       .max_send_sge = 1,
       .max_recv_sge = 1,
-      .max_inline_data = 0,
+      .max_inline_data = 4,
     },
     .qp_type = IBV_QPT_RC,
   },
-  .responder_resources = 30,
-  .initiator_depth =  30,
+  .responder_resources = 10,
+  .initiator_depth =  10,
   .retry_count = 5,  
   .rnr_retry_count = 2, 
   };
 }
 
+WriteReceiver::WriteReceiver(endpoint::Endpoint *ep, ringbuffer::Buffer *rbuf, Acknowledger *ack) 
+  : ep_(ep), rbuf_(rbuf), ack_(ack){
+  this->length_ = write_buf_size;
+  this->acked_ = 0;
+  this->max_unacked_ = write_buf_size/4;
+};
 
 StatusOr<ReceiveRegion> WriteReceiver::Receive(){
   ReceiveRegion reg;
-  void *head = this->rbuf_->GetReadPtr();
-  while ( *(volatile uint32_t *)head != 0){}
+  volatile void *head = this->rbuf_->GetReadPtr();
+  while ( *(volatile uint32_t *)head == 0){}
   uint32_t length = *(uint32_t *)head;
   void *addr = this->rbuf_->Read(length);
-  reg.addr = addr;
-  reg.length = length;
+  reg.addr = (void *)((size_t)addr + sizeof(uint32_t));
+  reg.length = length - sizeof(uint32_t);
   reg.context = 0;
   return reg;
 }
 
 Status WriteReceiver::Free(ReceiveRegion reg){
-  uint32_t head = this->rbuf_->Free(reg.addr);
+  uint32_t head = this->rbuf_->Free((void *)((size_t)reg.addr - sizeof(uint32_t)));
+  memset((void *)((size_t)reg.addr - sizeof(uint32_t)), 0, reg.length + sizeof(uint32_t));
   this->ack_->Ack(head);
-  return Status(StatusCode::NotImplemented);
+  if ((head > this->acked_ && head - this->acked_ > this->max_unacked_)
+      || (head < this->acked_ && head + (this->length_ - this->acked_) > this->max_unacked_)){
+    auto stat = this->ack_->Flush();
+    if (!stat.ok()){
+      return stat;
+    }
+    this->acked_ = head;
+  }
+
+  return Status();
 }
 
 
@@ -85,6 +103,7 @@ StatusOr<SendRegion> WriteSender::GetMemoryRegion(size_t size){
     return buf_s.status();
   }
   auto buf = buf_s.value();
+  *(uint32_t *)buf.addr = buf.length;
   reg.addr = (void *)((uint64_t)buf.addr + sizeof(uint32_t));
   reg.length = size;
   reg.lkey = buf.lkey;
@@ -93,14 +112,15 @@ StatusOr<SendRegion> WriteSender::GetMemoryRegion(size_t size){
 }
 
 Status WriteSender::Send(SendRegion reg){
-  auto addr_s = this->rbuf_->GetWriteAddr(reg.length);
+  uint32_t len = reg.length + sizeof(uint32_t);
+  auto addr_s = this->rbuf_->GetWriteAddr(len);
   if (!addr_s.ok()){
     auto head_s = this->ack_->Get();
     if (!head_s.ok()){
       return addr_s.status().Wrap(head_s.status().message());
     }
     this->rbuf_->UpdateHead(head_s.value());
-    addr_s = this->rbuf_->GetWriteAddr(reg.length);
+    addr_s = this->rbuf_->GetWriteAddr(len);
     if (!addr_s.ok()){
       return addr_s.status();
     }
@@ -108,15 +128,15 @@ Status WriteSender::Send(SendRegion reg){
   uint64_t addr = addr_s.value();
 
   auto stat = this->ep_->PostWrite(reg.context, reg.lkey,(void *)((size_t)reg.addr - sizeof(uint32_t)), 
-      reg.length + sizeof(uint32_t), addr, this->rbuf_->GetKey());
+      len, addr, this->rbuf_->GetKey());
   if (!stat.ok()){
     return stat;
   }
-  auto wc_s = this->ep_->PollRecvCq();
+  auto wc_s = this->ep_->PollSendCq();
   if (!wc_s.ok()){
     return wc_s.status();
   }
-  this->rbuf_->Write(reg.length);
+  this->rbuf_->Write(len);
   return Status();
 }
 
@@ -126,8 +146,8 @@ Status WriteSender::Send(std::vector<SendRegion> regions){
 
 Status WriteSender::Free(SendRegion region){
   memory::Region mr = memory::Region();
-  mr.addr = region.addr;
-  mr.length = region.length;
+  mr.addr = (void *)((size_t)region.addr - sizeof(uint32_t));
+  mr.length = region.length + sizeof(uint32_t);
   mr.lkey = region.lkey;
   mr.context = region.context;
   return this->alloc_->Free(mr);
@@ -171,7 +191,10 @@ Status initReceiver(struct ibv_pd *pd, WriteOpts opts, ringbuffer::Buffer **rbuf
       return Status(StatusCode::NotImplemented, "read acknowledger not implemented");
       break;
     case kAcknowledgerSend:
-      break;
+      {
+        *ack = new SendAcknowledger(); // Placeholder
+        break;
+      }
     default:
       return Status(StatusCode::InvalidArgument, "unkown acknowledger option");
   }

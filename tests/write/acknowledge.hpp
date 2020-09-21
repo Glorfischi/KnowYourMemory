@@ -39,6 +39,7 @@ class AckReceiver {
 class SendAcknowledger : public Acknowledger {
   public:
     SendAcknowledger(endpoint::Endpoint * ep) : ep_(ep){};
+    SendAcknowledger(){};
     ~SendAcknowledger() = default;
 
     kym::Status Close();

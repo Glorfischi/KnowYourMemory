@@ -6,6 +6,8 @@
 #include <algorithm>
 #include <bits/stdint-intn.h>
 #include <bits/stdint-uintn.h>
+#include <cstdio>
+#include <cstring>
 #include <infiniband/verbs.h>
 #include <string>
 
@@ -90,6 +92,8 @@ StatusOr<uint64_t> BasicRemoteBuffer::Write(uint32_t len){
     return tail_s;
   }
   this->tail_ = tail_s.value() - this->addr_;
+  std::cout << "new tail " << this->tail_;
+  this->full_ = false;
   return tail_s;
 }
 
@@ -101,9 +105,10 @@ StatusOr<MagicRingBuffer*> NewMagicRingBuffer(struct ibv_pd *pd, uint32_t size){
     return buf_s.status().Wrap("error allocating magic buffer");
   }
   void *buf = buf_s.value();
-
-  struct ibv_mr *mr = ibv_reg_mr(pd, buf, size, IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE);
+  memset(buf, 0, size);
+  struct ibv_mr *mr = ibv_reg_mr(pd, buf, 2*size, IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_READ);
   if (mr == nullptr){
+    perror("ERROR");
     FreeMagicBuffer(buf, size);
     return Status(StatusCode::Internal, "error registering mr");
   }
@@ -112,7 +117,7 @@ StatusOr<MagicRingBuffer*> NewMagicRingBuffer(struct ibv_pd *pd, uint32_t size){
 
 MagicRingBuffer::MagicRingBuffer(struct ibv_mr *mr) : mr_(mr){
   this->addr_ = mr->addr;
-  this->length_ = mr->length;
+  this->length_ = mr->length/2;
 
   this->head_ = 0;
   this->read_ptr_ = 0;
@@ -144,6 +149,7 @@ uint32_t MagicRingBuffer::Free(void *addr) {
 
 BufferContext MagicRingBuffer::GetContext(){
   auto ctx = BufferContext{0};
+
   *(uint64_t *)ctx.data = (uint64_t)this->addr_;
   ctx.data[2] = this->mr_->lkey;
   ctx.data[3] = this->length_;
@@ -159,7 +165,7 @@ Status MagicRingBuffer::Close() {
 }
 
 MagicRemoteBuffer::MagicRemoteBuffer(BufferContext ctx){
-  this->addr_ = *ctx.data;
+  this->addr_ = *(uint64_t *)ctx.data;
   this->key_ = ctx.data[2];
   this->length_ = ctx.data[3];
 
@@ -195,16 +201,16 @@ StatusOr<uint64_t> MagicRemoteBuffer::GetWriteAddr(uint32_t len){
     return Status(StatusCode::Unknown, "not enough free space for message");
   }
 
-  uint64_t read_offset = (this->tail_ + len  <= this->length_) ? this->tail_ : 0;
-  return this->addr_ + read_offset;
+  return this->addr_ + this->tail_;
 }
 StatusOr<uint64_t> MagicRemoteBuffer::Write(uint32_t len){
   auto tail_s = this->GetWriteAddr(len);
   if (!tail_s.ok()){
     return tail_s;
   }
-  this->tail_ = tail_s.value() - this->addr_;
-  this->full = this->tail_ == this->head_;
+  this->tail_ = (this->tail_ + len)%this->length_;
+  this->full_ = (this->tail_ == this->head_);
+
   return tail_s;
 }
 

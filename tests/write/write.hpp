@@ -48,8 +48,7 @@ typedef union {
 
 class WriteReceiver : public Receiver {
   public:
-    WriteReceiver(endpoint::Endpoint *ep, ringbuffer::Buffer *rbuf, Acknowledger *ack) 
-      : ep_(ep), rbuf_(rbuf), ack_(ack){};
+    WriteReceiver(endpoint::Endpoint *ep, ringbuffer::Buffer *rbuf, Acknowledger *ack);
     ~WriteReceiver();
 
     Status Close();
@@ -60,6 +59,10 @@ class WriteReceiver : public Receiver {
     endpoint::Endpoint *ep_;
     ringbuffer::Buffer *rbuf_;
     Acknowledger *ack_;
+
+    uint32_t acked_;
+    uint32_t length_;
+    uint32_t max_unacked_;
 };
 
 class WriteSender : public Sender, public BatchSender {

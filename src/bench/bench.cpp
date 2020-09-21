@@ -16,8 +16,8 @@ kym::Status test_lat_send(kym::connection::Sender *snd, int count, int size, std
     return buf_s.status().Wrap("error allocating send region");
   }
   auto buf = buf_s.value();
-
   for(int i = 0; i<count; i++){
+    //std::cout << i << std::endl;
     auto start = std::chrono::high_resolution_clock::now();
     auto send_s = snd->Send(buf);
     if (!send_s.ok()){
@@ -33,6 +33,7 @@ kym::Status test_lat_recv(kym::connection::Receiver *rcv, int count, std::vector
   lat_us->reserve(count);
 
   for(int i = 0; i<count; i++){
+    // std::cout << i << std::endl;
     auto start = std::chrono::high_resolution_clock::now();
     auto buf_s = rcv->Receive();
     if (!buf_s.ok()){
