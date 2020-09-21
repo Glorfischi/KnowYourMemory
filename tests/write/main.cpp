@@ -90,7 +90,7 @@ int main(int argc, char* argv[]) {
 
     kym::connection::WriteOpts opts;
     opts.raw = 0;
-    opts.acknowledger = kym::connection::kAcknowledgerSend;
+    opts.acknowledger = kym::connection::kAcknowledgerRead;
     opts.buffer = kym::connection::kBufferMagic;
     auto conn_s = ln->AcceptReceiver(opts);
     if (!conn_s.ok()){
@@ -116,7 +116,7 @@ int main(int argc, char* argv[]) {
   if(client){
     kym::connection::WriteOpts opts;
     opts.raw = 0;
-    opts.acknowledger = kym::connection::kAcknowledgerSend;
+    opts.acknowledger = kym::connection::kAcknowledgerRead;
     opts.buffer = kym::connection::kBufferMagic;
     auto conn_s = kym::connection::DialWriteSender(ip, 9999, opts);
     if (!conn_s.ok()){

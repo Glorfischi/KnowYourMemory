@@ -69,6 +69,44 @@ class SendAckReceiver : public AckReceiver {
 StatusOr<SendAckReceiver *> GetSendAckReceiver(endpoint::Endpoint *ep);
 
 
+class ReadAcknowledger : public Acknowledger {
+  public:
+    ReadAcknowledger(struct ibv_mr *mr);
+    ~ReadAcknowledger() = default;
+
+    kym::Status Close();
+
+    void Ack(uint32_t);
+    Status Flush();
+
+    AcknowledgerContext GetContext();
+  private:
+    struct ibv_mr *mr_;
+
+    uint32_t *curr_offset_;
+};
+StatusOr<ReadAcknowledger *> GetReadAcknowledger(struct ibv_pd *pd);
+
+class ReadAckReceiver : public AckReceiver {
+  public:
+    ReadAckReceiver(endpoint::Endpoint *ep, struct ibv_mr * mr, uint32_t key, uint64_t addr);
+    ~ReadAckReceiver() = default;
+    Status Close();
+
+    StatusOr<uint32_t> Get();
+  private:
+    endpoint::Endpoint *ep_; 
+
+    uint32_t key_;
+    uint64_t addr_;
+
+    struct ibv_mr *mr_;
+    uint32_t *curr_offset_;
+};
+StatusOr<ReadAckReceiver *> GetReadAckReceiver(endpoint::Endpoint *ep, AcknowledgerContext ctx);
+
+
+
 
 
 }

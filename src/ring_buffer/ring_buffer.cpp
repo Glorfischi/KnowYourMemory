@@ -192,11 +192,11 @@ StatusOr<uint64_t> MagicRemoteBuffer::GetWriteAddr(uint32_t len){
     // We are empty, but the message is larger then our complete buffer.
     return Status(StatusCode::Unknown, "message larger then buffer");
   } else if (this->head_ < this->tail_ 
-      && (this->length_ - this->tail_) + this->head_ < len){
+      && (this->length_ - this->tail_) + this->head_ <= len){
     // The free region does "wrap around" the end of the buffer.
     return Status(StatusCode::Unknown, "not enough free space for message");
   } else if (this->head_ > this->tail_ 
-      && this->head_ - this->tail_ < len){
+      && this->head_ - this->tail_ <= len){
     // The free region is continuous. The message needs to be at most as big. 
     return Status(StatusCode::Unknown, "not enough free space for message");
   }

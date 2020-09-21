@@ -3,6 +3,7 @@
 #include "conn.hpp"
 #include "error.hpp"
 
+#include <bits/stdint-uintn.h>
 #include <vector>
 #include <chrono>
 
@@ -18,6 +19,7 @@ kym::Status test_lat_send(kym::connection::Sender *snd, int count, int size, std
   auto buf = buf_s.value();
   for(int i = 0; i<count; i++){
     //std::cout << i << std::endl;
+    *(int *)buf.addr = i;
     auto start = std::chrono::high_resolution_clock::now();
     auto send_s = snd->Send(buf);
     if (!send_s.ok()){
@@ -33,12 +35,13 @@ kym::Status test_lat_recv(kym::connection::Receiver *rcv, int count, std::vector
   lat_us->reserve(count);
 
   for(int i = 0; i<count; i++){
-    // std::cout << i << std::endl;
+    //std::cout << i << std::endl;
     auto start = std::chrono::high_resolution_clock::now();
     auto buf_s = rcv->Receive();
     if (!buf_s.ok()){
       return buf_s.status().Wrap("error receiving buffer");
     }
+    //std::cout << "# GOT: " << *(int *)buf_s.value().addr << std::endl;
     auto free_s = rcv->Free(buf_s.value());
     if (!free_s.ok()){
       return free_s.Wrap("error receiving buffer");
@@ -137,5 +140,3 @@ kym::Status test_bw_send(kym::connection::Sender *snd, int count, int size, std:
 kym::Status test_bw_recv(kym::connection::Receiver *rcv, int count, int size, std::vector<float> *bw_bps){
   return kym::Status(kym::StatusCode::NotImplemented);
 }
-
-

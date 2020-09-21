@@ -4,6 +4,9 @@
 #include "receive_queue.hpp"
 #include <algorithm>
 #include <bits/stdint-uintn.h>
+#include <cstdlib>
+#include <infiniband/verbs.h>
+#include <string>
 
 namespace kym {
 namespace connection {
@@ -85,6 +88,80 @@ StatusOr<uint32_t> SendAckReceiver::Get(){
   }
   return offset;
 }
+
+
+
+StatusOr<ReadAcknowledger *> GetReadAcknowledger(struct ibv_pd *pd){
+  void *offset = calloc(1, sizeof(uint32_t));
+  if (offset == nullptr){
+    Status(StatusCode::Internal, "Error allocating memory");
+  }
+  auto mr = ibv_reg_mr(pd, offset, sizeof(offset), IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ);
+  if (mr == nullptr){
+    Status(StatusCode::Internal, "Error registering mr");
+  }
+  return new ReadAcknowledger(mr);
+}
+ReadAcknowledger::ReadAcknowledger(struct ibv_mr *mr) : mr_(mr){
+  this->curr_offset_ = (uint32_t *) mr->addr;
+};
+Status ReadAcknowledger::Close() {
+  int ret = ibv_dereg_mr(this->mr_);
+  if (ret){
+    return Status(StatusCode::Internal, "Error deregistering mr " + std::to_string(ret));
+  }
+  free(this->mr_->addr);
+  return Status();
+}
+void ReadAcknowledger::Ack(uint32_t off){
+  *this->curr_offset_ = off;
+}
+Status ReadAcknowledger::Flush(){
+  return Status();
+}
+AcknowledgerContext ReadAcknowledger::GetContext(){
+  auto ctx = AcknowledgerContext();
+  *(uint64_t *)ctx.data = (uint64_t)this->mr_->addr;
+  ctx.data[2] = this->mr_->lkey;
+  return ctx;
+}
+
+StatusOr<ReadAckReceiver *> GetReadAckReceiver(endpoint::Endpoint *ep, AcknowledgerContext ctx){
+  void *offset = calloc(1, sizeof(uint32_t));
+  if (offset == nullptr){
+    Status(StatusCode::Internal, "Error allocating memory");
+  }
+  auto mr = ibv_reg_mr(ep->GetPdP(), offset, sizeof(offset), IBV_ACCESS_LOCAL_WRITE);
+  if (mr == nullptr){
+    Status(StatusCode::Internal, "Error registering mr");
+  }
+  return new ReadAckReceiver(ep, mr, ctx.data[2], *(uint64_t *)ctx.data);
+}
+ReadAckReceiver::ReadAckReceiver(endpoint::Endpoint *ep, struct ibv_mr * mr, uint32_t key, uint64_t addr) 
+  : ep_(ep), key_(key), addr_(addr), mr_(mr) {
+  this->curr_offset_ = (uint32_t *)mr->addr;
+}
+Status ReadAckReceiver::Close(){
+  int ret = ibv_dereg_mr(this->mr_);
+  if (ret){
+    return Status(StatusCode::Internal, "Error deregistering mr " + std::to_string(ret));
+  }
+  free(this->mr_->addr);
+  return this->ep_->Close();
+}
+StatusOr<uint32_t> ReadAckReceiver::Get(){
+  auto stat = this->ep_->PostRead(0, this->mr_->lkey, this->mr_->addr, sizeof(uint32_t), this->addr_, this->key_);
+  if (!stat.ok()){
+    return stat;
+  }
+  auto wc_s = this->ep_->PollSendCq();
+  if (!wc_s.ok()){
+    return wc_s.status();
+  }
+  return *this->curr_offset_;
+}
+
+
 
 }
 }

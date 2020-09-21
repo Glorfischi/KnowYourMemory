@@ -17,7 +17,7 @@ namespace kym {
 namespace connection {
 
 namespace {
-  uint32_t write_buf_size = 4*1024;
+  uint32_t write_buf_size = 16*1024;
   struct conn_details {
     WriteOpts opts; // 2 Bytes
     ringbuffer::BufferContext buffer_ctx; // 16 Bytes
@@ -188,7 +188,14 @@ WriteConnection::~WriteConnection(){
 Status initReceiver(struct ibv_pd *pd, WriteOpts opts, ringbuffer::Buffer **rbuf, Acknowledger **ack){
   switch (opts.acknowledger) {
     case kAcknowledgerRead:
-      return Status(StatusCode::NotImplemented, "read acknowledger not implemented");
+      {
+        auto ack_s = GetReadAcknowledger(pd);
+        if (!ack_s.ok()){
+          return ack_s.status();
+        }
+        *ack = ack_s.value();
+        break;
+      }
       break;
     case kAcknowledgerSend:
       {
@@ -221,7 +228,6 @@ Status connectReceiver(endpoint::Endpoint * ep, conn_details det, ringbuffer::Bu
   auto opts = det.opts;
   switch (opts.acknowledger) {
     case kAcknowledgerRead:
-      return Status(StatusCode::NotImplemented, "read acknowledger not implemented");
       break;
     case kAcknowledgerSend:
       {
@@ -256,8 +262,14 @@ Status connectSender(endpoint::Endpoint * ep, conn_details det, ringbuffer::Remo
   auto opts = det.opts;
   switch (opts.acknowledger) {
     case kAcknowledgerRead:
-      return Status(StatusCode::NotImplemented, "read acknowledger not implemented");
-      break;
+      {
+        auto ack_s = GetReadAckReceiver(ep, det.ack_ctx);
+        if (!ack_s.ok()){
+          return ack_s.status();
+        }
+        *ack = ack_s.value();
+        break;
+      }
     case kAcknowledgerSend:
       {
         auto sa_s = GetSendAckReceiver(ep);
