@@ -1,6 +1,6 @@
 #include "dumb_allocator.hpp"
 
-#include <bits/stdint-uintn.h>
+#include <cstdint>
 #include <cstddef>
 #include <cstdlib>
 #include <iostream>
@@ -12,6 +12,8 @@ namespace kym {
 namespace memory {
 
 DumbAllocator::DumbAllocator(struct ibv_pd pd): pd_(pd){
+}
+DumbAllocator::DumbAllocator(struct ibv_pd *pd): pd_(*pd){
 }
 
 StatusOr<Region> DumbAllocator::Alloc(size_t size){

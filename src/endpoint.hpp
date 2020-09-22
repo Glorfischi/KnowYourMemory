@@ -10,7 +10,7 @@
 #ifndef KNY_ENDPOINT_HPP
 #define KNY_ENDPOINT_HPP
 
-#include <bits/stdint-uintn.h>
+#include <cstdint>
 #include <memory> // For smart pointers
 
 #include <rdma/rdma_cma.h>
@@ -30,12 +30,14 @@ struct Options {
 
   const void *private_data; // Private data set here will be accessible to the other endpoint through GetConnectionInfo
   uint8_t private_data_len;
+  
+  const char *src; // Source ip to send from. Only relevant for client connections
 
-  uint8_t responder_resources;
-  uint8_t initiator_depth;
-  uint8_t flow_control;
-  uint8_t retry_count;    /* ignored when accepting */
-  uint8_t rnr_retry_count;
+	uint8_t responder_resources;
+	uint8_t initiator_depth;
+	uint8_t flow_control;
+	uint8_t retry_count;		/* ignored when accepting */
+	uint8_t rnr_retry_count;
 };
 
 
@@ -49,7 +51,9 @@ class Endpoint {
     Status Connect(Options opts);
     Status Close();
 
+    ibv_context *GetContext();
     ibv_pd GetPd();
+    ibv_pd *GetPdP();
     ibv_srq *GetSRQ();
     struct ibv_cq *GetSendCQ();
     struct ibv_cq *GetRecvCQ();
@@ -88,16 +92,18 @@ class Listener {
 
     Status Close();
 
+    ibv_context *GetContext();
     ibv_pd GetPd();
+    ibv_pd *GetPdP();
 
-    StatusOr<std::unique_ptr<Endpoint>> Accept(Options opts);
+    StatusOr<Endpoint *> Accept(Options opts);
   private:
     rdma_cm_id *id_;
 };
 
-StatusOr<std::unique_ptr<Endpoint>> Create(std::string ip, int port, Options opts);
-StatusOr<std::unique_ptr<Endpoint>> Dial(std::string ip, int port, Options opts);
-StatusOr<std::unique_ptr<Listener>> Listen(std::string ip, int port);
+StatusOr<Endpoint *> Create(std::string ip, int port, Options opts);
+StatusOr<Endpoint *> Dial(std::string ip, int port, Options opts);
+StatusOr<Listener *> Listen(std::string ip, int port);
 
 }
 }
