@@ -418,7 +418,7 @@ StatusOr<Endpoint *> Create(std::string ip, int port, Options opts){
   }
   ret = rdma_create_qp(id, id->pd, &opts.qp_attr);
   if (ret) {
-    return Status(StatusCode::Internal, "dial: error getting creating qp");
+    return Status(StatusCode::Internal, "dial: error creating qp");
   }
 
   // cleanup addrinfo, we don't need it anymore
@@ -501,7 +501,7 @@ StatusOr<Listener *> Listen(std::string ip, int port){
   // cleanup addrinfo, we don't need it anymore
   rdma_freeaddrinfo(addrinfo);
 
-  ret = rdma_listen(id, 2);
+  ret = rdma_listen(id, 20);
   if(ret){
     // TODO(Fischi) Map error codes
     return Status(StatusCode::Internal, "listening failed");

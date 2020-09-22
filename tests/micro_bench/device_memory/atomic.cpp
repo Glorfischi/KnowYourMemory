@@ -33,8 +33,8 @@ kym::endpoint::Options opts = {
     },
     .qp_type = IBV_QPT_RC,
   },
-  .responder_resources = 2,
-  .initiator_depth =  3,
+  .responder_resources = 8,
+  .initiator_depth =  8,
   .retry_count = 4,  
   .rnr_retry_count = 1, 
 };
@@ -153,7 +153,7 @@ int server(std::string ip, int clients){
     }
     eps.push_back(conn_s.value());
   }
-  std::chrono::milliseconds timespan(2000); // Let's just wait 2s instead of coordinating everything...
+  std::chrono::milliseconds timespan(20000); // Let's just wait 2s instead of coordinating everything...
   std::this_thread::sleep_for(timespan);
   std::cout << "server closing.." << std::endl;
   for (auto ep : eps){
@@ -203,11 +203,9 @@ int client(std::string ip, int n, int clients, bool use_dm){
       if (use_dm) {
         addr = 0;
         key = ci->dm_key;
-        std::cout << "using device memory" << std::endl;
       } else {
         addr = ci->ram_addr;
         key = ci->ram_key;
-        std::cout << "using ram" << std::endl;
       }
       void *buf = malloc(1024);
       ibv_mr *counter = ibv_reg_mr(ep->GetPdP(), buf, 1024, IBV_ACCESS_LOCAL_WRITE);
