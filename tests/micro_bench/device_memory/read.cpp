@@ -16,6 +16,8 @@
 
 #include <infiniband/verbs.h> 
 
+#include "cxxopts.hpp"
+
 #include "conn.hpp"
 #include "endpoint.hpp"
 
@@ -36,12 +38,40 @@ kym::endpoint::Options opts = {
   .rnr_retry_count = 0, 
 };
 
+struct conn_info {
+  uint64_t ram_addr;
+  uint32_t ram_key;
+  uint32_t dm_key;
+};
+
+cxxopts::ParseResult parse(int argc, char* argv[]) {
+  cxxopts::Options options(argv[0], "read");
+  try {
+    options.add_options()
+      ("client", "Whether to as client only", cxxopts::value<bool>())
+      ("server", "Whether to as server only", cxxopts::value<bool>())
+      ("i,address", "IP address to connect to", cxxopts::value<std::string>())
+      ("n,iters",  "Number of exchanges" , cxxopts::value<int>()->default_value("1000"))
+     ;
+ 
+    auto result = options.parse(argc, argv);
+    if (!result.count("address")) {
+      std::cerr << "Specify an address" << std::endl;
+      std::cerr << options.help({""}) << std::endl;
+      exit(1);
+    }
+    return result;
+  } catch (const cxxopts::OptionException& e) {
+    std::cerr << "error parsing options: " << e.what() << std::endl;
+    std::cerr << options.help({""}) << std::endl;
+    exit(1);
+  }
+}
 
 
-int main(int argc, char* argv[]) {
-  std::cout << "#### Testing Device Memory Read latency####" << std::endl;
 
-  auto ln_s = kym::endpoint::Listen(argv[1], 8988);
+int server(std::string ip){
+  auto ln_s = kym::endpoint::Listen(ip, 8988);
   if (!ln_s.ok()){
     std::cerr << "Error listening" << ln_s.status() << std::endl;
     return 1;
@@ -71,14 +101,14 @@ int main(int argc, char* argv[]) {
 
 
   // Setup DRAM MR
-  void *ram = malloc(1024);
+  void *ram = malloc(16);
   if (ram == nullptr){
     std::cerr << "Error registering memory" << errno << std::endl;
     ibv_dereg_mr(dm_mr);
     ibv_free_dm(dm);
     return 1;
   }
-  struct ibv_mr *ram_mr = ibv_reg_mr(pd, ram, 1024, IBV_ACCESS_REMOTE_READ | IBV_ACCESS_LOCAL_WRITE);
+  struct ibv_mr *ram_mr = ibv_reg_mr(pd, ram, 16, IBV_ACCESS_REMOTE_READ | IBV_ACCESS_LOCAL_WRITE);
   if (ram_mr == nullptr) {
     std::cerr << "Error registering ram mr" << errno << std::endl;
     perror("error");
@@ -88,74 +118,96 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  // Setup dst MR
-  void *src = malloc(1024);
-  if (src == nullptr){
-    std::cerr << "Error registering dst memory" << errno << std::endl;
-    ibv_dereg_mr(ram_mr);
-    free(ram);
-    ibv_dereg_mr(dm_mr);
-    ibv_free_dm(dm);
+  struct conn_info ci;
+  ci.dm_key = dm_mr->lkey;
+  ci.ram_addr = (size_t)ram_mr->addr;
+  ci.ram_key = ram_mr->lkey;
+
+  opts.private_data = &ci;
+  opts.private_data_len = sizeof(ci);
+
+  auto conn_s = ln->Accept(opts);
+  if (!conn_s.ok()){
+    std::cerr << "Error accepting connection " << conn_s.status() << std::endl;
     return 1;
   }
-  struct ibv_mr *src_mr = ibv_reg_mr(pd, src, 1024, IBV_ACCESS_LOCAL_WRITE);
+  auto ep = conn_s.value();
+  void *buf = malloc(16);
+  struct ibv_mr *mr = ibv_reg_mr(ep->GetPdP(), buf, 16, IBV_ACCESS_REMOTE_WRITE  | IBV_ACCESS_LOCAL_WRITE);
+  auto stat = ep->PostRecv(42, mr->lkey, mr->addr, mr->length);
+  if (!stat.ok()){
+    std::cerr << "Error posting server mr " << stat << std::endl;
+    ep->Close();
+    return 1;
+  }
+
+  ep->PollRecvCq();
+  ibv_dereg_mr(mr);
+  free(buf);
+
+  std::cout << "server closing.." << std::endl;
+  ep->Close();
+
+  // Free RAM MR
+  int ret = ibv_dereg_mr(ram_mr);
+  if (ret != 0) {
+    std::cerr << "Error deregistering ram mr " << ret << std::endl;
+  }
+  free(ram);
+
+  // Free DM MR
+  ret = ibv_dereg_mr(dm_mr);
+  if (ret != 0) {
+    std::cerr << "Error deregistering dm mr " << ret << std::endl;
+  }
+  ret = ibv_free_dm(dm);
+  if (ret != 0) {
+    std::cerr << "Error freeing memory " << ret << std::endl;
+  }
+
+  stat = ln->Close();
+  if(!stat.ok()){
+    std::cerr << "Error closing listener " << stat << std::endl;
+  }
+  return 0;
+}
+
+
+int client(std::string ip, int count){
+  auto conn_s = kym::endpoint::Dial(ip, 8988, opts);
+  if (!conn_s.ok()){
+    std::cerr << "Error creating ep " << conn_s.status() << std::endl;
+    perror("error");
+    return 1;
+  }
+  auto ep = conn_s.value();
+
+  // Setup dst MR
+  void *src = malloc(16);
+  if (src == nullptr){
+    std::cerr << "Error registering dst memory" << errno << std::endl;
+    return 1;
+  }
+  struct ibv_mr *src_mr = ibv_reg_mr(ep->GetPdP(), src, 16, IBV_ACCESS_LOCAL_WRITE);
   if (src_mr == nullptr) {
     std::cerr << "Error registering dst mr" << errno << std::endl;
     perror("error");
     free(src);
-    ibv_dereg_mr(ram_mr);
-    free(ram);
-    ibv_dereg_mr(dm_mr);
-    ibv_free_dm(dm);
     return 1;
   }
 
-  std::cout << "## Setup done " << std::endl;
-  std::thread server([ln](){
-      auto conn_s = ln->Accept(opts);
-      if (!conn_s.ok()){
-        std::cerr << "Error accepting connection " << conn_s.status() << std::endl;
-        return 1;
-      }
-      auto ep = conn_s.value();
-      void *buf = malloc(16);
-      struct ibv_mr *mr = ibv_reg_mr(ep->GetPdP(), buf, 16, IBV_ACCESS_REMOTE_WRITE  | IBV_ACCESS_LOCAL_WRITE);
-      auto stat = ep->PostRecv(42, mr->lkey, mr->addr, mr->length);
-      if (!stat.ok()){
-        std::cerr << "Error posting server mr " << stat << std::endl;
-        ep->Close();
-        return 1;
-      }
+  struct conn_info *ci;
+  ep->GetConnectionInfo((void **)&ci);
 
-      ep->PollRecvCq();
-      ibv_dereg_mr(mr);
-      free(buf);
-
-      std::cout << "server closing.." << std::endl;
-      ep->Close();
-      return 0;
-  });
-
-  // Client dialing
-  auto conn_s = kym::endpoint::Dial(argv[1], 8988, opts);
-  if (!conn_s.ok()){
-    std::cerr << "Error dialing connection " << conn_s.status() << std::endl;
-    perror("error");
-    server.join();
-    return 1;
-  }
-  auto ep = conn_s.value();
   std::cout << "Connected" << std::endl;
-
-
   std::cout << "## Latency test ibv_read RAM" << std::endl;
 
-  int n = 1000;
+  int n = count;
   std::vector<float> lat_us;
   lat_us.reserve(n);
   for (int i = 0; i<n; i++) {
     auto start = std::chrono::high_resolution_clock::now();
-    auto stat = ep->PostRead(i, src_mr->lkey, src_mr->addr, 16, (uint64_t)ram_mr->addr, ram_mr->lkey);
+    auto stat = ep->PostRead(i, src_mr->lkey, src_mr->addr, 16, ci->ram_addr, ci->ram_key);
     if (!stat.ok()){
       std::cerr << "Error posting read to ram " << stat << std::endl;
       break;
@@ -181,7 +233,7 @@ int main(int argc, char* argv[]) {
   dm_lat_us.reserve(n);
   for (int i = 0; i<n; i++) {
     auto start = std::chrono::high_resolution_clock::now();
-    auto stat = ep->PostRead(i, src_mr->lkey, src_mr->addr, 16, 0, dm_mr->lkey);
+    auto stat = ep->PostRead(i, src_mr->lkey, src_mr->addr, 16, 0, ci->dm_key);
     if (!stat.ok()){
       std::cerr << "Error posting read to dm " << stat << std::endl;
       break;
@@ -202,12 +254,9 @@ int main(int argc, char* argv[]) {
   auto stat = ep->PostImmidate(4, 42);
   if(!stat.ok()){
     std::cerr << "Error singaling end" << conn_s.status() << std::endl;
-    server.join();
     return 1;
   }
   ep->Close();
-  server.join();
-
   // Free src MR
   int ret = ibv_dereg_mr(src_mr);
   if (ret != 0) {
@@ -215,28 +264,28 @@ int main(int argc, char* argv[]) {
   }
   free(src);
 
-  // Free RAM MR
-  ret = ibv_dereg_mr(ram_mr);
-  if (ret != 0) {
-    std::cerr << "Error deregistering ram mr " << ret << std::endl;
-  }
-  free(ram);
+  return 0;
+}
 
-  // Free DM MR
-  ret = ibv_dereg_mr(dm_mr);
-  if (ret != 0) {
-    std::cerr << "Error deregistering dm mr " << ret << std::endl;
-  }
-  ret = ibv_free_dm(dm);
-  if (ret != 0) {
-    std::cerr << "Error freeing memory " << ret << std::endl;
-  }
 
-  stat = ln->Close();
-  if(!stat.ok()){
-    std::cerr << "Error closing listener " << stat << std::endl;
-  }
+int main(int argc, char* argv[]) {
+  auto flags = parse(argc,argv);
+  std::string ip = flags["address"].as<std::string>();  
 
+  int count = flags["iters"].as<int>();  
+
+  bool is_server = flags["server"].as<bool>();  
+  bool is_client = flags["client"].as<bool>();  
+
+
+  std::cout << "#### Testing Device Memory Read latency####" << std::endl;
+
+  if (is_client){
+    return client(ip, count);
+  } else {
+    return server(ip);
+  }
+  
   return 0;
 }
  
