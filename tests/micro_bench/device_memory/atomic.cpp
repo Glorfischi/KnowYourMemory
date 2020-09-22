@@ -17,6 +17,8 @@
 #include <infiniband/verbs.h> 
 #include <vector>
 
+#include "cxxopts.hpp"
+
 #include "conn.hpp"
 #include "endpoint.hpp"
 
@@ -37,20 +39,44 @@ kym::endpoint::Options opts = {
   .rnr_retry_count = 1, 
 };
 
+struct conn_info {
+  uint64_t ram_addr;
+  uint32_t ram_key;
+  uint32_t dm_key;
+};
 
-
-
-int main(int argc, char* argv[]) {
-  if ( argc < 4 ){
-    std::cout << "Run binary with ./atomic <address> <nr_clients> <dm | ram>" << std::endl;
-    return 1;
+cxxopts::ParseResult parse(int argc, char* argv[]) {
+  cxxopts::Options options(argv[0], "read");
+  try {
+    options.add_options()
+      ("client", "Whether to as client only", cxxopts::value<bool>())
+      ("server", "Whether to as server only", cxxopts::value<bool>())
+      ("i,address", "IP address to connect to", cxxopts::value<std::string>())
+      ("n,iters",  "Number of exchanges" , cxxopts::value<int>()->default_value("1000"))
+      ("clients",  "Number of clients" , cxxopts::value<int>()->default_value("1"))
+      ("dm", "Whether to use device memory", cxxopts::value<bool>())
+     ;
+ 
+    auto result = options.parse(argc, argv);
+    if (!result.count("address")) {
+      std::cerr << "Specify an address" << std::endl;
+      std::cerr << options.help({""}) << std::endl;
+      exit(1);
+    }
+    return result;
+  } catch (const cxxopts::OptionException& e) {
+    std::cerr << "error parsing options: " << e.what() << std::endl;
+    std::cerr << options.help({""}) << std::endl;
+    exit(1);
   }
-  std::cout << "#### Testing Device Memory ####" << std::endl;
-  int n = 100000;
-  int clients = atoi(argv[2]);
-  bool use_dm = !std::strcmp("dm", argv[3]);
+}
 
-  auto ln_s = kym::endpoint::Listen(argv[1], 8988);
+
+
+
+
+int server(std::string ip, int clients){
+  auto ln_s = kym::endpoint::Listen(ip, 8988);
   if (!ln_s.ok()){
     std::cerr << "Error listening" << ln_s.status() << std::endl;
     return 1;
@@ -72,7 +98,7 @@ int main(int argc, char* argv[]) {
 
   uint64_t init = 0;
   int ret = dm->memcpy_to_dm(dm, 0, &init, sizeof(init));
-if (ret != 0) {
+  if (ret != 0) {
     std::cerr << "Error setting device memory " << ret << std::endl;
     ibv_free_dm(dm);
     return 1;
@@ -109,46 +135,80 @@ if (ret != 0) {
     return 1;
   }
 
-  std::cout << "## Setup done " << std::endl;
+  struct conn_info ci;
+  ci.dm_key = dm_mr->lkey;
+  ci.ram_addr = (size_t)ram_mr->addr;
+  ci.ram_key = ram_mr->lkey;
 
-  std::thread server([ln, clients](){
-      std::vector<kym::endpoint::Endpoint*> eps;
-      for (int i = 0; i < clients; i++){
-        auto conn_s = ln->Accept(opts);
-        if (!conn_s.ok()){
-          std::cerr << "Error accepting connection " << conn_s.status() << std::endl;
-          return 1;
-        }
-        eps.push_back(conn_s.value());
-      }
-      std::chrono::milliseconds timespan(20000); // Let's just wait 20s instead of coordinating everything...
-      std::this_thread::sleep_for(timespan);
-      std::cout << "server closing.." << std::endl;
-      for (auto ep : eps){
-        ep->Close();
-      }
-      return 0;
-  });
+  opts.private_data = &ci;
+  opts.private_data_len = sizeof(ci);
 
-  struct ibv_mr *mr;
-  if (use_dm){
-    std::cout << "using device memory" << std::endl;
-    mr = dm_mr;
-  } else {
-    std::cout << "using ram" << std::endl;
-    mr = ram_mr;
+
+  std::vector<kym::endpoint::Endpoint*> eps;
+  for (int i = 0; i < clients; i++){
+    auto conn_s = ln->Accept(opts);
+    if (!conn_s.ok()){
+      std::cerr << "Error accepting connection " << conn_s.status() << std::endl;
+      return 1;
+    }
+    eps.push_back(conn_s.value());
   }
+  std::chrono::milliseconds timespan(2000); // Let's just wait 2s instead of coordinating everything...
+  std::this_thread::sleep_for(timespan);
+  std::cout << "server closing.." << std::endl;
+  for (auto ep : eps){
+    ep->Close();
+  }
+
+  // Free RAM MR
+  ret = ibv_dereg_mr(ram_mr);
+  if (ret != 0) {
+    std::cerr << "Error deregistering ram mr " << ret << std::endl;
+  }
+  free(ram);
+
+  // Free DM MR
+  ret = ibv_dereg_mr(dm_mr);
+  if (ret != 0) {
+    std::cerr << "Error deregistering dm mr " << ret << std::endl;
+  }
+  ret = ibv_free_dm(dm);
+  if (ret != 0) {
+    std::cerr << "Error freeing memory " << ret << std::endl;
+  }
+
+  auto stat = ln->Close();
+  if(!stat.ok()){
+    std::cerr << "Error closing listener " << stat << std::endl;
+  }
+  return 0;
+}
+
+int client(std::string ip, int n, int clients, bool use_dm){
   std::vector<std::thread> client_threads;
   for (int j = 0; j < clients; j++){
     int t = j;
-    client_threads.push_back(std::thread([argv, n, mr, t]{
+    client_threads.push_back(std::thread([ip, n, t, use_dm]{
       // Client dialing
-      auto conn_s = kym::endpoint::Dial(argv[1], 8988, opts);
+      auto conn_s = kym::endpoint::Dial(ip, 8988, opts);
       if (!conn_s.ok()){
         std::cerr << "Error dialing connection " << conn_s.status() << std::endl;
         return 1;
       }
       auto ep = conn_s.value();
+      struct conn_info *ci;
+      ep->GetConnectionInfo((void **)&ci);
+      uint64_t addr;
+      uint32_t key;
+      if (use_dm) {
+        addr = 0;
+        key = ci->dm_key;
+        std::cout << "using device memory" << std::endl;
+      } else {
+        addr = ci->ram_addr;
+        key = ci->ram_key;
+        std::cout << "using ram" << std::endl;
+      }
       void *buf = malloc(1024);
       ibv_mr *counter = ibv_reg_mr(ep->GetPdP(), buf, 1024, IBV_ACCESS_LOCAL_WRITE);
       if (counter == nullptr){
@@ -176,8 +236,8 @@ if (ret != 0) {
         wr.num_sge = 1;
         wr.opcode = IBV_WR_ATOMIC_FETCH_AND_ADD;
         wr.send_flags = last ? IBV_SEND_SIGNALED : 0;  
-        wr.wr.atomic.remote_addr = (uint64_t)mr->addr;
-        wr.wr.atomic.rkey = mr->lkey;
+        wr.wr.atomic.remote_addr = addr;
+        wr.wr.atomic.rkey = key;
         wr.wr.atomic.compare_add = 1ULL;
         wrs[i] = wr;
       }
@@ -221,33 +281,29 @@ if (ret != 0) {
   }
  
    
-  server.join();
   for (int i = 0; i < clients; i++){ 
     client_threads[i].join();
   }
+  return 0;
+}
 
-  // Free RAM MR
-  ret = ibv_dereg_mr(ram_mr);
-  if (ret != 0) {
-    std::cerr << "Error deregistering ram mr " << ret << std::endl;
-  }
-  free(ram);
+int main(int argc, char* argv[]) {
+  auto flags = parse(argc,argv);
+  std::string ip = flags["address"].as<std::string>();  
 
-  // Free DM MR
-  ret = ibv_dereg_mr(dm_mr);
-  if (ret != 0) {
-    std::cerr << "Error deregistering dm mr " << ret << std::endl;
-  }
-  ret = ibv_free_dm(dm);
-  if (ret != 0) {
-    std::cerr << "Error freeing memory " << ret << std::endl;
-  }
+  int count = flags["iters"].as<int>();  
+  int clients = flags["clients"].as<int>();  
 
-  auto stat = ln->Close();
-  if(!stat.ok()){
-    std::cerr << "Error closing listener " << stat << std::endl;
-  }
+  bool is_server = flags["server"].as<bool>();  
+  bool is_client = flags["client"].as<bool>();  
 
+  bool use_dm = flags["dm"].as<bool>();  
+  std::cout << "#### Testing Device Memory ####" << std::endl;
+  if (is_client){
+    return client(ip, count, clients, use_dm);
+  } else {
+    return server(ip, clients);
+  }
   return 0;
 }
  
