@@ -29,7 +29,7 @@ namespace kym {
 namespace connection {
 namespace {
 
-const uint64_t inflight = 80;
+const uint64_t inflight = 120;
 
 endpoint::Options defaultOptions = {
   .pd = NULL,
@@ -195,7 +195,7 @@ StatusOr<SendReceiveConnection *> SendReceiveListener::Accept(){
 
 }
 
-SendReceiveListener::SendReceiveListener(endpoint::Listener *listener) : listener_(listener) {}
+SendReceiveListener::SendReceiveListener(endpoint::Listener *listener) : listener_(listener), srq_(NULL) {}
 SendReceiveListener::SendReceiveListener(endpoint::Listener *listener, 
     endpoint::SharedReceiveQueue *srq ) : listener_(listener), srq_(srq) {}
 
