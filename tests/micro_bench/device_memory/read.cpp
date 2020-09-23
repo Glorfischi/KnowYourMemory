@@ -199,7 +199,6 @@ int client(std::string ip, int count){
   struct conn_info *ci;
   ep->GetConnectionInfo((void **)&ci);
 
-  std::cout << "Connected" << std::endl;
   std::cout << "## Latency test ibv_read RAM" << std::endl;
 
   int n = count;
@@ -220,12 +219,17 @@ int client(std::string ip, int count){
     auto finish = std::chrono::high_resolution_clock::now();
     lat_us.push_back(std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count()/1000.0);
   }
+  for (auto lat : lat_us){
+    std::cout << lat << std::endl;
+  }
+  std::cout << std::endl;
   std::sort (lat_us.begin(), lat_us.end());
   int q025 = (int)(n*0.025);
   int q500 = (int)(n*0.5);
   int q975 = (int)(n*0.975);
   std::cout << "q025" << "\t" << "q50" << "\t" << "q975" << std::endl;
   std::cout << lat_us[q025] << "\t" << lat_us[q500] << "\t" << lat_us[q975] << std::endl;
+  std::cout << std::endl;
 
 
   std::cout << "## Latency test ibv_read DM" << std::endl;
@@ -246,9 +250,16 @@ int client(std::string ip, int count){
     auto finish = std::chrono::high_resolution_clock::now();
     dm_lat_us.push_back(std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count()/1000.0);
   }
+  for (auto lat : dm_lat_us){
+    std::cout << lat << std::endl;
+  }
+  std::cout << std::endl;
   std::sort (dm_lat_us.begin(), dm_lat_us.end());
   std::cout << "q025" << "\t" << "q50" << "\t" << "q975" << std::endl;
   std::cout << dm_lat_us[q025] << "\t" << dm_lat_us[q500] << "\t" << dm_lat_us[q975] << std::endl;
+  std::cout << std::endl;
+
+
 
   // Signal end to server
   auto stat = ep->PostImmidate(4, 42);
@@ -278,7 +289,7 @@ int main(int argc, char* argv[]) {
   bool is_client = flags["client"].as<bool>();  
 
 
-  std::cout << "#### Testing Device Memory Read latency####" << std::endl;
+  std::cout << "#### Testing Device Memory Read latency N: " << count << std::endl;
 
   if (is_client){
     return client(ip, count);

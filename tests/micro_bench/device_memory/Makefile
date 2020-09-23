@@ -6,11 +6,14 @@ CFLAGS += -Wall -std=c++11 -I$(PREFIX)/include  -I$(PREFIX)/src -I$(PREFIX)/exte
 CXXFLAGS = $(CFLAGS)
 
 BINDIR = ./bin
+PLOTDIR = ./plot
 SRCPATH = $(PREFIX)/src
 
 SRCS =  $(SRCPATH)/endpoint.cpp 
 
 OBJS = $(SRCS:.cpp=.o)
+
+PLOT = $(PLOTDIR)/read.png $(PLOTDIR)/write.png $(PLOTDIR)/atomic.png
 
 local:  ./local.o $(OBJS)
 	mkdir -pm 755 $(BINDIR)
@@ -29,6 +32,7 @@ atomic:  ./atomic.o $(OBJS)
 	$(CC) $(CFLAGS) -o $(BINDIR)/atomic ./atomic.o $(OBJS) $(LDFLAGS)
 
 
+plot: $(PLOT)
 
 
 clean:

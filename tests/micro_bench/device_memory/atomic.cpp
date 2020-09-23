@@ -153,7 +153,7 @@ int server(std::string ip, int clients){
     }
     eps.push_back(conn_s.value());
   }
-  std::chrono::milliseconds timespan(20000); // Let's just wait 2s instead of coordinating everything...
+  std::chrono::milliseconds timespan(25000); // Let's just wait 2s instead of coordinating everything...
   std::this_thread::sleep_for(timespan);
   std::cout << "server closing.." << std::endl;
   for (auto ep : eps){
@@ -296,7 +296,7 @@ int main(int argc, char* argv[]) {
   bool is_client = flags["client"].as<bool>();  
 
   bool use_dm = flags["dm"].as<bool>();  
-  std::cout << "#### Testing Device Memory ####" << std::endl;
+  std::cout << "#### Testing Device Memory N: " << count << "  Clients: " << clients << "DM: " << use_dm << std::endl;
   if (is_client){
     return client(ip, count, clients, use_dm);
   } else {
