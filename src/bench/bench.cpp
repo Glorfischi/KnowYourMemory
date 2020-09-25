@@ -1,10 +1,72 @@
 #include "bench.hpp"
 
-#include "conn.hpp"
-#include "error.hpp"
+#include "../conn.hpp"
+#include "../error.hpp"
 
 #include <vector>
 #include <chrono>
+
+kym::Status test_lat_ping(kym::connection::Sender *snd, kym::connection::Receiver *rcv, int count, int size, std::vector<float> *lat_us){
+  lat_us->reserve(count);
+
+  auto buf_s = snd->GetMemoryRegion(size);
+  if (!buf_s.ok()){
+    return buf_s.status().Wrap("error allocating send region");
+  }
+  // TODO(fischi) Warmup
+  auto buf = buf_s.value();
+  for(int i = 0; i<count; i++){
+    //std::cout << i << std::endl;
+    *(int *)buf.addr = i;
+    auto start = std::chrono::high_resolution_clock::now();
+    auto send_s = snd->Send(buf);
+    if (!send_s.ok()){
+      snd->Free(buf);
+      return send_s.Wrap("error sending buffer");
+    }
+    auto rcv_s = rcv->Receive();
+    auto finish = std::chrono::high_resolution_clock::now();
+    if (!rcv_s.ok()){
+      snd->Free(buf);
+      return rcv_s.status().Wrap("error receiving buffer");
+    }
+    auto free_s = rcv->Free(rcv_s.value());
+    if (!free_s.ok()){
+      return free_s.Wrap("error freeing receive buffer");
+    }
+    lat_us->push_back(std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count()/1000.0);
+  }
+  return snd->Free(buf);
+
+}
+kym::Status test_lat_pong(kym::connection::Sender *snd, kym::connection::Receiver *rcv, int count, int size){
+  auto buf_s = snd->GetMemoryRegion(size);
+  if (!buf_s.ok()){
+    return buf_s.status().Wrap("error allocating send region");
+  }
+  // TODO(fischi) Warmup
+  auto buf = buf_s.value();
+  for(int i = 0; i<count; i++){
+    //std::cout << i << std::endl;
+    *(int *)buf.addr = i;
+    auto rcv_s = rcv->Receive();
+    auto send_s = snd->Send(buf);
+    if (!rcv_s.ok()){
+      snd->Free(buf);
+      return rcv_s.status().Wrap("error receiving buffer");
+    }
+    if (!send_s.ok()){
+      snd->Free(buf);
+      return send_s.Wrap("error sending buffer");
+    }
+    auto free_s = rcv->Free(rcv_s.value());
+    if (!free_s.ok()){
+      return free_s.Wrap("error freeing receive buffer");
+    }
+  }
+  return snd->Free(buf);
+
+}
 
 
 
@@ -21,11 +83,11 @@ kym::Status test_lat_send(kym::connection::Sender *snd, int count, int size, std
     *(int *)buf.addr = i;
     auto start = std::chrono::high_resolution_clock::now();
     auto send_s = snd->Send(buf);
+    auto finish = std::chrono::high_resolution_clock::now();
     if (!send_s.ok()){
       snd->Free(buf);
       return send_s.Wrap("error sending buffer");
     }
-    auto finish = std::chrono::high_resolution_clock::now();
     lat_us->push_back(std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count()/1000.0);
   }
   return snd->Free(buf);

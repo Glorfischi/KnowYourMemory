@@ -27,6 +27,7 @@ cxxopts::ParseResult parse(int argc, char* argv[]) {
       ("srq", "Whether to use a shard receive queue", cxxopts::value<bool>())
       ("bw", "Whether to test bandwidth", cxxopts::value<bool>())
       ("lat", "Whether to test latency", cxxopts::value<bool>())
+      ("pingpong", "Whether to test pingpong latency", cxxopts::value<bool>())
       ("client", "Whether to as client only", cxxopts::value<bool>())
       ("server", "Whether to as server only", cxxopts::value<bool>())
       ("i,address", "IP address to connect to", cxxopts::value<std::string>())
@@ -43,7 +44,7 @@ cxxopts::ParseResult parse(int argc, char* argv[]) {
       exit(1);
     }
 
-    if (!result.count("lat") && !result.count("bw")) {
+    if (!result.count("lat") && !result.count("bw") && !result.count("pingpong")) {
       std::cerr << "Either perform latency or bandwidth benchmark" << std::endl;
       std::cerr << options.help({""}) << std::endl;
       exit(1);
@@ -59,35 +60,6 @@ cxxopts::ParseResult parse(int argc, char* argv[]) {
 
 
 
-void sr_test_bw_send(kym::connection::SendReceiveConnection *conn, int count, int size, int batch){
-  std::chrono::milliseconds timespan(1000); // This is because of a race condition...
-  std::this_thread::sleep_for(timespan);
-
-  int batch_size = batch;
-  std::vector<kym::connection::SendRegion> bufs;
-  for (int i = 0; i<batch_size; i++){
-    auto buf_s = conn->GetMemoryRegion(size);
-    if (!buf_s.ok()){
-      std::cerr << "Error allocating send region " << buf_s.status().message() << std::endl;
-      return;
-    }
-    bufs.push_back(buf_s.value());
-  }
-  for(int i = 0; i<count/batch_size; i++){
-    //(*(uint64_t*)buf.addr) = i; 
-    // std::cout << "send " << i << std::endl;
-    auto send_s = conn->Send(bufs);
-    if (!send_s.ok()){
-      std::cerr << "Error sending buffer " << send_s.message() << std::endl;
-      break;
-    }
-  }
-  for (auto buf : bufs){
-    conn->Free(buf);
-  }
-
-  std::this_thread::sleep_for(timespan);
-}
 
 int main(int argc, char* argv[]) {
   auto flags = parse(argc,argv);
@@ -174,6 +146,12 @@ int main(int argc, char* argv[]) {
           std::cerr << "Error running benchmark: " << stat << std::endl;
           return 1;
         }
+      } else {
+        auto stat = test_lat_pong(conn, conn, count, size);
+        if (!stat.ok()){
+          std::cerr << "Error running benchmark: " << stat << std::endl;
+          return 1;
+        }
       }
       conn->Close();
       ln->Close();
@@ -222,7 +200,7 @@ int main(int argc, char* argv[]) {
       std::cout << "q025" << "\t" << "q50" << "\t" << "q975" << std::endl;
       std::cout << bw_bps[q025]/(1024*1024) << "\t" << bw_bps[q500]/(1024*1024) << "\t" << bw_bps[q975]/(1024*1024) << std::endl;
 
-    } else {
+    } else if (lat) {
       std::chrono::milliseconds timespan(1000); // This is because of a race condition...
       std::this_thread::sleep_for(timespan);
 
@@ -240,6 +218,7 @@ int main(int argc, char* argv[]) {
         std::cerr << "Error running benchmark: " << stat << std::endl;
         return 1;
       }
+      
 
       std::ofstream lat_file("data/sr_test_lat_send_N" + std::to_string(count) + "_S" + std::to_string(size) + "_" + tmstr + ".csv");
       for (float f : latency_us){
@@ -253,6 +232,28 @@ int main(int argc, char* argv[]) {
       int q500 = (int)(n*0.5);
       int q975 = (int)(n*0.975);
       std::cout << "## Latency Sender" << std::endl;
+      std::cout << "q025" << "\t" << "q50" << "\t" << "q975" << std::endl;
+      std::cout << latency_us[q025] << "\t" << latency_us[q500] << "\t" << latency_us[q975] << std::endl;
+    } else {
+      // pingpong
+      std::chrono::milliseconds timespan(1000); // This is because of a race condition...
+      std::this_thread::sleep_for(timespan);
+
+      std::vector<float> latency_us;
+      latency_us.reserve(count);
+
+      auto stat = test_lat_ping(conn, conn, count, size, &latency_us);
+      if (!stat.ok()){
+        std::cerr << "Error running benchmark: " << stat << std::endl;
+        return 1;
+      }
+      
+      auto n = count;
+      std::sort (latency_us.begin(), latency_us.end());
+      int q025 = (int)(n*0.025);
+      int q500 = (int)(n*0.5);
+      int q975 = (int)(n*0.975);
+      std::cout << "## Ping Pong latency" << std::endl;
       std::cout << "q025" << "\t" << "q50" << "\t" << "q975" << std::endl;
       std::cout << latency_us[q025] << "\t" << latency_us[q500] << "\t" << latency_us[q975] << std::endl;
     }
