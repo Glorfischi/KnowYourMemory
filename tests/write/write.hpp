@@ -2,7 +2,6 @@
 #ifndef KNY_WRITE_HPP_
 #define KNY_WRITE_HPP_
 
-#include <bits/stdint-uintn.h>
 #include <cstdint>
 #include <stddef.h>
 #include <string>

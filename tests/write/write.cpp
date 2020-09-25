@@ -1,25 +1,26 @@
 #include "write.hpp"
 
-#include "acknowledge.hpp"
+#include <cstddef>
+#include <iostream>
+
 #include "conn.hpp"
 #include "endpoint.hpp"
 #include "error.hpp"
 #include "mm.hpp"
+#include "mm/dumb_allocator.hpp"
 #include "receive_queue.hpp"
 #include "ring_buffer/ring_buffer.hpp"
 
-#include "mm/dumb_allocator.hpp"
-#include <bits/stdint-uintn.h>
-#include <cstddef>
-#include <iostream>
+#include "acknowledge.hpp"
+
 
 
 namespace kym {
 namespace connection {
 
 namespace {
-  uint32_t write_buf_size = 16*1024;
-  uint8_t inflight = 30;
+  uint32_t write_buf_size = 1024*1024;
+  uint8_t inflight = 15;
   struct conn_details {
     WriteOpts opts; // 2 Bytes
     ringbuffer::BufferContext buffer_ctx; // 16 Bytes

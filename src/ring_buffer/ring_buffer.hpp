@@ -1,7 +1,6 @@
 #ifndef KNY_RINGBUFFER_HPP_
 #define KNY_RINGBUFFER_HPP_
 
-#include <bits/stdint-uintn.h>
 #include <cstddef>
 #include <list>
 

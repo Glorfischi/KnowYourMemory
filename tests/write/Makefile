@@ -12,12 +12,20 @@ BIN = $(BINDIR)/write
 SRCS=  ./main.cpp ./write.cpp ./acknowledge.cpp $(SRCPATH)/endpoint.cpp $(SRCPATH)/mm/dumb_allocator.cpp \
 			 $(SRCPATH)/bench/bench.cpp  $(SRCPATH)/receive_queue.cpp $(SRCPATH)/ring_buffer/ring_buffer.cpp  \
 			 $(SRCPATH)/ring_buffer/magic_buffer.cpp
-
 OBJS= $(SRCS:.cpp=.o)
+
+TSRCS=  ./write_test.cpp ./write.cpp ./acknowledge.cpp $(SRCPATH)/endpoint.cpp $(SRCPATH)/mm/dumb_allocator.cpp \
+			 $(SRCPATH)/bench/bench.cpp  $(SRCPATH)/receive_queue.cpp $(SRCPATH)/ring_buffer/ring_buffer.cpp  \
+			 $(SRCPATH)/ring_buffer/magic_buffer.cpp
+TOBJS= $(TSRCS:.cpp=.o)
 
 all: $(OBJS)
 	mkdir -pm 755 $(BINDIR)
 	$(CC) $(CFLAGS) -o $(BIN) $(OBJS) $(LDFLAGS)
+
+test: $(TOBJS)
+	mkdir -pm 755 $(BINDIR)
+	$(CC) $(CFLAGS) -o $(BINDIR)/test $(TOBJS) $(LDFLAGS)
 
 clean:
 	@echo "##### CLEAN-UP #####"

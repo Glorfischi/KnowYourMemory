@@ -4,7 +4,6 @@
 
 #include "endpoint.hpp"
 
-#include <bits/stdint-uintn.h>
 
 #include "error.hpp"
 #include "receive_queue.hpp"

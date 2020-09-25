@@ -3,7 +3,6 @@
 #include "error.hpp"
 #include "receive_queue.hpp"
 #include <algorithm>
-#include <bits/stdint-uintn.h>
 #include <cstdlib>
 #include <infiniband/verbs.h>
 #include <string>

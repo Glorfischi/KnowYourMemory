@@ -4,8 +4,6 @@
 #include "error.hpp"
 
 #include <algorithm>
-#include <bits/stdint-intn.h>
-#include <bits/stdint-uintn.h>
 #include <cstdio>
 #include <cstring>
 #include <infiniband/verbs.h>

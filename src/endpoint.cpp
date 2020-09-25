@@ -440,6 +440,7 @@ Status Endpoint::Connect(Options opts){
   // connect to remote
   int ret = rdma_connect(this->id_, &conn_param);
   if (ret) {
+    perror("ERROR");
     return Status(StatusCode::Internal, "Error " + std::to_string(ret) + " connecting to remote");
   }
   // Set connection data
