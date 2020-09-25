@@ -3,6 +3,8 @@
 #include <cstddef>
 #include <iostream>
 
+#include <boost/crc.hpp>  
+
 #include "conn.hpp"
 #include "endpoint.hpp"
 #include "error.hpp"
@@ -19,7 +21,7 @@ namespace kym {
 namespace connection {
 
 namespace {
-  uint32_t write_buf_size = 1024*1024;
+  uint32_t write_buf_size = 128*1024*1024;
   uint8_t inflight = 15;
   struct conn_details {
     WriteOpts opts; // 2 Bytes
@@ -61,16 +63,22 @@ StatusOr<ReceiveRegion> WriteReceiver::Receive(){
   volatile void *head = this->rbuf_->GetReadPtr();
   while ( *(volatile uint32_t *)head == 0){}
   uint32_t length = *(uint32_t *)head;
-  void *addr = this->rbuf_->Read(length);
-  reg.addr = (void *)((size_t)addr + sizeof(uint32_t));
-  reg.length = length - sizeof(uint32_t);
+  reg.addr = (void *)((size_t)head + 2*sizeof(uint32_t));
+  reg.length = length - 2*sizeof(uint32_t);
   reg.context = 0;
+
+  boost::crc_32_type result;
+  while (*(uint32_t *)((size_t)reg.addr - sizeof(uint32_t)) != result.checksum()){
+    result.process_bytes(reg.addr, reg.length);
+  };
+
+  void *addr = this->rbuf_->Read(length);
   return reg;
 }
 
 Status WriteReceiver::Free(ReceiveRegion reg){
-  uint32_t head = this->rbuf_->Free((void *)((size_t)reg.addr - sizeof(uint32_t)));
-  memset((void *)((size_t)reg.addr - sizeof(uint32_t)), 0, reg.length + sizeof(uint32_t));
+  uint32_t head = this->rbuf_->Free((void *)((size_t)reg.addr - 2*sizeof(uint32_t)));
+  memset((void *)((size_t)reg.addr - 2*sizeof(uint32_t)), 0, reg.length + 2*sizeof(uint32_t));
   this->ack_->Ack(head);
   if ((head > this->acked_ && head - this->acked_ > this->max_unacked_)
       || (head < this->acked_ && head + (this->length_ - this->acked_) > this->max_unacked_)){
@@ -105,13 +113,13 @@ WriteReceiver::~WriteReceiver(){
 
 StatusOr<SendRegion> WriteSender::GetMemoryRegion(size_t size){
   SendRegion reg;
-  auto buf_s = this->alloc_->Alloc(size + sizeof(uint32_t)); // Add 2 bytes for legth of buffer
+  auto buf_s = this->alloc_->Alloc(size + 2*sizeof(uint32_t)); // Add 2 bytes for legth of buffer
   if (!buf_s.ok()){
     return buf_s.status();
   }
   auto buf = buf_s.value();
   *(uint32_t *)buf.addr = buf.length;
-  reg.addr = (void *)((uint64_t)buf.addr + sizeof(uint32_t));
+  reg.addr = (void *)((uint64_t)buf.addr + 2*sizeof(uint32_t));
   reg.length = size;
   reg.lkey = buf.lkey;
   reg.context = buf.context;
@@ -119,7 +127,7 @@ StatusOr<SendRegion> WriteSender::GetMemoryRegion(size_t size){
 }
 
 Status WriteSender::Send(SendRegion reg){
-  uint32_t len = reg.length + sizeof(uint32_t);
+  uint32_t len = reg.length + 2*sizeof(uint32_t);
   auto addr_s = this->rbuf_->GetWriteAddr(len);
   if (!addr_s.ok()){
     auto head_s = this->ack_->Get();
@@ -133,8 +141,12 @@ Status WriteSender::Send(SendRegion reg){
     }
   }
   uint64_t addr = addr_s.value();
+  boost::crc_32_type result;
+  result.process_bytes(reg.addr, reg.length);
+  *(uint32_t *)((size_t)reg.addr - sizeof(uint32_t)) = result.checksum();
 
-  auto stat = this->ep_->PostWrite(reg.context, reg.lkey,(void *)((size_t)reg.addr - sizeof(uint32_t)), 
+
+  auto stat = this->ep_->PostWrite(reg.context, reg.lkey,(void *)((size_t)reg.addr - 2*sizeof(uint32_t)), 
       len, addr, this->rbuf_->GetKey());
   if (!stat.ok()){
     return stat;
@@ -153,8 +165,8 @@ Status WriteSender::Send(std::vector<SendRegion> regions){
 
 Status WriteSender::Free(SendRegion region){
   memory::Region mr = memory::Region();
-  mr.addr = (void *)((size_t)region.addr - sizeof(uint32_t));
-  mr.length = region.length + sizeof(uint32_t);
+  mr.addr = (void *)((size_t)region.addr - 2*sizeof(uint32_t));
+  mr.length = region.length + 2*sizeof(uint32_t);
   mr.lkey = region.lkey;
   mr.context = region.context;
   return this->alloc_->Free(mr);

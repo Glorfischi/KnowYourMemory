@@ -58,18 +58,16 @@ int test_write_integrity(std::string ip){
     opts.sender = kym::connection::kSenderWrite;
     opts.acknowledger = kym::connection::kAcknowledgerRead;
     opts.buffer = kym::connection::kBufferMagic;
-    std::cout << "A" << std::endl;
     auto conn_s = ln->AcceptReceiver(opts);
     if (!conn_s.ok()){
       std::cerr << "Error Accepting  " << conn_s.status() << std::endl;
       return 1;
     }
-    std::cout << "D" << std::endl;
     auto rcv = conn_s.value();
 
     auto buf_s = rcv->Receive();
     auto buf = buf_s.value();
-    if (((char *)buf.addr)[1023*1024-1] != 'Q'){
+    if (((char *)buf.addr)[127*1024*1024-1] != 'Q'){
       std::cerr << "ERROR: buffer was not received correctly" << std::endl; 
     }
     if (!buf_s.ok()){
@@ -99,13 +97,13 @@ int test_write_integrity(std::string ip){
       return 1;
     }
     kym::connection::WriteSender *snd = conn_s.value();
-    auto buf_s = snd->GetMemoryRegion(1023*1024);
+    auto buf_s = snd->GetMemoryRegion(127*1024*1024);
     if (!buf_s.ok()) {
       std::cerr << "ERROR: " << buf_s.status() << std::endl; 
       return 1;
     }
     auto buf = buf_s.value();
-    ((char *)buf.addr)[1023*1024-1] = 'Q';
+    ((char *)buf.addr)[127*1024*1024-1] = 'Q';
     std::this_thread::sleep_for(timespan);
     auto stat = snd->Send(buf);
     if (!stat.ok()){
