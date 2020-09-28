@@ -82,7 +82,7 @@ class ReadAcknowledger : public Acknowledger {
   private:
     struct ibv_mr *mr_;
 
-    uint32_t *curr_offset_;
+    volatile uint32_t *curr_offset_;
 };
 StatusOr<ReadAcknowledger *> GetReadAcknowledger(struct ibv_pd *pd);
 
@@ -100,7 +100,7 @@ class ReadAckReceiver : public AckReceiver {
     uint64_t addr_;
 
     struct ibv_mr *mr_;
-    uint32_t *curr_offset_;
+    volatile uint32_t *curr_offset_;
 };
 StatusOr<ReadAckReceiver *> GetReadAckReceiver(endpoint::Endpoint *ep, AcknowledgerContext ctx);
 

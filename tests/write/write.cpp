@@ -59,7 +59,7 @@ WriteReceiver::WriteReceiver(endpoint::Endpoint *ep, ringbuffer::Buffer *rbuf, A
   : ep_(ep), rbuf_(rbuf), ack_(ack){
   this->length_ = write_buf_size;
   this->acked_ = 0;
-  this->max_unacked_ = write_buf_size/4;
+  this->max_unacked_ = write_buf_size/8;
 };
 
 StatusOr<ReceiveRegion> WriteReceiver::Receive(){
@@ -72,9 +72,15 @@ StatusOr<ReceiveRegion> WriteReceiver::Receive(){
   reg.context = 0;
 
   boost::crc_32_type result;
-  while (*(uint32_t *)((size_t)reg.addr - sizeof(uint32_t)) != result.checksum()){
+  while (*(volatile uint32_t *)((size_t)reg.addr - sizeof(uint32_t)) != result.checksum()){
+    result.reset();
+    result.process_bytes((void *)(head), sizeof(uint32_t));
     result.process_bytes(reg.addr, reg.length);
   };
+  if (result.checksum() == 0){
+    std::cerr << "WAT" << std::endl;
+  }
+
 
   this->rbuf_->Read(length);
   return reg;
@@ -140,12 +146,18 @@ Status WriteSender::Send(SendRegion reg){
     }
     this->rbuf_->UpdateHead(head_s.value());
     addr_s = this->rbuf_->GetWriteAddr(len);
-    if (!addr_s.ok()){
-      return addr_s.status();
+    while (!addr_s.ok()){
+      head_s = this->ack_->Get();
+      if (!head_s.ok()){
+        return addr_s.status().Wrap(head_s.status().message());
+      }
+      this->rbuf_->UpdateHead(head_s.value());
+      addr_s = this->rbuf_->GetWriteAddr(len);
     }
   }
   uint64_t addr = addr_s.value();
   boost::crc_32_type result;
+  result.process_bytes((void *)((size_t)reg.addr - 2*sizeof(uint32_t)), sizeof(uint32_t));
   result.process_bytes(reg.addr, reg.length);
   *(uint32_t *)((size_t)reg.addr - sizeof(uint32_t)) = result.checksum();
 

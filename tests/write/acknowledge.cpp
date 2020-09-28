@@ -18,7 +18,7 @@ Status SendAcknowledger::Close(){
   return Status();
 }
 
-void SendAcknowledger::Ack(uint32_t offset){
+void SendAcknowledger::Ack(volatile uint32_t offset){
   this->curr_offset_ = offset;
 };
 
@@ -112,7 +112,7 @@ Status ReadAcknowledger::Close() {
   free(this->mr_->addr);
   return Status();
 }
-void ReadAcknowledger::Ack(uint32_t off){
+void ReadAcknowledger::Ack(volatile uint32_t off){
   *this->curr_offset_ = off;
 }
 Status ReadAcknowledger::Flush(){

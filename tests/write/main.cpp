@@ -19,6 +19,7 @@
 #include "conn.hpp"
 #include "bench/bench.hpp"
 
+#include "error.hpp"
 #include "write.hpp"
 
 cxxopts::ParseResult parse(int argc, char* argv[]) {
@@ -34,6 +35,8 @@ cxxopts::ParseResult parse(int argc, char* argv[]) {
       ("n,iters",  "Number of exchanges" , cxxopts::value<int>()->default_value("1000"))
       ("s,size",  "Size of message to exchange", cxxopts::value<int>()->default_value("60"))
       ("batch",  "Number of messages to send in a single batch. Only relevant for bandwidth benchmark", cxxopts::value<int>()->default_value("20"))
+      ("sender", "Write sender type (write, writeImm, writeOff)", cxxopts::value<std::string>()->default_value("write"))
+      ("ack", "Write acknowledger type (read, send)", cxxopts::value<std::string>()->default_value("write"))
      ;
  
     auto result = options.parse(argc, argv);
@@ -65,6 +68,9 @@ int main(int argc, char* argv[]) {
   std::string src = flags["source"].as<std::string>();  
 
 
+  std::string sender = flags["sender"].as<std::string>();  
+  std::string ack = flags["ack"].as<std::string>();  
+
   bool bw = flags["bw"].as<bool>();  
   bool lat = flags["lat"].as<bool>();  
 
@@ -79,6 +85,22 @@ int main(int argc, char* argv[]) {
   std::vector<float> latency_m;
 
   std::cout << "#### Testing WriteConnection ####" << std::endl;
+  kym::connection::WriteOpts opts;
+  opts.raw = 0;
+  if (sender.compare("writeImm") == 0){
+    opts.sender = kym::connection::kSenderWriteImm;
+  } else if (sender.compare("writeOff") == 0){
+    opts.sender = kym::connection::kSenderWriteOffset;
+  } else {
+    opts.sender = kym::connection::kSenderWrite;
+  }
+  if (ack.compare("send") == 0){
+    opts.acknowledger = kym::connection::kAcknowledgerSend;
+  } else {
+    opts.acknowledger = kym::connection::kAcknowledgerRead;
+  }
+  opts.buffer = kym::connection::kBufferMagic;
+
 
   if (server){
     auto ln_s = kym::connection::ListenWrite(ip, 9999);
@@ -88,11 +110,6 @@ int main(int argc, char* argv[]) {
     }
     kym::connection::WriteListener *ln = ln_s.value();
 
-    kym::connection::WriteOpts opts;
-    opts.raw = 0;
-    opts.sender = kym::connection::kSenderWriteOffset;
-    opts.acknowledger = kym::connection::kAcknowledgerRead;
-    opts.buffer = kym::connection::kBufferMagic;
     auto conn_s = ln->AcceptReceiver(opts);
     if (!conn_s.ok()){
       std::cerr << "Error Accepting  " << conn_s.status() << std::endl;
@@ -100,8 +117,13 @@ int main(int argc, char* argv[]) {
     }
     kym::connection::WriteReceiver *rcv = conn_s.value();
 
-    std::vector<float> latency_us;
-    auto stat = test_lat_recv(rcv, count, &latency_us);
+    std::vector<float> measurements;
+    kym::Status stat;
+    if (lat) {
+      stat = test_lat_recv(rcv, count, &measurements);
+    } else if (bw) {
+      stat = test_bw_recv(rcv, count, size, &measurements);
+    }
     if (!stat.ok()){
       std::cerr << "Error running benchmark: " << stat << std::endl;
       return 1;
@@ -115,11 +137,6 @@ int main(int argc, char* argv[]) {
   }
 
   if(client){
-    kym::connection::WriteOpts opts;
-    opts.raw = 0;
-    opts.sender = kym::connection::kSenderWriteOffset;
-    opts.acknowledger = kym::connection::kAcknowledgerRead;
-    opts.buffer = kym::connection::kBufferMagic;
     auto conn_s = kym::connection::DialWriteSender(ip, 9999, opts);
     if (!conn_s.ok()){
       std::cerr << "Error Dialing  " << conn_s.status() << std::endl;
@@ -128,23 +145,29 @@ int main(int argc, char* argv[]) {
     kym::connection::WriteSender *snd = conn_s.value();
     std::chrono::milliseconds timespan(1000); // Make sure we received all acks
     std::this_thread::sleep_for(timespan);
-    std::vector<float> latency_us;
-    auto stat = test_lat_send(snd, count, size, &latency_us);
+    std::vector<float> measurements;
+    kym::Status stat;
+    if (lat) {
+      stat = test_lat_send(snd, count, size, &measurements);
+      std::cout << "## Latency Sender" << std::endl;
+    } else if (bw) {
+      stat = test_bw_send(snd, count, size, &measurements);
+      std::cout << "## Bandwith Sender" << std::endl;
+    }
     if (!stat.ok()){
       std::cerr << "Error running benchmark: " << stat << std::endl;
       return 1;
-    }
+    } 
     std::this_thread::sleep_for(timespan);
     snd->Close();
     delete snd;
     auto n = count;
-    std::sort (latency_us.begin(), latency_us.end());
+    std::sort (measurements.begin(), measurements.end());
     int q025 = (int)(n*0.025);
     int q500 = (int)(n*0.5);
     int q975 = (int)(n*0.975);
-    std::cout << "## Latency Sender" << std::endl;
     std::cout << "q025" << "\t" << "q50" << "\t" << "q975" << std::endl;
-    std::cout << latency_us[q025] << "\t" << latency_us[q500] << "\t" << latency_us[q975] << std::endl;
+    std::cout << measurements[q025] << "\t" << measurements[q500] << "\t" << measurements[q975] << std::endl;
 
     return 0;
   }
