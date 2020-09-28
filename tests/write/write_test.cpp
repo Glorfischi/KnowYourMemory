@@ -55,7 +55,7 @@ int test_write_integrity(std::string ip){
 
     kym::connection::WriteOpts opts;
     opts.raw = 0;
-    opts.sender = kym::connection::kSenderWrite;
+    opts.sender = kym::connection::kSenderWriteOffset;
     opts.acknowledger = kym::connection::kAcknowledgerRead;
     opts.buffer = kym::connection::kBufferMagic;
     auto conn_s = ln->AcceptReceiver(opts);
@@ -87,7 +87,7 @@ int test_write_integrity(std::string ip){
     std::chrono::milliseconds timespan(1000); // Make sure receiver is ready
     kym::connection::WriteOpts opts;
     opts.raw = 0;
-    opts.sender = kym::connection::kSenderWrite;
+    opts.sender = kym::connection::kSenderWriteOffset;
     opts.acknowledger = kym::connection::kAcknowledgerRead;
     opts.buffer = kym::connection::kBufferMagic;
     std::this_thread::sleep_for(timespan);

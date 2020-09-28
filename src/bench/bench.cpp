@@ -3,6 +3,7 @@
 #include "../conn.hpp"
 #include "../error.hpp"
 
+#include <string>
 #include <vector>
 #include <chrono>
 
@@ -79,7 +80,7 @@ kym::Status test_lat_send(kym::connection::Sender *snd, int count, int size, std
   }
   auto buf = buf_s.value();
   for(int i = 0; i<count; i++){
-    //std::cout << i << std::endl;
+    // std::cout << i << std::endl;
     *(int *)buf.addr = i;
     auto start = std::chrono::high_resolution_clock::now();
     auto send_s = snd->Send(buf);
@@ -103,6 +104,9 @@ kym::Status test_lat_recv(kym::connection::Receiver *rcv, int count, std::vector
       return buf_s.status().Wrap("error receiving buffer");
     }
     //std::cout << "# GOT: " << *(int *)buf_s.value().addr << std::endl;
+    /*if (*(int *)buf_s.value().addr != i){
+      return kym::Status(kym::StatusCode::Internal, "transmission error exepected " + std::to_string(i) + " got " + std::to_string(*(int *)buf_s.value().addr));
+    }*/
     auto free_s = rcv->Free(buf_s.value());
     if (!free_s.ok()){
       return free_s.Wrap("error receiving buffer");

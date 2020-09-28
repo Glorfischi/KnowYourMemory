@@ -24,6 +24,10 @@ void *BasicRingBuffer::GetReadPtr() {
   return (void *)((size_t)this->addr_ + this->read_ptr_);
 }
 
+uint32_t BasicRingBuffer::GetReadOff() {
+  return this->read_ptr_;
+}
+
 uint32_t BasicRingBuffer::Free(void *addr) {
   uint32_t region_start = (size_t)addr - (size_t)this->addr_;
   
@@ -84,6 +88,11 @@ StatusOr<uint64_t> BasicRemoteBuffer::GetWriteAddr(uint32_t len){
   uint64_t read_offset = (this->tail_ + len  <= this->length_) ? this->tail_ : 0;
   return this->addr_ + read_offset;
 }
+
+StatusOr<uint32_t> BasicRemoteBuffer::GetNextTail(uint32_t len){
+  return Status(StatusCode::NotImplemented);
+}
+
 StatusOr<uint64_t> BasicRemoteBuffer::Write(uint32_t len){
   auto tail_s = this->GetWriteAddr(len);
   if (!tail_s.ok()){
@@ -130,6 +139,10 @@ void *MagicRingBuffer::Read(uint32_t len) {
 
 void *MagicRingBuffer::GetReadPtr() {
   return (void *)((size_t)this->addr_ + this->read_ptr_);
+}
+
+uint32_t MagicRingBuffer::GetReadOff() {
+  return this->read_ptr_;
 }
 
 uint32_t MagicRingBuffer::Free(void *addr) {
@@ -200,6 +213,13 @@ StatusOr<uint64_t> MagicRemoteBuffer::GetWriteAddr(uint32_t len){
   }
 
   return this->addr_ + this->tail_;
+}
+StatusOr<uint32_t> MagicRemoteBuffer::GetNextTail(uint32_t len){
+  auto tail_s = this->GetWriteAddr(len);
+  if (!tail_s.ok()){
+    return tail_s.status();
+  }
+  return (this->tail_ + len)%this->length_;
 }
 StatusOr<uint64_t> MagicRemoteBuffer::Write(uint32_t len){
   auto tail_s = this->GetWriteAddr(len);

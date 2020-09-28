@@ -6,7 +6,7 @@
 
 #include <infiniband/verbs.h> 
 
-#include "error.hpp"
+#include "../error.hpp"
 
 namespace kym {
 namespace ringbuffer {
@@ -28,8 +28,9 @@ class Buffer {
     // Returns a Context with all infomation necessary for the setup of a remote buffer
     virtual BufferContext GetContext() = 0;
     // Returns the current read pointer without updating it
-    // There is always at least 4 bytes of usable space directly after the read pointer
     virtual void *GetReadPtr() = 0;
+    // Returns the current read offset without updating it
+    virtual uint32_t GetReadOff() = 0;
 
     // Reads len bytes and updates the read pointer
     virtual void *Read(uint32_t len) = 0;
@@ -52,6 +53,9 @@ class RemoteBuffer {
     // Returns the write address if you want to write len bytes to the buffer without updating the tail
     // Can return an error if there is not enough free space
     virtual StatusOr<uint64_t>GetWriteAddr(uint32_t len) = 0;
+    // Returns the tail address if you want to write len bytes to the buffer without actually updating the tail
+    // Can return an error if there is not enough free space
+    virtual StatusOr<uint32_t>GetNextTail(uint32_t len) = 0;
     // Returns the write address if you want to write len bytes to the buffer and updates the tail accordingly
     // Can return an error if there is not enough free space
     virtual StatusOr<uint64_t>Write(uint32_t len) = 0;
@@ -66,6 +70,7 @@ class BasicRingBuffer : public Buffer {
 
     BufferContext GetContext();
     void *GetReadPtr();
+    uint32_t GetReadOff();
 
     void *Read(uint32_t len);
     uint32_t Free(void *addr);
@@ -90,6 +95,7 @@ class BasicRemoteBuffer : public RemoteBuffer {
     uint32_t GetTail();
 
     StatusOr<uint64_t>GetWriteAddr(uint32_t len);
+    StatusOr<uint32_t>GetNextTail(uint32_t len);
     StatusOr<uint64_t>Write(uint32_t len);
   private:
     struct ibv_mr *mr_;
@@ -110,6 +116,7 @@ class MagicRingBuffer : public Buffer {
 
     BufferContext GetContext();
     void *GetReadPtr();
+    uint32_t GetReadOff();
 
     void *Read(uint32_t len);
     uint32_t Free(void *addr);
@@ -135,6 +142,7 @@ class MagicRemoteBuffer : public RemoteBuffer {
     uint32_t GetTail();
 
     StatusOr<uint64_t>GetWriteAddr(uint32_t len);
+    StatusOr<uint32_t>GetNextTail(uint32_t len);
     StatusOr<uint64_t>Write(uint32_t len);
   private:
 

@@ -31,7 +31,10 @@ const uint8_t kAcknowledgerSend = 0;
 const uint8_t kAcknowledgerRead = 1;
 
 const uint8_t kSenderWrite = 0;
+const uint8_t kSenderWriteCRC = 0;
+const uint8_t kSenderWriteOffset = 2;
 const uint8_t kSenderWriteImm = 1;
+const uint8_t kSenderWriteAtomic = 3;
 
 const uint8_t kBufferBasic = 0;
 const uint8_t kBufferMagic = 1;
@@ -84,10 +87,41 @@ class WriteSender : public Sender, public BatchSender {
     AckReceiver *ack_;
 };
 
+class WriteOffsetReceiver : public WriteReceiver {
+  public:
+    WriteOffsetReceiver(endpoint::Endpoint *ep, ringbuffer::Buffer *rbuf, Acknowledger *ack, struct ibv_mr *tail_mr)
+      : WriteReceiver(ep, rbuf, ack), tail_mr_(tail_mr), tail_((volatile uint32_t *)tail_mr->addr) {};
+    Status Close();
+
+    StatusOr<ReceiveRegion> Receive();
+    Status Free(ReceiveRegion);
+  private:
+    struct ibv_mr *tail_mr_;
+    volatile uint32_t *tail_;
+};
+
+class WriteOffsetSender : public WriteSender {
+  public:
+    WriteOffsetSender(endpoint::Endpoint *ep, memory::Allocator *alloc, ringbuffer::RemoteBuffer *rbuf, AckReceiver *ack, 
+        uint64_t tail_addr, uint32_t tail_key) 
+      : WriteSender(ep, alloc, rbuf, ack), tail_addr_(tail_addr), tail_key_(tail_key) {};
+
+    StatusOr<SendRegion> GetMemoryRegion(size_t size);
+    Status Send(SendRegion region);
+    Status Send(std::vector<SendRegion> regions);
+    Status Free(SendRegion region);
+  private:
+    // TODO(Fischi): Write inline
+    uint64_t tail_addr_;
+    uint32_t tail_key_;
+
+};
+
 class WriteImmReceiver : public WriteReceiver {
   public:
     WriteImmReceiver(endpoint::Endpoint *ep, ringbuffer::Buffer *rbuf, Acknowledger *ack, endpoint::IReceiveQueue *rq)
       : WriteReceiver(ep, rbuf, ack), rq_(rq) {};
+    Status Close();
     StatusOr<ReceiveRegion> Receive();
     Status Free(ReceiveRegion);
   private:

@@ -1,9 +1,12 @@
 #include "write.hpp"
 
 #include <cstddef>
+#include <cstdint>
+#include <infiniband/verbs.h>
 #include <iostream>
 
 #include <boost/crc.hpp>  
+#include <string>
 
 #include "conn.hpp"
 #include "endpoint.hpp"
@@ -21,12 +24,13 @@ namespace kym {
 namespace connection {
 
 namespace {
-  uint32_t write_buf_size = 128*1024*1024;
+  uint32_t write_buf_size = 128*1024;
   uint8_t inflight = 15;
   struct conn_details {
     WriteOpts opts; // 2 Bytes
     ringbuffer::BufferContext buffer_ctx; // 16 Bytes
     AcknowledgerContext ack_ctx; // 16 bytes
+    uint32_t snd_ctx[4]; // 16 bytes
   };
 
   endpoint::Options write_connection_opts{
@@ -34,9 +38,9 @@ namespace {
     .cap = {
       .max_send_wr = inflight,
       .max_recv_wr = inflight,
-      .max_send_sge = 1,
-      .max_recv_sge = 1,
-      .max_inline_data = 4,
+      .max_send_sge = 2,
+      .max_recv_sge = 2,
+      .max_inline_data = 8,
     },
     .qp_type = IBV_QPT_RC,
   },
@@ -72,7 +76,7 @@ StatusOr<ReceiveRegion> WriteReceiver::Receive(){
     result.process_bytes(reg.addr, reg.length);
   };
 
-  void *addr = this->rbuf_->Read(length);
+  this->rbuf_->Read(length);
   return reg;
 }
 
@@ -113,7 +117,7 @@ WriteReceiver::~WriteReceiver(){
 
 StatusOr<SendRegion> WriteSender::GetMemoryRegion(size_t size){
   SendRegion reg;
-  auto buf_s = this->alloc_->Alloc(size + 2*sizeof(uint32_t)); // Add 2 bytes for legth of buffer
+  auto buf_s = this->alloc_->Alloc(size + 2*sizeof(uint32_t)); // Add 4 bytes for legth of buffer and CRC
   if (!buf_s.ok()){
     return buf_s.status();
   }
@@ -198,10 +202,165 @@ WriteConnection::~WriteConnection(){
   delete this->snd_;
 }
 
+/*
+ * Write Offset
+ */ 
+
+Status WriteOffsetReceiver::Close() {
+  auto stat = WriteReceiver::Close();
+  if (!stat.ok()){
+    return stat;
+  }
+  int ret = ibv_dereg_mr(this->tail_mr_);
+  if (ret) {
+    return Status(StatusCode::Internal, "error deregistering tail MR");
+  }
+  free(this->tail_mr_->addr);
+  return Status();
+};
+
+StatusOr<ReceiveRegion> WriteOffsetReceiver::Receive(){
+  ReceiveRegion reg;
+
+  uint32_t head_off = this->rbuf_->GetReadOff();
+  while(*this->tail_ == head_off){}
+
+  void *head = this->rbuf_->GetReadPtr();
+  uint32_t length = *(uint32_t *)head;
+  reg.addr = (void *)((size_t)head + sizeof(uint32_t));
+  reg.length = length - sizeof(uint32_t);
+  reg.context = 0;
+  this->rbuf_->Read(length);
+
+  return reg;
+
+
+}
+
+Status WriteOffsetReceiver::Free(ReceiveRegion reg){
+  uint32_t head = this->rbuf_->Free((void *)((char *)reg.addr - sizeof(uint32_t)));
+  this->ack_->Ack(head);
+  if ((head > this->acked_ && head - this->acked_ > this->max_unacked_)
+      || (head < this->acked_ && head + (this->length_ - this->acked_) > this->max_unacked_)){
+    auto stat = this->ack_->Flush();
+    if (!stat.ok()){
+      return stat;
+    }
+    this->acked_ = head;
+  }
+
+  return Status();
+}
+
+StatusOr<SendRegion> WriteOffsetSender::GetMemoryRegion(size_t size){
+  SendRegion reg;
+  auto buf_s = this->alloc_->Alloc(size + sizeof(uint32_t)); // Add 2 bytes for legth of buffer
+  if (!buf_s.ok()){
+    return buf_s.status();
+  }
+  auto buf = buf_s.value();
+  *(uint32_t *)buf.addr = buf.length;
+  reg.addr = (void *)((uint64_t)buf.addr + sizeof(uint32_t));
+  reg.length = size;
+  reg.lkey = buf.lkey;
+  reg.context = buf.context;
+  return reg;
+
+}
+
+Status WriteOffsetSender::Send(SendRegion reg){
+  uint32_t len = reg.length + sizeof(uint32_t);
+  auto addr_s = this->rbuf_->GetWriteAddr(len);
+  if (!addr_s.ok()){
+    auto head_s = this->ack_->Get();
+    if (!head_s.ok()){
+      return addr_s.status().Wrap(head_s.status().message());
+    }
+    this->rbuf_->UpdateHead(head_s.value());
+    addr_s = this->rbuf_->GetWriteAddr(len);
+    if (!addr_s.ok()){
+      return addr_s.status();
+    }
+  }
+  uint64_t addr = addr_s.value();
+  auto tail_s = this->rbuf_->GetNextTail(len);
+  if (!tail_s.ok()){
+    return tail_s.status();
+  }
+  uint32_t tail = tail_s.value();
+
+  struct ibv_sge sge_off;
+  sge_off.addr = (uintptr_t)&tail;
+  sge_off.length = sizeof(uint32_t);
+
+  struct ibv_send_wr wr_off, *bad;
+  wr_off.wr_id = 0;
+  wr_off.next = NULL;
+  wr_off.sg_list = &sge_off;
+  wr_off.num_sge = 1;
+  wr_off.opcode = IBV_WR_RDMA_WRITE;
+  wr_off.wr.rdma.remote_addr = this->tail_addr_;
+  wr_off.wr.rdma.rkey = this->tail_key_;
+  wr_off.send_flags = IBV_SEND_SIGNALED | IBV_SEND_INLINE;  
+
+
+  struct ibv_sge sge_data;
+  sge_data.addr = (size_t)reg.addr - sizeof(uint32_t);
+  sge_data.length = len;
+  sge_data.lkey = reg.lkey;
+
+  struct ibv_send_wr wr_data;
+  wr_data.wr_id = 1;
+  wr_data.next = &wr_off;
+  wr_data.sg_list = &sge_data;
+  wr_data.num_sge = 1;
+  wr_data.opcode = IBV_WR_RDMA_WRITE;
+  wr_data.wr.rdma.remote_addr = addr;
+  wr_data.wr.rdma.rkey = this->rbuf_->GetKey();
+  wr_data.send_flags = 0;  
+
+  auto stat = this->ep_->PostSendRaw(&wr_data, &bad);
+  if (!stat.ok()){
+    return stat;
+  }
+  
+  auto wc_s = this->ep_->PollSendCq();
+  if (!wc_s.ok()){
+    return wc_s.status();
+  }
+  this->rbuf_->Write(len);
+  return Status();
+}
+
+Status WriteOffsetSender::Send(std::vector<SendRegion> regions){
+  return Status(StatusCode::NotImplemented);
+}
+
+Status WriteOffsetSender::Free(SendRegion region){
+  memory::Region mr = memory::Region();
+  mr.addr = (void *)((size_t)region.addr - sizeof(uint32_t));
+  mr.length = region.length + sizeof(uint32_t);
+  mr.lkey = region.lkey;
+  mr.context = region.context;
+  return this->alloc_->Free(mr);
+}
+
+
+
+
 
 /*
  * WriteImm
  */ 
+
+
+Status WriteImmReceiver::Close() {
+  auto stat = WriteReceiver::Close();
+  if (!stat.ok()){
+    return stat;
+  }
+  return this->rq_->Close();
+};
 
 StatusOr<ReceiveRegion> WriteImmReceiver::Receive(){
   ReceiveRegion reg;
@@ -301,7 +460,7 @@ Status WriteImmSender::Free(SendRegion region){
  *  CONNECTION SETUP
  *
  */
-Status initReceiver(struct ibv_pd *pd, WriteOpts opts, ringbuffer::Buffer **rbuf, Acknowledger **ack){
+Status initReceiver(struct ibv_pd *pd, WriteOpts opts, ringbuffer::Buffer **rbuf, Acknowledger **ack, struct ibv_mr **metadata){
   switch (opts.acknowledger) {
     case kAcknowledgerRead:
       {
@@ -336,6 +495,13 @@ Status initReceiver(struct ibv_pd *pd, WriteOpts opts, ringbuffer::Buffer **rbuf
       }
     default:
       return Status(StatusCode::InvalidArgument, "unkown buffer option");
+  }
+  if (opts.sender == kSenderWriteOffset){
+    void *buf = calloc(1, sizeof(uint32_t));
+    *metadata = ibv_reg_mr(pd, buf, sizeof(uint32_t), IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE);
+    if (*metadata == nullptr){
+      return Status(StatusCode::Internal, "error " + std::to_string(errno) + " registering MR");
+    }
   }
   return Status();
 }
@@ -487,6 +653,8 @@ StatusOr<WriteSender *> WriteListener::AcceptSender(WriteOpts opts){
       return new WriteSender(ep, alloc, rbuf, ack);
     case kSenderWriteImm:
       return new WriteImmSender(ep, alloc, rbuf, ack);
+    case kSenderWriteOffset:
+      return new WriteOffsetSender(ep, alloc, rbuf, ack, *(uint64_t *)remote_conn_details->snd_ctx, remote_conn_details->snd_ctx[2]);
     default:
       return Status(StatusCode::InvalidArgument, "unkown sender option");
   }
@@ -501,15 +669,20 @@ StatusOr<WriteReceiver *> WriteListener::AcceptReceiver(WriteOpts opts){
 
   ringbuffer::Buffer *rbuf;
   Acknowledger *ack;
+  struct ibv_mr *metadata;
 
   conn_details local_conn_details;
   local_conn_details.opts = opts;
 
-  auto stat = initReceiver(this->listener_->GetPdP(), opts, &rbuf, &ack);
+  auto stat = initReceiver(this->listener_->GetPdP(), opts, &rbuf, &ack, &metadata);
   if (!stat.ok()){
     return stat.Wrap("Error initalizing connection details");
   }
   
+  if (metadata != nullptr){
+    *(uint64_t *)local_conn_details.snd_ctx = (uintptr_t)metadata->addr;
+    local_conn_details.snd_ctx[2] = metadata->lkey;
+  }
   local_conn_details.ack_ctx = ack->GetContext();
   local_conn_details.buffer_ctx = rbuf->GetContext();
 
@@ -547,6 +720,10 @@ StatusOr<WriteReceiver *> WriteListener::AcceptReceiver(WriteOpts opts){
         }
         return new WriteImmReceiver(ep, rbuf, ack, rq_s.value());
       }
+    case kSenderWriteOffset:
+      {
+      return new WriteOffsetReceiver(ep, rbuf, ack, metadata);
+      }
     default:
       return Status(StatusCode::InvalidArgument, "unkown sender option");
   }
@@ -562,11 +739,12 @@ StatusOr<WriteConnection *> WriteListener::AcceptConnection(WriteOpts opts){
 
   ringbuffer::Buffer *rbuf;
   Acknowledger *ack;
+  struct ibv_mr *metadata;
 
 
   memory::Allocator *alloc;
 
-  auto stat = initReceiver(this->listener_->GetPdP(), opts, &rbuf, &ack);
+  auto stat = initReceiver(this->listener_->GetPdP(), opts, &rbuf, &ack, &metadata);
   if (!stat.ok()){
     return stat.Wrap("Error initalizing receiver details");
   }
@@ -579,6 +757,10 @@ StatusOr<WriteConnection *> WriteListener::AcceptConnection(WriteOpts opts){
   local_conn_details.opts = opts;
   local_conn_details.ack_ctx = ack->GetContext();
   local_conn_details.buffer_ctx = rbuf->GetContext();
+  if (metadata != nullptr){
+    *(uint64_t *)local_conn_details.snd_ctx = (uintptr_t)metadata->addr;
+    local_conn_details.snd_ctx[2] = metadata->lkey;
+  }
 
   auto conn_opts = write_connection_opts;
   conn_opts.private_data = &local_conn_details;
@@ -612,6 +794,12 @@ StatusOr<WriteConnection *> WriteListener::AcceptConnection(WriteOpts opts){
           return rq_s.status().Wrap("error setting up receive queue");
         }
         rcvr = new WriteImmReceiver(ep, rbuf, ack, rq_s.value());
+        break;
+      }
+    case kSenderWriteOffset:
+      {
+        rcvr = new WriteOffsetReceiver(ep, rbuf, ack, metadata);
+        break;
       }
     default:
       return Status(StatusCode::InvalidArgument, "unkown sender option");
@@ -637,6 +825,8 @@ StatusOr<WriteConnection *> WriteListener::AcceptConnection(WriteOpts opts){
       sndr = new WriteSender(ep, alloc, remote_rbuf, ackRcv);
     case kSenderWriteImm:
       sndr = new WriteImmSender(ep, alloc, remote_rbuf, ackRcv);
+    case kSenderWriteOffset:
+      sndr = new WriteOffsetSender(ep, alloc, remote_rbuf, ackRcv, *(uint64_t *)remote_conn_details->snd_ctx, remote_conn_details->snd_ctx[2]);
     default:
       return Status(StatusCode::InvalidArgument, "unkown sender option");
   }
@@ -706,6 +896,8 @@ StatusOr<WriteSender*> DialWriteSender(std::string ip, int port, WriteOpts opts)
       return new WriteSender(ep, alloc, rbuf, ack);
     case kSenderWriteImm:
       return new WriteImmSender(ep, alloc, rbuf, ack);
+    case kSenderWriteOffset:
+      return new WriteOffsetSender(ep, alloc, rbuf, ack, *(uint64_t *)remote_conn_details->snd_ctx, remote_conn_details->snd_ctx[2]);
     default:
       return Status(StatusCode::InvalidArgument, "unkown sender option");
   }
@@ -719,6 +911,7 @@ StatusOr<WriteReceiver*> DialWriteReceiver(std::string ip, int port, WriteOpts o
 
   ringbuffer::Buffer *rbuf;
   Acknowledger *ack;
+  struct ibv_mr *metadata;
 
   conn_details local_conn_details;
   local_conn_details.opts = opts;
@@ -731,13 +924,17 @@ StatusOr<WriteReceiver*> DialWriteReceiver(std::string ip, int port, WriteOpts o
   }
   endpoint::Endpoint *ep = ep_s.value();
   
-  auto stat = initReceiver(ep->GetPdP(), opts, &rbuf, &ack);
+  auto stat = initReceiver(ep->GetPdP(), opts, &rbuf, &ack, &metadata);
   if (!stat.ok()){
     return stat.Wrap("Error initalizing connection details");
   }
   
   local_conn_details.ack_ctx = ack->GetContext();
   local_conn_details.buffer_ctx = rbuf->GetContext();
+  if (metadata != nullptr){
+    *(uint64_t *)local_conn_details.snd_ctx = (uintptr_t)metadata->addr;
+    local_conn_details.snd_ctx[2] = metadata->lkey;
+  }
 
   conn_opts.private_data = &local_conn_details;
   conn_opts.private_data_len = sizeof(local_conn_details);
@@ -761,6 +958,8 @@ StatusOr<WriteReceiver*> DialWriteReceiver(std::string ip, int port, WriteOpts o
   switch (opts.sender) {
     case kSenderWrite:
       return new WriteReceiver(ep, rbuf, ack);
+    case kSenderWriteOffset:
+      return new WriteOffsetReceiver(ep, rbuf, ack, metadata);
     case kSenderWriteImm:
       {
         auto rq_s = endpoint::GetReceiveQueue(ep, 8, inflight); 
@@ -785,6 +984,7 @@ StatusOr<WriteConnection*> DialWriteConnection(std::string ip, int port, WriteOp
 
   ringbuffer::Buffer *rbuf;
   Acknowledger *ack;
+  struct ibv_mr *metadata;
 
   memory::Allocator *alloc;
 
@@ -796,7 +996,7 @@ StatusOr<WriteConnection*> DialWriteConnection(std::string ip, int port, WriteOp
   }
   endpoint::Endpoint *ep = ep_s.value();
 
-  auto stat = initReceiver(ep->GetPdP(), opts, &rbuf, &ack);
+  auto stat = initReceiver(ep->GetPdP(), opts, &rbuf, &ack, &metadata);
   if (!stat.ok()){
     return stat.Wrap("Error initalizing receiver details");
   }
@@ -809,6 +1009,10 @@ StatusOr<WriteConnection*> DialWriteConnection(std::string ip, int port, WriteOp
   local_conn_details.opts = opts;
   local_conn_details.ack_ctx = ack->GetContext();
   local_conn_details.buffer_ctx = rbuf->GetContext();
+  if (metadata != nullptr){
+    *(uint64_t *)local_conn_details.snd_ctx = (uintptr_t)metadata->addr;
+    local_conn_details.snd_ctx[2] = metadata->lkey;
+  }
 
   conn_opts.private_data = &local_conn_details;
   conn_opts.private_data_len = sizeof(local_conn_details);
@@ -840,6 +1044,12 @@ StatusOr<WriteConnection*> DialWriteConnection(std::string ip, int port, WriteOp
           return rq_s.status().Wrap("error setting up receive queue");
         }
         rcvr = new WriteImmReceiver(ep, rbuf, ack, rq_s.value());
+        break;
+      }
+    case kSenderWriteOffset:
+      {
+        rcvr = new WriteOffsetReceiver(ep, rbuf, ack, metadata);
+        break;
       }
     default:
       return Status(StatusCode::InvalidArgument, "unkown sender option");
@@ -865,6 +1075,8 @@ StatusOr<WriteConnection*> DialWriteConnection(std::string ip, int port, WriteOp
       sndr = new WriteSender(ep, alloc, remote_rbuf, ackRcv);
     case kSenderWriteImm:
       sndr = new WriteImmSender(ep, alloc, remote_rbuf, ackRcv);
+    case kSenderWriteOffset:
+      sndr = new WriteOffsetSender(ep, alloc, remote_rbuf, ackRcv, *(uint64_t *)remote_conn_details->snd_ctx, remote_conn_details->snd_ctx[2]);
     default:
       return Status(StatusCode::InvalidArgument, "unkown sender option");
   }
