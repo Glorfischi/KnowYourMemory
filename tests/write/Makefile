@@ -2,7 +2,7 @@ PREFIX = ../..
 
 CC = g++
 LDFLAGS =  -libverbs -lpthread -lrdmacm
-CFLAGS += -O0 -Wall -I$(PREFIX)/include  -I$(PREFIX)/src -I$(PREFIX)/external
+CFLAGS += -g -Wall -I$(PREFIX)/include  -I$(PREFIX)/src -I$(PREFIX)/external
 CXXFLAGS = $(CFLAGS)
 
 BINDIR = ./bin

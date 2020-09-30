@@ -35,6 +35,7 @@ cxxopts::ParseResult parse(int argc, char* argv[]) {
       ("n,iters",  "Number of exchanges" , cxxopts::value<int>()->default_value("1000"))
       ("s,size",  "Size of message to exchange", cxxopts::value<int>()->default_value("1024"))
       ("batch",  "Number of messages to send in a single batch. Only relevant for bandwidth benchmark", cxxopts::value<int>()->default_value("20"))
+      ("out", "filename to output measurements", cxxopts::value<std::string>()->default_value(""))
      ;
  
     auto result = options.parse(argc, argv);
@@ -66,6 +67,8 @@ int main(int argc, char* argv[]) {
   std::string ip = flags["address"].as<std::string>();  
   std::string src = flags["source"].as<std::string>();  
 
+  std::string filename = flags["out"].as<std::string>();  
+
 
   bool bw = flags["bw"].as<bool>();  
   bool lat = flags["lat"].as<bool>();  
@@ -80,7 +83,7 @@ int main(int argc, char* argv[]) {
   bool server = flags["server"].as<bool>();  
   bool client = flags["client"].as<bool>();  
 
-  std::vector<float> latency_m;
+  std::vector<float> measurements;
 
   std::cout << "#### Testing SendReceive ####" << std::endl;
 
@@ -107,41 +110,32 @@ int main(int argc, char* argv[]) {
         std::cerr << "Error accepting for send_receive " << conn_s.status().message() << std::endl;
         return 1;
       }
-
-      // Create a cpu_set_t object representing a set of CPUs. Clear it and mark only CPU i as set.
-      cpu_set_t cpuset;
-      CPU_ZERO(&cpuset);
-      CPU_SET(0, &cpuset);
-      int rc = pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
-      if (rc != 0) {
-        std::cerr << "Error calling pthread_setaffinity_np: " << rc << "\n";
-      }
+      
       conn = conn_s.value();
 
       if (bw) {
-        std::vector<float> bw_bps;
-        auto stat = test_bw_batch_recv(conn, count, size, batch, &bw_bps);
+        auto stat = test_bw_batch_recv(conn, count, size, batch, &measurements);
         if (!stat.ok()){
           std::cerr << "Error running benchmark: " << stat << std::endl;
           return 1;
         }
-        auto n = bw_bps.size();
-        std::sort (bw_bps.begin(), bw_bps.end());
+        auto n = measurements.size();
+        std::vector<float> sorted = measurements;
+        std::sort (sorted.begin(), sorted.end());
         int q025 = (int)(n*0.025);
         int q500 = (int)(n*0.5);
         int q975 = (int)(n*0.975);
         float sum = 0;
-        for (float b : bw_bps){
+        for (float b : sorted){
           sum += b;
         }
         std::cout << "## Bandwidth Receiver (MB/s)" << std::endl;
         std::cout << "mean: " << (sum/n)/(1024*1024) << std::endl;
         std::cout << "q025" << "\t" << "q50" << "\t" << "q975" << std::endl;
-        std::cout << bw_bps[q025]/(1024*1024) << "\t" << bw_bps[q500]/(1024*1024) << "\t" << bw_bps[q975]/(1024*1024) << std::endl;
+        std::cout << sorted[q025]/(1024*1024) << "\t" << sorted[q500]/(1024*1024) << "\t" << sorted[q975]/(1024*1024) << std::endl;
 
       } else if (lat) {
-        std::vector<float> latency_us;
-        auto stat = test_lat_recv(conn, count, &latency_us);
+        auto stat = test_lat_recv(conn, count, &measurements);
         if (!stat.ok()){
           std::cerr << "Error running benchmark: " << stat << std::endl;
           return 1;
@@ -155,10 +149,11 @@ int main(int argc, char* argv[]) {
       }
       conn->Close();
       ln->Close();
-      return 0;
   }
 
   if(client){
+    std::chrono::milliseconds timespan(2000); // If we start the server at the same time we will wait a little
+    std::this_thread::sleep_for(timespan);
     auto conn_s = kym::connection::DialSendReceive(ip, 9999, src);
     if (!conn_s.ok()){
       std::cerr << "Error dialing send_receive co_nection" << conn_s.status().message() << std::endl;
@@ -166,100 +161,86 @@ int main(int argc, char* argv[]) {
     }
     kym::connection::SendReceiveConnection *conn = conn_s.value();
 
-    // Create a cpu_set_t object representing a set of CPUs. Clear it and mark only CPU i as set.
-    cpu_set_t cpuset;
-    CPU_ZERO(&cpuset);
-    CPU_SET(1, &cpuset);
-    int rc = pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
-    if (rc != 0) {
-      std::cerr << "Error calling pthread_setaffinity_np: " << rc << "\n";
-      return 1;
-    }
-
     if (bw) {
       std::chrono::milliseconds timespan(1000); // This is because of a race condition...
       std::this_thread::sleep_for(timespan);
 
-      std::vector<float> bw_bps;
-      auto stat = test_bw_batch_send(conn, count, size, batch, &bw_bps);
+      auto stat = test_bw_batch_send(conn, count, size, batch, &measurements);
       if (!stat.ok()){
         std::cerr << "Error running benchmark: " << stat << std::endl;
         return 1;
       }
-       auto n = bw_bps.size();
-      std::sort (bw_bps.begin(), bw_bps.end());
+      auto n = measurements.size();
+      std::vector<float> sorted = measurements;
+      std::sort (sorted.begin(), sorted.end());
       int q025 = (int)(n*0.025);
       int q500 = (int)(n*0.5);
       int q975 = (int)(n*0.975);
       float sum = 0;
-      for (float b : bw_bps){
+      for (float b : sorted){
         sum += b;
       }
       std::cout << "## Bandwidth Sender (MB/s)" << std::endl;
       std::cout << "mean: " << (sum/n)/(1024*1024) << std::endl;
       std::cout << "q025" << "\t" << "q50" << "\t" << "q975" << std::endl;
-      std::cout << bw_bps[q025]/(1024*1024) << "\t" << bw_bps[q500]/(1024*1024) << "\t" << bw_bps[q975]/(1024*1024) << std::endl;
+      std::cout << sorted[q025]/(1024*1024) << "\t" << sorted[q500]/(1024*1024) << "\t" << sorted[q975]/(1024*1024) << std::endl;
 
     } else if (lat) {
       std::chrono::milliseconds timespan(1000); // This is because of a race condition...
       std::this_thread::sleep_for(timespan);
 
-      auto t = std::time(nullptr);
-      auto tm = *std::localtime(&t);
-      std::stringstream tmstream;
-      tmstream << std::put_time(&tm, "%Y_%m_%d_%H_%M");
-      std::string tmstr = tmstream.str();
+      measurements.reserve(count);
 
-      std::vector<float> latency_us;
-      latency_us.reserve(count);
-
-      auto stat = test_lat_send(conn, count, size, &latency_us);
+      auto stat = test_lat_send(conn, count, size, &measurements);
       if (!stat.ok()){
         std::cerr << "Error running benchmark: " << stat << std::endl;
         return 1;
       }
-      
-
-      std::ofstream lat_file("data/sr_test_lat_send_N" + std::to_string(count) + "_S" + std::to_string(size) + "_" + tmstr + ".csv");
-      for (float f : latency_us){
-        lat_file << f << "\n";
-      }
-      lat_file.close();
 
       auto n = count;
-      std::sort (latency_us.begin(), latency_us.end());
+      std::vector<float> sorted = measurements;
+      std::sort (sorted.begin(), sorted.end());
       int q025 = (int)(n*0.025);
       int q500 = (int)(n*0.5);
       int q975 = (int)(n*0.975);
       std::cout << "## Latency Sender" << std::endl;
       std::cout << "q025" << "\t" << "q50" << "\t" << "q975" << std::endl;
-      std::cout << latency_us[q025] << "\t" << latency_us[q500] << "\t" << latency_us[q975] << std::endl;
+      std::cout << sorted[q025] << "\t" << sorted[q500] << "\t" << sorted[q975] << std::endl;
     } else {
       // pingpong
       std::chrono::milliseconds timespan(1000); // This is because of a race condition...
       std::this_thread::sleep_for(timespan);
 
-      std::vector<float> latency_us;
-      latency_us.reserve(count);
+      measurements.reserve(count);
 
-      auto stat = test_lat_ping(conn, conn, count, size, &latency_us);
+      auto stat = test_lat_ping(conn, conn, count, size, &measurements);
       if (!stat.ok()){
         std::cerr << "Error running benchmark: " << stat << std::endl;
         return 1;
       }
       
       auto n = count;
-      std::sort (latency_us.begin(), latency_us.end());
+      std::vector<float> sorted = measurements;
+      std::sort (sorted.begin(), sorted.end());
       int q025 = (int)(n*0.025);
       int q500 = (int)(n*0.5);
       int q975 = (int)(n*0.975);
       std::cout << "## Ping Pong latency" << std::endl;
       std::cout << "q025" << "\t" << "q50" << "\t" << "q975" << std::endl;
-      std::cout << latency_us[q025] << "\t" << latency_us[q500] << "\t" << latency_us[q975] << std::endl;
+      std::cout << sorted[q025] << "\t" << sorted[q500] << "\t" << sorted[q975] << std::endl;
     }
     conn->Close();
-    return 0;
   }
+
+  if (!filename.empty()){
+    std::cout << "writing" << std::endl;
+    std::ofstream file(filename);
+    for (float f : measurements){
+      file << f << "\n";
+    }
+    file.close();
+  }
+
 
     
   return 0;

@@ -51,15 +51,18 @@ typedef union {
 
 class WriteReceiver : public Receiver {
   public:
+    WriteReceiver(endpoint::Endpoint *ep, bool owns_ep, ringbuffer::Buffer *rbuf, Acknowledger *ack);
     WriteReceiver(endpoint::Endpoint *ep, ringbuffer::Buffer *rbuf, Acknowledger *ack);
     ~WriteReceiver();
 
     Status Close();
 
+
     StatusOr<ReceiveRegion> Receive();
     Status Free(ReceiveRegion);
   protected:
     endpoint::Endpoint *ep_;
+    bool owns_ep_;
     ringbuffer::Buffer *rbuf_;
     Acknowledger *ack_;
 
@@ -71,10 +74,13 @@ class WriteReceiver : public Receiver {
 class WriteSender : public Sender, public BatchSender {
   public:
     WriteSender(endpoint::Endpoint *ep, memory::Allocator *alloc, ringbuffer::RemoteBuffer *rbuf, AckReceiver *ack) 
-      : ep_(ep), alloc_(alloc), rbuf_(rbuf), ack_(ack) {};
+      : ep_(ep), owns_ep_(true), alloc_(alloc), rbuf_(rbuf), ack_(ack) {};
+    WriteSender(endpoint::Endpoint *ep, bool owns_ep, memory::Allocator *alloc, ringbuffer::RemoteBuffer *rbuf, AckReceiver *ack) 
+      : ep_(ep), owns_ep_(owns_ep), alloc_(alloc), rbuf_(rbuf), ack_(ack) {};
     ~WriteSender();
 
     Status Close();
+
 
     StatusOr<SendRegion> GetMemoryRegion(size_t size);
     Status Send(SendRegion region);
@@ -82,6 +88,7 @@ class WriteSender : public Sender, public BatchSender {
     Status Free(SendRegion region);
   protected:
     endpoint::Endpoint *ep_;
+    bool owns_ep_;
     memory::Allocator *alloc_;
     ringbuffer::RemoteBuffer *rbuf_;
     AckReceiver *ack_;
@@ -91,6 +98,8 @@ class WriteOffsetReceiver : public WriteReceiver {
   public:
     WriteOffsetReceiver(endpoint::Endpoint *ep, ringbuffer::Buffer *rbuf, Acknowledger *ack, struct ibv_mr *tail_mr)
       : WriteReceiver(ep, rbuf, ack), tail_mr_(tail_mr), tail_((volatile uint32_t *)tail_mr->addr) {};
+    WriteOffsetReceiver(endpoint::Endpoint *ep, bool owns_ep, ringbuffer::Buffer *rbuf, Acknowledger *ack, struct ibv_mr *tail_mr)
+      : WriteReceiver(ep, owns_ep, rbuf, ack), tail_mr_(tail_mr), tail_((volatile uint32_t *)tail_mr->addr) {};
     Status Close();
 
     StatusOr<ReceiveRegion> Receive();
@@ -105,6 +114,10 @@ class WriteOffsetSender : public WriteSender {
     WriteOffsetSender(endpoint::Endpoint *ep, memory::Allocator *alloc, ringbuffer::RemoteBuffer *rbuf, AckReceiver *ack, 
         uint64_t tail_addr, uint32_t tail_key) 
       : WriteSender(ep, alloc, rbuf, ack), tail_addr_(tail_addr), tail_key_(tail_key) {};
+    WriteOffsetSender(endpoint::Endpoint *ep, bool owns_ep, memory::Allocator *alloc, ringbuffer::RemoteBuffer *rbuf, 
+        AckReceiver *ack, uint64_t tail_addr, uint32_t tail_key) 
+      : WriteSender(ep, owns_ep, alloc, rbuf, ack), tail_addr_(tail_addr), tail_key_(tail_key) {};
+
 
     StatusOr<SendRegion> GetMemoryRegion(size_t size);
     Status Send(SendRegion region);
@@ -121,6 +134,8 @@ class WriteImmReceiver : public WriteReceiver {
   public:
     WriteImmReceiver(endpoint::Endpoint *ep, ringbuffer::Buffer *rbuf, Acknowledger *ack, endpoint::IReceiveQueue *rq)
       : WriteReceiver(ep, rbuf, ack), rq_(rq) {};
+    WriteImmReceiver(endpoint::Endpoint *ep, bool owns_ep, ringbuffer::Buffer *rbuf, Acknowledger *ack, endpoint::IReceiveQueue *rq)
+      : WriteReceiver(ep, owns_ep, rbuf, ack), rq_(rq) {};
     Status Close();
     StatusOr<ReceiveRegion> Receive();
     Status Free(ReceiveRegion);
@@ -132,6 +147,9 @@ class WriteImmSender : public WriteSender {
   public:
     WriteImmSender(endpoint::Endpoint *ep, memory::Allocator *alloc, ringbuffer::RemoteBuffer *rbuf, AckReceiver *ack) 
       : WriteSender(ep, alloc, rbuf, ack) {};
+    WriteImmSender(endpoint::Endpoint *ep, bool owns_ep, memory::Allocator *alloc, ringbuffer::RemoteBuffer *rbuf, AckReceiver *ack) 
+      : WriteSender(ep, owns_ep, alloc, rbuf, ack) {};
+
 
     StatusOr<SendRegion> GetMemoryRegion(size_t size);
     Status Send(SendRegion region);
@@ -142,7 +160,10 @@ class WriteImmSender : public WriteSender {
 class WriteConnection : public Connection {
   public:
     WriteConnection(WriteSender *snd, WriteReceiver *rcv) 
-      : snd_(snd), rcv_(rcv) {};
+      : ep_(nullptr), snd_(snd), rcv_(rcv) {};
+    WriteConnection(endpoint::Endpoint *ep, WriteSender *snd, WriteReceiver *rcv) 
+      : ep_(ep), snd_(snd), rcv_(rcv) {};
+
     ~WriteConnection();
 
     Status Close();
@@ -155,6 +176,7 @@ class WriteConnection : public Connection {
     Status Send(std::vector<SendRegion> regions){return this->snd_->Send(regions);};
     Status Free(SendRegion region){return this->snd_->Free(region);};
   private:
+    endpoint::Endpoint *ep_;
     WriteSender *snd_;
     WriteReceiver *rcv_;
 };

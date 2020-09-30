@@ -28,6 +28,7 @@ cxxopts::ParseResult parse(int argc, char* argv[]) {
     options.add_options()
       ("bw", "Whether to test bandwidth", cxxopts::value<bool>())
       ("lat", "Whether to test latency", cxxopts::value<bool>())
+      ("pingpong", "Whether to test pingpong latency", cxxopts::value<bool>())
       ("client", "Whether to as client only", cxxopts::value<bool>())
       ("server", "Whether to as server only", cxxopts::value<bool>())
       ("i,address", "IP address to connect to", cxxopts::value<std::string>())
@@ -37,6 +38,7 @@ cxxopts::ParseResult parse(int argc, char* argv[]) {
       ("batch",  "Number of messages to send in a single batch. Only relevant for bandwidth benchmark", cxxopts::value<int>()->default_value("20"))
       ("sender", "Write sender type (write, writeImm, writeOff)", cxxopts::value<std::string>()->default_value("write"))
       ("ack", "Write acknowledger type (read, send)", cxxopts::value<std::string>()->default_value("write"))
+      ("out", "filename to output measurements", cxxopts::value<std::string>()->default_value(""))
      ;
  
     auto result = options.parse(argc, argv);
@@ -46,7 +48,7 @@ cxxopts::ParseResult parse(int argc, char* argv[]) {
       exit(1);
     }
 
-    if (!result.count("lat") && !result.count("bw")) {
+    if (!result.count("lat") && !result.count("bw") && !result.count("pingpong")) {
       std::cerr << "Either perform latency or bandwidth benchmark" << std::endl;
       std::cerr << options.help({""}) << std::endl;
       exit(1);
@@ -67,6 +69,7 @@ int main(int argc, char* argv[]) {
   std::string ip = flags["address"].as<std::string>();  
   std::string src = flags["source"].as<std::string>();  
 
+  std::string filename = flags["out"].as<std::string>();  
 
   std::string sender = flags["sender"].as<std::string>();  
   std::string ack = flags["ack"].as<std::string>();  
@@ -102,6 +105,8 @@ int main(int argc, char* argv[]) {
   opts.buffer = kym::connection::kBufferMagic;
 
 
+
+  std::vector<float> measurements;
   if (server){
     auto ln_s = kym::connection::ListenWrite(ip, 9999);
     if (!ln_s.ok()){
@@ -109,70 +114,134 @@ int main(int argc, char* argv[]) {
       return 1;
     }
     kym::connection::WriteListener *ln = ln_s.value();
+    kym::connection::WriteConnection *conn;
+    kym::connection::WriteReceiver *rcv = 0;
+    kym::connection::WriteSender *snd = 0;
 
-    auto conn_s = ln->AcceptReceiver(opts);
-    if (!conn_s.ok()){
-      std::cerr << "Error Accepting  " << conn_s.status() << std::endl;
-      return 1;
+    if (opts.acknowledger == kym::connection::kAcknowledgerSend && opts.sender == kym::connection::kSenderWriteImm){
+      auto rcv_s = ln->AcceptReceiver(opts);
+      if (!rcv_s.ok()){
+        std::cerr << "Error Accepting  " << rcv_s.status() << std::endl;
+        return 1;
+      }
+      rcv = rcv_s.value();
+
+
+      auto snd_s = ln->AcceptSender(opts);
+      if (!snd_s.ok()){
+        std::cerr << "Error Accepting  " << snd_s.status() << std::endl;
+        return 1;
+      }
+      snd = snd_s.value();
+      conn = new kym::connection::WriteConnection(snd, rcv);
+    } else {
+      auto conn_s = ln->AcceptConnection(opts);
+      if (!conn_s.ok()){
+        std::cerr << "Error Accepting  " << conn_s.status() << std::endl;
+        return 1;
+      }
+      conn = conn_s.value();
     }
-    kym::connection::WriteReceiver *rcv = conn_s.value();
-
-    std::vector<float> measurements;
     kym::Status stat;
     if (lat) {
-      stat = test_lat_recv(rcv, count, &measurements);
+      stat = test_lat_recv(conn, count, &measurements);
     } else if (bw) {
-      stat = test_bw_recv(rcv, count, size, &measurements);
+      stat = test_bw_recv(conn, count, size, &measurements);
+    } else {
+      stat = test_lat_pong(conn, conn, count, size);
     }
     if (!stat.ok()){
       std::cerr << "Error running benchmark: " << stat << std::endl;
       return 1;
     }
 
-    rcv->Close();
-    delete rcv;
+
+    if (snd != nullptr){
+      rcv->Close();
+      snd->Close();
+    } else {
+      conn->Close();
+    }
+    delete conn;
     ln->Close();
     delete ln;
-    return 0;
   }
 
   if(client){
-    auto conn_s = kym::connection::DialWriteSender(ip, 9999, opts);
-    if (!conn_s.ok()){
-      std::cerr << "Error Dialing  " << conn_s.status() << std::endl;
-      return 1;
-    }
-    kym::connection::WriteSender *snd = conn_s.value();
     std::chrono::milliseconds timespan(1000); // Make sure we received all acks
     std::this_thread::sleep_for(timespan);
-    std::vector<float> measurements;
+    kym::connection::WriteConnection *conn;
+    kym::connection::WriteReceiver *rcv = 0;
+    kym::connection::WriteSender *snd = 0;
+
+
+    if (opts.acknowledger == kym::connection::kAcknowledgerSend && opts.sender == kym::connection::kSenderWriteImm){
+      auto snd_s = kym::connection::DialWriteSender(ip, 9999, opts);
+      if (!snd_s.ok()){
+        std::cerr << "Error Dialing  " << snd_s.status() << std::endl;
+        return 1;
+      }
+      snd = snd_s.value();
+      auto rcv_s = kym::connection::DialWriteReceiver(ip, 9999, opts);
+      if (!rcv_s.ok()){
+        std::cerr << "Error Dialing  " << rcv_s.status() << std::endl;
+        return 1;
+      }
+      rcv = rcv_s.value();
+
+      conn = new kym::connection::WriteConnection(snd, rcv);
+    } else {
+      auto conn_s = kym::connection::DialWriteConnection(ip, 9999, opts);
+      if (!conn_s.ok()){
+        std::cerr << "Error Dialing  " << conn_s.status() << std::endl;
+        return 1;
+      }
+      conn = conn_s.value();
+    }
+    std::this_thread::sleep_for(timespan);
     kym::Status stat;
     if (lat) {
-      stat = test_lat_send(snd, count, size, &measurements);
+      stat = test_lat_send(conn, count, size, &measurements);
       std::cout << "## Latency Sender" << std::endl;
     } else if (bw) {
-      stat = test_bw_send(snd, count, size, &measurements);
+      stat = test_bw_send(conn, count, size, &measurements);
       std::cout << "## Bandwith Sender" << std::endl;
+    } else {
+      stat = test_lat_ping(conn, conn, count, size, &measurements);
+      std::cout << "## Pingpong Sender" << std::endl;
     }
     if (!stat.ok()){
       std::cerr << "Error running benchmark: " << stat << std::endl;
       return 1;
     } 
     std::this_thread::sleep_for(timespan);
-    snd->Close();
-    delete snd;
-    auto n = count;
-    std::sort (measurements.begin(), measurements.end());
-    int q025 = (int)(n*0.025);
-    int q500 = (int)(n*0.5);
-    int q975 = (int)(n*0.975);
-    std::cout << "q025" << "\t" << "q50" << "\t" << "q975" << std::endl;
-    std::cout << measurements[q025] << "\t" << measurements[q500] << "\t" << measurements[q975] << std::endl;
-
+    if (snd != nullptr){
+      snd->Close();
+      rcv->Close();
+    } else {
+      conn->Close();
+    }
+    delete conn;
+  }
+  
+  if (measurements.size() == 0){
     return 0;
   }
+  if (!filename.empty()){
+    std::ofstream file(filename);
+    for (float f : measurements){
+      file << f << "\n";
+    }
+    file.close();
+  }
 
-    
+  auto n = count;
+  std::sort (measurements.begin(), measurements.end());
+  int q025 = (int)(n*0.025);
+  int q500 = (int)(n*0.5);
+  int q975 = (int)(n*0.975);
+  std::cout << "q025" << "\t" << "q50" << "\t" << "q975" << std::endl;
+  std::cout << measurements[q025] << "\t" << measurements[q500] << "\t" << measurements[q975] << std::endl;
   return 0;
 }
  

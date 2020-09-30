@@ -279,6 +279,7 @@ Status Endpoint::PostRecv(uint64_t ctx, uint32_t lkey, void *addr, size_t size){
 
 StatusOr<ibv_wc> Endpoint::PollRecvCq(){
   struct ibv_wc wc;
+
   while(ibv_poll_cq(this->id_->qp->recv_cq, 1, &wc) == 0){}
   if (wc.status){
     // TODO(Fischi) Map error codes
@@ -353,6 +354,8 @@ StatusOr<Endpoint *> Listener::Accept(Options opts){
     return Status(StatusCode::Internal, "accept: error " + std::to_string(ret) + " accepting connection");
   }
   conn_id->srq = opts.qp_attr.srq;
+
+  
   
   return new Endpoint(conn_id, private_data, private_data_len);
 }

@@ -80,7 +80,7 @@ kym::Status test_lat_send(kym::connection::Sender *snd, int count, int size, std
   }
   auto buf = buf_s.value();
   for(int i = 0; i<count; i++){
-    // std::cout << i << std::endl;
+    //std::cout << i << std::endl;
     *(int *)buf.addr = i;
     auto start = std::chrono::high_resolution_clock::now();
     auto send_s = snd->Send(buf);
