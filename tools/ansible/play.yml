@@ -1,0 +1,28 @@
+---
+- hosts: rxe
+  roles:
+    - rxe
+
+- hosts: roce
+  roles:
+    - roce
+
+- hosts: all
+  tasks:
+    - name: Install build requirements
+      become: true
+      package:
+        name: 
+          - gcc
+          - make
+          - g++
+        state: latest
+
+- hosts: all
+  tasks:
+    - name: Install dev tools 
+      become: true
+      package:
+        name: 
+          - vim
+        state: latest

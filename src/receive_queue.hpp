@@ -10,7 +10,7 @@
 #ifndef KNY_RECEIVE_QUEUE_HPP_
 #define KNY_RECEIVE_QUEUE_HPP_
 
-#include <bits/stdint-uintn.h>
+#include <cstdint>
 #include <memory>
 #include <stddef.h>
 
@@ -27,13 +27,19 @@ namespace endpoint {
 /*
  * Common interface
  */
+struct mr {
+  void		    *addr;
+	size_t			length;
+};
+
 class IReceiveQueue {
   public:
+    virtual ~IReceiveQueue() = default;
     // Cleanup of receive buffers
     virtual Status Close() = 0;
 
     // Returns the MR corresponding to the work request id of a receive completion event.
-    virtual struct ibv_mr *GetMR(uint32_t wr_id) = 0;
+    virtual struct mr GetMR(uint32_t wr_id) = 0;
     // Reposts the MR corresponding to the work request id of a receive completion event.
     virtual Status PostMR(uint32_t wr_id) = 0;
 };
@@ -44,18 +50,19 @@ class IReceiveQueue {
  */
 class ReceiveQueue : public IReceiveQueue {
   public:
-    ReceiveQueue(Endpoint *ep, std::vector<ibv_mr*> mrs): ep_(ep), mrs_(mrs){}; 
+    ReceiveQueue(Endpoint *ep, ibv_mr* mr, size_t transfer_size): ep_(ep), mr_(mr), transfer_size_(transfer_size){}; 
     ~ReceiveQueue() = default;
 
     Status Close();
 
-    struct ibv_mr *GetMR(uint32_t wr_id);
+    struct mr GetMR(uint32_t wr_id);
     Status PostMR(uint32_t wr_id);
   private:
     Endpoint *ep_;
-    std::vector<ibv_mr*> mrs_;
+    ibv_mr* mr_;
+    size_t transfer_size_;
 };
-StatusOr<std::unique_ptr<ReceiveQueue>> GetReceiveQueue(Endpoint *ep, size_t transfer_size, size_t inflight);
+StatusOr<ReceiveQueue *> GetReceiveQueue(Endpoint *ep, size_t transfer_size, size_t inflight);
 
 
 
@@ -64,20 +71,21 @@ StatusOr<std::unique_ptr<ReceiveQueue>> GetReceiveQueue(Endpoint *ep, size_t tra
  */
 class SharedReceiveQueue : public IReceiveQueue {
   public:
-    SharedReceiveQueue(struct ibv_srq *srq, std::vector<ibv_mr*> mrs): srq_(srq), mrs_(mrs){}; 
+    SharedReceiveQueue(struct ibv_srq *srq, ibv_mr* mr, size_t transfer_size): srq_(srq), mr_(mr), transfer_size_(transfer_size){}; 
     ~SharedReceiveQueue() = default;
 
     Status Close();
 
-    struct ibv_mr *GetMR(uint32_t wr_id);
+    struct mr GetMR(uint32_t wr_id);
     Status PostMR(uint32_t wr_id);
 
     struct ibv_srq *GetSRQ();
   private:
     struct ibv_srq *srq_;
-    std::vector<ibv_mr*> mrs_;
+    ibv_mr* mr_;
+    size_t transfer_size_;
 };
-StatusOr<std::shared_ptr<SharedReceiveQueue>> GetSharedReceiveQueue(struct ibv_pd pd, size_t transfer_size, size_t inflight);
+StatusOr<SharedReceiveQueue *> GetSharedReceiveQueue(struct ibv_pd pd, size_t transfer_size, size_t inflight);
 
 
 

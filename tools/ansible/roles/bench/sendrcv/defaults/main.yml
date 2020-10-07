@@ -1,0 +1,7 @@
+---
+bench_type: pingpong
+bench_count: 1000000
+bench_srq: false
+
+bench_msg_size: 16
+bench_batch_size: 20

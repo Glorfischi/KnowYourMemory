@@ -27,6 +27,8 @@ struct Region {
 
 class Allocator {
   public:
+    virtual ~Allocator() = default;
+
     virtual StatusOr<kym::memory::Region> Alloc(size_t size) = 0;
     virtual Status Free(kym::memory::Region region) = 0;
 };

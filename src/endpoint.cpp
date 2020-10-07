@@ -6,8 +6,9 @@
 
 #include "endpoint.hpp"
 
-#include <bits/stdint-uintn.h>
+#include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <iostream>
 #include <memory> // For smart pointers
 
@@ -21,11 +22,47 @@
 namespace kym {
 namespace endpoint {
 
+int get_rdma_addr(const char *src, const char *dst, const char *port,
+		  struct rdma_addrinfo *hints, struct rdma_addrinfo **rai){
+	struct rdma_addrinfo rai_hints, *res;
+	int ret;
+
+	if (hints->ai_flags & RAI_PASSIVE)
+		return rdma_getaddrinfo(src, port, hints, rai);
+
+	rai_hints = *hints;
+	if (src) {
+		rai_hints.ai_flags |= RAI_PASSIVE;
+		ret = rdma_getaddrinfo(src, NULL, &rai_hints, &res);
+		if (ret)
+			return ret;
+
+		rai_hints.ai_src_addr = res->ai_src_addr;
+		rai_hints.ai_src_len = res->ai_src_len;
+		rai_hints.ai_flags &= ~RAI_PASSIVE;
+	}
+
+	ret = rdma_getaddrinfo(dst, port, &rai_hints, rai);
+	if (src)
+		rdma_freeaddrinfo(res);
+
+	return ret;
+}
+
 
 Endpoint::Endpoint(rdma_cm_id *id) : id_(id){
+  // std::cout << "dev " << id->verbs->device->name << std::endl;
+  // std::cout << "id " << id <<  " pd " << id->pd << " qp " << id->qp << " verbs " << id->verbs << std::endl; 
+}
+Endpoint::Endpoint(rdma_cm_id* id, void *private_data, size_t private_data_len) : id_(id), private_data_(private_data), private_data_len_(private_data_len){
+  // std::cout << "dev " << id->verbs->device->name << std::endl;
+  // std::cout << "id " << id <<  " pd " << id->pd << " qp " << id->qp << " verbs " << id->verbs << std::endl; 
 }
 
 Endpoint::~Endpoint() {
+  if (this->private_data_){
+    free(this->private_data_);
+  }
   rdma_destroy_ep(this->id_);
 }
 
@@ -38,20 +75,44 @@ Status Endpoint::Close() {
   return Status();
 }
 
+ibv_context *Endpoint::GetContext(){
+  return this->id_->verbs;
+}
 ibv_pd Endpoint::GetPd(){
   return *this->id_->pd;
+}
+ibv_pd *Endpoint::GetPdP(){
+  return this->id_->pd;
+}
+ibv_srq *Endpoint::GetSRQ(){
+  return this->id_->srq;
+}
+struct ibv_cq *Endpoint::GetSendCQ(){
+  return this->id_->send_cq;
+}
+struct ibv_cq	*Endpoint::GetRecvCQ(){
+  return this->id_->recv_cq;
+}
+
+size_t Endpoint::GetConnectionInfo(void ** buf){
+  *buf = this->private_data_;
+  return this->private_data_len_;
 }
 
 Status Endpoint::PostSendRaw(struct ibv_send_wr *wr , struct ibv_send_wr **bad_wr){
   int ret = ibv_post_send(this->id_->qp, wr, bad_wr);
   if (ret) {
     // TODO(Fischi) Map error codes
+    perror("SEND Error");
     return Status(StatusCode::Internal, "error  " + std::to_string(ret) + " sending");
   }
   return Status();
 }
 
 Status Endpoint::PostSend(uint64_t ctx, uint32_t lkey, void *addr, size_t size){
+  return PostSend(ctx, lkey, addr, size, true);
+}
+Status Endpoint::PostSend(uint64_t ctx, uint32_t lkey, void *addr, size_t size, bool signaled){
   struct ibv_sge sge;
   sge.addr = (uintptr_t)addr;
   sge.length = size;
@@ -64,7 +125,7 @@ Status Endpoint::PostSend(uint64_t ctx, uint32_t lkey, void *addr, size_t size){
   wr.num_sge = 1;
   wr.opcode = IBV_WR_SEND;
 
-  wr.send_flags = IBV_SEND_SIGNALED;  
+  wr.send_flags = signaled ? IBV_SEND_SIGNALED : 0;  
   return this->PostSendRaw( &wr, &bad);
 }
 Status Endpoint::PostInline(uint64_t ctx, void *addr, size_t size){
@@ -156,12 +217,34 @@ Status Endpoint::PostWriteWithImmidate(uint64_t ctx, uint32_t lkey, void *addr, 
 
   return this->PostSendRaw(&wr, &bad);
 }
+
+Status Endpoint::PostFetchAndAdd(uint64_t ctx, uint64_t add, uint32_t lkey, uint64_t *addr, uint64_t remote_addr, uint32_t rkey){
+  struct ibv_sge sge;
+  sge.addr = (uintptr_t)addr;
+  sge.length = sizeof(uint64_t);
+  sge.lkey =  lkey;
+  struct ibv_send_wr wr, *bad;
+
+  wr.wr_id = ctx;
+  wr.next = NULL;
+  wr.sg_list = &sge;
+  wr.num_sge = 1;
+  wr.opcode = IBV_WR_ATOMIC_FETCH_AND_ADD;
+  wr.send_flags = IBV_SEND_SIGNALED;  
+  wr.wr.atomic.remote_addr = remote_addr;
+  wr.wr.atomic.rkey = rkey;
+  wr.wr.atomic.compare_add = add;
+
+  return this->PostSendRaw(&wr, &bad);
+}
+
 StatusOr<struct ibv_wc> Endpoint::PollSendCq(){
   struct ibv_wc wc;
   while(ibv_poll_cq(this->id_->qp->send_cq, 1, &wc) == 0){}
   if (wc.status){
     // TODO(Fischi) Map error codes
-    return Status(StatusCode::Internal, "error " + std::to_string(wc.status) +  " polling send cq \n" + std::string(ibv_wc_status_str(wc.status)));
+    return Status(StatusCode::Internal, "error " + std::to_string(wc.status) +  " polling send cq for wr " 
+        + std::to_string(wc.wr_id ) +" \n" + std::string(ibv_wc_status_str(wc.status)));
   }
   return wc;
 }
@@ -182,9 +265,13 @@ Status Endpoint::PostRecv(uint64_t ctx, uint32_t lkey, void *addr, size_t size){
   wr.sg_list = &sge;
   wr.num_sge = 1;
 
-  int ret = ibv_post_recv(this->id_->qp, &wr, &bad);
+  int ret;
+  if(this->id_->srq != nullptr){
+    ret = ibv_post_srq_recv(this->id_->srq, &wr, &bad);
+  } else {
+    ret = ibv_post_recv(this->id_->qp, &wr, &bad);
+  }
   if (ret) {
-    // TODO(Fischi) Map error codes
     return Status(StatusCode::Internal, "error posting receive buffer");
   }
   return Status();
@@ -192,6 +279,7 @@ Status Endpoint::PostRecv(uint64_t ctx, uint32_t lkey, void *addr, size_t size){
 
 StatusOr<ibv_wc> Endpoint::PollRecvCq(){
   struct ibv_wc wc;
+
   while(ibv_poll_cq(this->id_->qp->recv_cq, 1, &wc) == 0){}
   if (wc.status){
     // TODO(Fischi) Map error codes
@@ -215,16 +303,22 @@ StatusOr<ibv_wc> Endpoint::PollRecvCqOnce(){
 }
 
 
-StatusOr<std::unique_ptr<Endpoint>> Listener::Accept(Options opts){
+StatusOr<Endpoint *> Listener::Accept(Options opts){
   int ret;
   struct rdma_cm_id *conn_id;
 
   ret = rdma_get_request(this->id_, &conn_id);
-  if (ret) {
-    // TODO(Fischi) Map error codes
-    return Status(StatusCode::Internal, "accept: error getting request");
+  if (ret){
+    return Status(StatusCode::Internal, "accept: error getting connection id");
   }
-
+  // Set connection data
+  size_t private_data_len = conn_id->event->param.conn.private_data_len;
+  void * private_data;
+  if (private_data_len) {
+    private_data = calloc(1, private_data_len);
+    memcpy(private_data, conn_id->event->param.conn.private_data, private_data_len);
+  }
+  
   struct rdma_conn_param conn_param;
   conn_param.responder_resources = opts.responder_resources;  
   conn_param.initiator_depth =  opts.initiator_depth; 
@@ -235,19 +329,35 @@ StatusOr<std::unique_ptr<Endpoint>> Listener::Accept(Options opts){
   conn_param.private_data_len = opts.private_data_len;
   conn_param.flow_control = opts.flow_control;
 
+  if (opts.use_srq && opts.qp_attr.srq == nullptr){
+    struct ibv_srq_init_attr srq_init_attr;
+    srq_init_attr.attr.max_sge = opts.qp_attr.cap.max_recv_sge;
+    srq_init_attr.attr.max_wr = opts.qp_attr.cap.max_recv_wr;
+    auto srq = ibv_create_srq(conn_id->pd, &srq_init_attr);
+    if (srq == nullptr){
+      perror("error");
+      return Status(StatusCode::Internal, "error " + std::to_string(errno) + " creating ibv_srq");
+    }
+    opts.qp_attr.srq = srq;
+  }
+
   ret = rdma_create_qp(conn_id, this->id_->pd, &opts.qp_attr);
   if (ret) {
     // TODO(Fischi) Map error codes
-    return Status(StatusCode::Internal, "accept: error getting creating qp");
+    perror("ERROR");
+    return Status(StatusCode::Internal, "accept: error " + std::to_string(ret) + " getting creating qp");
   }
-
+  
   ret = rdma_accept(conn_id, &conn_param);
   if (ret) {
-    // TODO(Fischi) Map error codes
-    return Status(StatusCode::Internal, "accept: error accepting connection");
+    perror("ERROR");
+    return Status(StatusCode::Internal, "accept: error " + std::to_string(ret) + " accepting connection");
   }
+  conn_id->srq = opts.qp_attr.srq;
 
-  return StatusOr<std::unique_ptr<Endpoint>>(std::make_unique<Endpoint>(conn_id));
+  
+  
+  return new Endpoint(conn_id, private_data, private_data_len);
 }
 
 Listener::Listener(rdma_cm_id *id) : id_(id) {
@@ -259,6 +369,13 @@ Listener::~Listener(){
 ibv_pd Listener::GetPd(){
   return *this->id_->pd;
 }
+ibv_pd *Listener::GetPdP(){
+  return this->id_->pd;
+}
+ibv_context *Listener::GetContext(){
+  return this->id_->verbs;
+}
+
 
 Status Listener::Close(){
   int ret = rdma_destroy_id(this->id_);
@@ -269,7 +386,7 @@ Status Listener::Close(){
   return Status();
 }
 
-StatusOr<std::unique_ptr<Endpoint>> Dial(std::string ip, int port, Options opts){
+StatusOr<Endpoint *> Create(std::string ip, int port, Options opts){
   if (ip.empty()){
     return Status(StatusCode::InvalidArgument, "IP cannot be empty");
   }
@@ -281,25 +398,38 @@ StatusOr<std::unique_ptr<Endpoint>> Dial(std::string ip, int port, Options opts)
   memset(&hints, 0, sizeof hints);
   hints.ai_port_space = RDMA_PS_TCP;
 
-  ret = rdma_getaddrinfo(ip.c_str(), std::to_string(port).c_str(), &hints, &addrinfo);
+  ret = get_rdma_addr(opts.src, ip.c_str(), std::to_string(port).c_str(), &hints, &addrinfo);
   if (ret) {
-    // TODO(Fischi) Map error codes
     return Status(StatusCode::Internal, "Error getting address info");
   }
 
   struct rdma_cm_id *id;
 
   // setup endpoint, also creates qp
-  ret = rdma_create_ep(&id, addrinfo, opts.pd, &opts.qp_attr); 
+  ret = rdma_create_ep(&id, addrinfo, opts.pd, NULL); 
   if (ret) {
-    // TODO(Fischi) Map error codes
     return Status(StatusCode::Internal, "Error " + std::to_string(errno) + " creating endpoint");
+  }
+  if (opts.use_srq && opts.qp_attr.srq == nullptr){
+    struct ibv_srq_init_attr srq_init_attr;
+    srq_init_attr.attr.max_sge = opts.qp_attr.cap.max_recv_sge;
+    srq_init_attr.attr.max_wr = opts.qp_attr.cap.max_recv_wr;
+    auto srq = ibv_create_srq(id->pd, &srq_init_attr);
+    if (srq == nullptr){
+      return Status(StatusCode::Internal, "error " + std::to_string(errno) + " creating ibv_srq");
+    }
+  }
+  ret = rdma_create_qp(id, id->pd, &opts.qp_attr);
+  if (ret) {
+    return Status(StatusCode::Internal, "dial: error creating qp");
   }
 
   // cleanup addrinfo, we don't need it anymore
   rdma_freeaddrinfo(addrinfo);
 
-
+  return new Endpoint(id);
+}
+Status Endpoint::Connect(Options opts){
   struct rdma_conn_param conn_param;
   conn_param.responder_resources = opts.responder_resources;  
   conn_param.initiator_depth =  opts.initiator_depth; 
@@ -310,18 +440,38 @@ StatusOr<std::unique_ptr<Endpoint>> Dial(std::string ip, int port, Options opts)
   conn_param.private_data_len = opts.private_data_len;
   conn_param.flow_control = opts.flow_control;
 
-
   // connect to remote
-  ret = rdma_connect(id, &conn_param);
+  int ret = rdma_connect(this->id_, &conn_param);
   if (ret) {
-    // TODO(Fischi) Map error codes
-    return Status(StatusCode::Internal, "Error connecting to remote");
+    perror("ERROR");
+    return Status(StatusCode::Internal, "Error " + std::to_string(ret) + " connecting to remote");
   }
-  
-  return StatusOr<std::unique_ptr<Endpoint>>(std::make_unique<Endpoint>(id));
+  // Set connection data
+  size_t private_data_len = this->id_->event->param.conn.private_data_len;
+  void * private_data = nullptr;
+  if (private_data_len) {
+    private_data = calloc(1, private_data_len);
+    memcpy(private_data, this->id_->event->param.conn.private_data, private_data_len);
+  }
+  this->private_data_ = private_data;
+  this->private_data_len_ = private_data_len;
+  return Status();
 }
 
-StatusOr<std::unique_ptr<Listener>> Listen(std::string ip, int port){
+StatusOr<Endpoint *> Dial(std::string ip, int port, Options opts){
+  auto ep_stat = Create(ip, port, opts);
+  if (!ep_stat.ok()){
+    return ep_stat.status().Wrap("error setting up endpoint");
+  }
+  auto ep = ep_stat.value();
+  auto stat = ep->Connect(opts);
+  if (!stat.ok()){
+    return stat;
+  }
+  return ep;
+}
+
+StatusOr<Listener *> Listen(std::string ip, int port){
   int ret;
   struct rdma_addrinfo hints;
   struct rdma_addrinfo *addrinfo;
@@ -330,7 +480,7 @@ StatusOr<std::unique_ptr<Listener>> Listen(std::string ip, int port){
   hints.ai_port_space = RDMA_PS_TCP;
   hints.ai_flags = RAI_PASSIVE;
 
-  ret = rdma_getaddrinfo(ip.c_str(), std::to_string(port).c_str(), &hints, &addrinfo);
+  ret = get_rdma_addr(ip.c_str(), NULL, std::to_string(port).c_str(), &hints, &addrinfo);
   if (ret) {
     // TODO(Fischi) Map error codes
     return Status(StatusCode::Internal, "Error getting address info");
@@ -349,19 +499,19 @@ StatusOr<std::unique_ptr<Listener>> Listen(std::string ip, int port){
   ret = rdma_create_ep(&id, addrinfo, NULL, NULL); 
   if (ret) {
     // TODO(Fischi) Map error codes
-    return Status(StatusCode::Internal, "Error creating listening endpoint");
+    return Status(StatusCode::Internal, "Error " + std::to_string(errno) +" creating listening endpoint");
   }
 
   // cleanup addrinfo, we don't need it anymore
   rdma_freeaddrinfo(addrinfo);
 
-  ret = rdma_listen(id, 2);
+  ret = rdma_listen(id, 20);
   if(ret){
     // TODO(Fischi) Map error codes
     return Status(StatusCode::Internal, "listening failed");
   }
 
-  return StatusOr<std::unique_ptr<Listener>>(std::make_unique<Listener>(id));
+  return new Listener(id);
 }
 
 }

@@ -10,8 +10,9 @@
 #ifndef KNY_CONN_HPP_
 #define KNY_CONN_HPP_
 
-#include <bits/stdint-uintn.h>
+#include <cstdint>
 #include <stddef.h>
+#include <vector>
 
 #include "error.hpp"
 
@@ -40,6 +41,14 @@ class Sender {
     virtual StatusOr<SendRegion> GetMemoryRegion(size_t size) = 0;
     virtual Status Free(SendRegion region) = 0;
     virtual Status Send(SendRegion region) = 0;
+};
+
+class BatchSender{
+  public:
+    virtual ~BatchSender() = default;
+    virtual StatusOr<SendRegion> GetMemoryRegion(size_t size) = 0;
+    virtual Status Free(SendRegion region) = 0;
+    virtual Status Send(std::vector<SendRegion> regions) = 0;
 };
 
 class Receiver {

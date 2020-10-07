@@ -1,0 +1,8 @@
+---
+- name: Install rdma-core
+  become: true
+  package:
+    name: [ "rdma-core", "ibverbs-utils", "librdmacm-dev" ]
+    update_cache: yes
+    state: present
+

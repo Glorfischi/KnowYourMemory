@@ -1,6 +1,8 @@
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <exception>
+#include <fstream>
 #include <iostream>
 #include <memory>
 #include <ostream>
@@ -8,9 +10,13 @@
 #include <thread>
 #include <chrono>
 
+#include <ctime>
+#include <iomanip>
+
 #include "cxxopts.hpp"
 
 #include "conn.hpp"
+#include "bench/bench.hpp"
 
 #include "send_receive.hpp"
 
@@ -18,14 +24,29 @@ cxxopts::ParseResult parse(int argc, char* argv[]) {
   cxxopts::Options options(argv[0], "sendrecv");
   try {
     options.add_options()
-      ("s,server", "Whether to act as a server", cxxopts::value<bool>())
       ("srq", "Whether to use a shard receive queue", cxxopts::value<bool>())
+      ("bw", "Whether to test bandwidth", cxxopts::value<bool>())
+      ("lat", "Whether to test latency", cxxopts::value<bool>())
+      ("pingpong", "Whether to test pingpong latency", cxxopts::value<bool>())
+      ("client", "Whether to as client only", cxxopts::value<bool>())
+      ("server", "Whether to as server only", cxxopts::value<bool>())
       ("i,address", "IP address to connect to", cxxopts::value<std::string>())
-      ("n,count", "How many times to repeat measurement", cxxopts::value<int>()->default_value("1000"))
+      ("source", "source IP address", cxxopts::value<std::string>()->default_value(""))
+      ("n,iters",  "Number of exchanges" , cxxopts::value<int>()->default_value("1000"))
+      ("s,size",  "Size of message to exchange", cxxopts::value<int>()->default_value("1024"))
+      ("batch",  "Number of messages to send in a single batch. Only relevant for bandwidth benchmark", cxxopts::value<int>()->default_value("20"))
+      ("out", "filename to output measurements", cxxopts::value<std::string>()->default_value(""))
      ;
  
     auto result = options.parse(argc, argv);
     if (!result.count("address")) {
+      std::cerr << "Specify an address" << std::endl;
+      std::cerr << options.help({""}) << std::endl;
+      exit(1);
+    }
+
+    if (!result.count("lat") && !result.count("bw") && !result.count("pingpong")) {
+      std::cerr << "Either perform latency or bandwidth benchmark" << std::endl;
       std::cerr << options.help({""}) << std::endl;
       exit(1);
     }
@@ -37,99 +58,191 @@ cxxopts::ParseResult parse(int argc, char* argv[]) {
   }
 }
 
+
+
+
+
 int main(int argc, char* argv[]) {
   auto flags = parse(argc,argv);
   std::string ip = flags["address"].as<std::string>();  
-  bool server = flags["server"].as<bool>();  
+  std::string src = flags["source"].as<std::string>();  
+
+  std::string filename = flags["out"].as<std::string>();  
+
+
+  bool bw = flags["bw"].as<bool>();  
+  bool lat = flags["lat"].as<bool>();  
+
   bool srq = flags["srq"].as<bool>();  
-  int count = flags["count"].as<int>();  
 
-  std::vector<float> latency_m;
+  int count = flags["iters"].as<int>();  
+  int size = flags["size"].as<int>();  
+  int batch = flags["batch"].as<int>();  
 
-  std::cout << "#### Testing SendReceive Latency ####" << std::endl;
-  std::unique_ptr<kym::connection::SendReceiveConnection> conn;
-  if (server) {
-    std::unique_ptr<kym::connection::SendReceiveListener> ln;
-    if (srq){
-      auto ln_s = kym::connection::ListenSharedReceive(ip, 9999);
-      if (!ln_s.ok()){
-        std::cerr << "Error listening for send_receive with shared receive queue " << ln_s.status().message() << std::endl;
+
+  bool server = flags["server"].as<bool>();  
+  bool client = flags["client"].as<bool>();  
+
+  std::vector<float> measurements;
+
+  std::cout << "#### Testing SendReceive ####" << std::endl;
+
+  if (server){
+      kym::connection::SendReceiveConnection *conn;
+      kym::connection::SendReceiveListener *ln;
+      if (srq){
+        auto ln_s = kym::connection::ListenSharedReceive(ip, 9999);
+        if (!ln_s.ok()){
+          std::cerr << "Error listening for send_receive with shared receive queue " << ln_s.status().message() << std::endl;
+          return 1;
+        }
+        ln = ln_s.value();
+      } else {
+        auto ln_s = kym::connection::ListenSendReceive(ip, 9999);
+        if (!ln_s.ok()){
+          std::cerr << "Error listening for send_receive " << ln_s.status().message() << std::endl;
+          return 1;
+        }
+        ln = ln_s.value();
+      }
+      auto conn_s = ln->Accept();
+      if (!conn_s.ok()){
+        std::cerr << "Error accepting for send_receive " << conn_s.status().message() << std::endl;
         return 1;
       }
-      ln = ln_s.value();
-    } else {
-      auto ln_s = kym::connection::ListenSendReceive(ip, 9999);
-      if (!ln_s.ok()){
-        std::cerr << "Error listening for send_receive " << ln_s.status().message() << std::endl;
-        return 1;
+      
+      conn = conn_s.value();
+
+      if (bw) {
+        auto stat = test_bw_batch_recv(conn, count, size, batch, &measurements);
+        if (!stat.ok()){
+          std::cerr << "Error running benchmark: " << stat << std::endl;
+          return 1;
+        }
+        auto n = measurements.size();
+        std::vector<float> sorted = measurements;
+        std::sort (sorted.begin(), sorted.end());
+        int q025 = (int)(n*0.025);
+        int q500 = (int)(n*0.5);
+        int q975 = (int)(n*0.975);
+        float sum = 0;
+        for (float b : sorted){
+          sum += b;
+        }
+        std::cout << "## Bandwidth Receiver (MB/s)" << std::endl;
+        std::cout << "mean: " << (sum/n)/(1024*1024) << std::endl;
+        std::cout << "q025" << "\t" << "q50" << "\t" << "q975" << std::endl;
+        std::cout << sorted[q025]/(1024*1024) << "\t" << sorted[q500]/(1024*1024) << "\t" << sorted[q975]/(1024*1024) << std::endl;
+
+      } else if (lat) {
+        auto stat = test_lat_recv(conn, count, &measurements);
+        if (!stat.ok()){
+          std::cerr << "Error running benchmark: " << stat << std::endl;
+          return 1;
+        }
+      } else {
+        auto stat = test_lat_pong(conn, conn, count, size);
+        if (!stat.ok()){
+          std::cerr << "Error running benchmark: " << stat << std::endl;
+          return 1;
+        }
       }
-      ln = ln_s.value();
-    }
-    auto conn_s = ln->Accept();
-    if (!conn_s.ok()){
-      std::cerr << "Error accepting for send_receive " << conn_s.status().message() << std::endl;
-      return 1;
-    }
-    conn = conn_s.value();
-
-    for(int i = 0; i<count; i++){
-      auto start = std::chrono::high_resolution_clock::now();
-      auto buf_s = conn->Receive();
-      if (!buf_s.ok()){
-        std::cerr << "Error receiving buffer " << buf_s.status().message() << std::endl;
-        conn->Close();
-        ln->Close();
-        return 1;
-      }
-      auto free_s = conn->Free(buf_s.value());
-      auto finish = std::chrono::high_resolution_clock::now();
-      latency_m.push_back(std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count()/1000.0);
-    }
-    conn->Close();
-    ln->Close();
-  } else {
-    auto conn_s = kym::connection::DialSendReceive(ip, 9999);
-    if (!conn_s.ok()){
-      std::cerr << "Error dialing send_receive connection" << conn_s.status().message() << std::endl;
-      return 1;
-    }
-    conn = conn_s.value();
-
-    std::chrono::milliseconds timespan(1000); // This is because of a race condition...
-    std::this_thread::sleep_for(timespan);
-
-    auto buf_s = conn->GetMemoryRegion(2048);
-    if (!buf_s.ok()){
-      std::cerr << "Error allocating send region " << buf_s.status().message() << std::endl;
       conn->Close();
+      ln->Close();
+  }
+
+  if(client){
+    std::chrono::milliseconds timespan(4000); // If we start the server at the same time we will wait a little
+    std::this_thread::sleep_for(timespan);
+    auto conn_s = kym::connection::DialSendReceive(ip, 9999, src);
+    if (!conn_s.ok()){
+      std::cerr << "Error dialing send_receive co_nection" << conn_s.status().message() << std::endl;
       return 1;
     }
-    auto buf = buf_s.value();
-    for(int i = 0; i<count; i++){
-      auto start = std::chrono::high_resolution_clock::now();
-      auto send_s = conn->Send(buf);
-      if (!send_s.ok()){
-        std::cerr << "Error sending buffer " << send_s.message() << std::endl;
-        conn->Free(buf);
-        conn->Close();
+    kym::connection::SendReceiveConnection *conn = conn_s.value();
+
+    if (bw) {
+      std::chrono::milliseconds timespan(1000); // This is because of a race condition...
+      std::this_thread::sleep_for(timespan);
+
+      auto stat = test_bw_batch_send(conn, count, size, batch, &measurements);
+      if (!stat.ok()){
+        std::cerr << "Error running benchmark: " << stat << std::endl;
         return 1;
       }
-      auto finish = std::chrono::high_resolution_clock::now();
-      latency_m.push_back(std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count()/1000.0);
+      auto n = measurements.size();
+      std::vector<float> sorted = measurements;
+      std::sort (sorted.begin(), sorted.end());
+      int q025 = (int)(n*0.025);
+      int q500 = (int)(n*0.5);
+      int q975 = (int)(n*0.975);
+      float sum = 0;
+      for (float b : sorted){
+        sum += b;
+      }
+      std::cout << "## Bandwidth Sender (MB/s)" << std::endl;
+      std::cout << "mean: " << (sum/n)/(1024*1024) << std::endl;
+      std::cout << "q025" << "\t" << "q50" << "\t" << "q975" << std::endl;
+      std::cout << sorted[q025]/(1024*1024) << "\t" << sorted[q500]/(1024*1024) << "\t" << sorted[q975]/(1024*1024) << std::endl;
+
+    } else if (lat) {
+      std::chrono::milliseconds timespan(1000); // This is because of a race condition...
+      std::this_thread::sleep_for(timespan);
+
+      measurements.reserve(count);
+
+      auto stat = test_lat_send(conn, count, size, &measurements);
+      if (!stat.ok()){
+        std::cerr << "Error running benchmark: " << stat << std::endl;
+        return 1;
+      }
+
+      auto n = count;
+      std::vector<float> sorted = measurements;
+      std::sort (sorted.begin(), sorted.end());
+      int q025 = (int)(n*0.025);
+      int q500 = (int)(n*0.5);
+      int q975 = (int)(n*0.975);
+      std::cout << "## Latency Sender" << std::endl;
+      std::cout << "q025" << "\t" << "q50" << "\t" << "q975" << std::endl;
+      std::cout << sorted[q025] << "\t" << sorted[q500] << "\t" << sorted[q975] << std::endl;
+    } else {
+      // pingpong
+      std::chrono::milliseconds timespan(1000); // This is because of a race condition...
+      std::this_thread::sleep_for(timespan);
+
+      measurements.reserve(count);
+
+      auto stat = test_lat_ping(conn, conn, count, size, &measurements);
+      if (!stat.ok()){
+        std::cerr << "Error running benchmark: " << stat << std::endl;
+        return 1;
+      }
+      
+      auto n = count;
+      std::vector<float> sorted = measurements;
+      std::sort (sorted.begin(), sorted.end());
+      int q025 = (int)(n*0.025);
+      int q500 = (int)(n*0.5);
+      int q975 = (int)(n*0.975);
+      std::cout << "## Ping Pong latency" << std::endl;
+      std::cout << "q025" << "\t" << "q50" << "\t" << "q975" << std::endl;
+      std::cout << sorted[q025] << "\t" << sorted[q500] << "\t" << sorted[q975] << std::endl;
     }
-    conn->Free(buf);
     conn->Close();
+  }
+
+  if (!filename.empty()){
+    std::cout << "writing" << std::endl;
+    std::ofstream file(filename);
+    for (float f : measurements){
+      file << f << "\n";
+    }
+    file.close();
+  }
 
 
-  } 
-  auto n = count;
-  std::sort (latency_m.begin(), latency_m.end());
-  int q025 = (int)(n*0.025);
-  int q500 = (int)(n*0.5);
-  int q975 = (int)(n*0.975);
-  std::cout << "q025" << "\t" << "q50" << "\t" << "q975" << std::endl;
-  std::cout << latency_m[q025] << "\t" << latency_m[q500] << "\t" << latency_m[q975] << std::endl;
-  
+    
   return 0;
 }
  

@@ -5,6 +5,8 @@ compile_commands.json
 *.o
 bin/
 
+*.pdf
+*.png
 
 # TeX stuff
 *.aux
@@ -18,3 +20,7 @@ bin/
 *.run.xml
 _minted-*
 
+
+# Perf stuff
+*.data
+*.data.old
