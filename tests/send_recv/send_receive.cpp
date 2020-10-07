@@ -29,7 +29,7 @@ namespace kym {
 namespace connection {
 namespace {
 
-const uint64_t inflight = 120;
+const uint64_t inflight = 200;
 
 endpoint::Options defaultOptions = {
   .pd = NULL,
@@ -55,7 +55,7 @@ endpoint::Options defaultOptions = {
   .initiator_depth =  0,
   .flow_control = 0,
   .retry_count = 0,  
-  .rnr_retry_count = 0, 
+  .rnr_retry_count = inflight, 
 };
 
 
@@ -88,7 +88,7 @@ StatusOr<SendReceiveConnection *> DialSendReceive(std::string ip, int port, std:
   auto allocator = new memory::DumbAllocator(ep->GetPd());
 
   //TODO(Fischi) parameterize
-  auto rq_stat = endpoint::GetReceiveQueue(ep, 8*1024, inflight);
+  auto rq_stat = endpoint::GetReceiveQueue(ep, 16*1024, inflight);
   if (!rq_stat.ok()){
     return rq_stat.status().Wrap("error creating receive queue while dialing");
   }
@@ -155,7 +155,7 @@ StatusOr<SendReceiveListener *> ListenSharedReceive(std::string ip, int port) {
   endpoint::Listener *ln = lnStatus.value();
 
   //TODO(Fischi) parameterize
-  auto srq_stat = endpoint::GetSharedReceiveQueue(ln->GetPd(), 8*1024, inflight);
+  auto srq_stat = endpoint::GetSharedReceiveQueue(ln->GetPd(), 16*1024, inflight);
   if (!srq_stat.ok()){
     return srq_stat.status().Wrap("error creating shared receive queue");
   }
@@ -180,7 +180,7 @@ StatusOr<SendReceiveConnection *> SendReceiveListener::Accept(){
 
   endpoint::IReceiveQueue *rq;
   if (this->srq_ == nullptr){
-    auto rq_stat = endpoint::GetReceiveQueue(ep, 8*1024, inflight);
+    auto rq_stat = endpoint::GetReceiveQueue(ep, 16*1024, inflight);
     if (!rq_stat.ok()){
       return rq_stat.status().Wrap("error creating receive queue while dialing");
     }

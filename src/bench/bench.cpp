@@ -137,9 +137,7 @@ kym::Status test_bw_batch_send(kym::connection::BatchSender *snd, int count, int
   int sent_iterval = 0;
   uint64_t data_interval = 0;
 
-  std::chrono::high_resolution_clock::time_point finish;
-  std::chrono::high_resolution_clock::time_point start;
-  start = std::chrono::high_resolution_clock::now();
+  auto begin = std::chrono::high_resolution_clock::now();
 
   while(i<count){
     std::vector<kym::connection::SendRegion> regs = bufs;
@@ -158,25 +156,79 @@ kym::Status test_bw_batch_send(kym::connection::BatchSender *snd, int count, int
     }
     sent_iterval += batch;
     data_interval += batch_data;
-    if (sent_iterval >= test_bw_sample_rate || i >= count){ 
-      finish = std::chrono::high_resolution_clock::now();
-      double dur = std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count();
-      start = finish;
-      bw_bps->push_back(1e9*data_interval/dur);
-      sent_iterval = 0;
-      data_interval = 0;
-    }
   }
+  auto end = std::chrono::high_resolution_clock::now();
   for(auto buf : bufs){
     snd->Free(buf);
   }
+  double dur = std::chrono::duration_cast<std::chrono::nanoseconds>(end-begin).count();
+  bw_bps->push_back((double)size*(double)count/(dur/1e9));
   return kym::Status();
 }
 
 kym::Status test_bw_batch_recv(kym::connection::Receiver *rcv, int count, int size, int batch, std::vector<float> *bw_bps){
+  auto begin = std::chrono::high_resolution_clock::now();
+  int i = 0;
+  while(i<count){
+    i++;
+    auto buf_s = rcv->Receive();
+    if (!buf_s.ok()){
+      return buf_s.status().Wrap("error receiving buffer");
+    }
+    auto free_s = rcv->Free(buf_s.value());
+    if (!free_s.ok()){
+      return free_s.Wrap("error receiving buffer");
+    }
+  }
+  auto end = std::chrono::high_resolution_clock::now();
+  double dur = std::chrono::duration_cast<std::chrono::nanoseconds>(end-begin).count();
+  bw_bps->push_back((double)size*((double)count/(dur/1e9)));
+  return kym::Status();
+}
+
+kym::Status test_bw_send(kym::connection::Sender *snd, int count, int size, std::vector<float> *bw_bps){
+  auto buf_s = snd->GetMemoryRegion(size);
+  if (!buf_s.ok()){
+    return buf_s.status().Wrap("error allocating send region");
+  }
+  auto buf = buf_s.value();
+
+  bw_bps->reserve(count/test_bw_sample_rate);
+  int i = 0;
+  int sent_iterval = 0;
+  uint64_t data_interval = 0;
+
   std::chrono::high_resolution_clock::time_point finish;
   std::chrono::high_resolution_clock::time_point start;
   start = std::chrono::high_resolution_clock::now();
+  auto begin = start;
+  while(i<count){
+    i++;
+    auto send_s = snd->Send(buf);
+    if (!send_s.ok()){
+      snd->Free(buf);
+      return send_s.Wrap("error sending buffer");
+    }
+    data_interval += size;
+    if (i%test_bw_sample_rate == 0 || i == count){
+      finish = std::chrono::high_resolution_clock::now();
+      uint64_t batch_data = (i == count) ? (i%test_bw_sample_rate)*size : test_bw_sample_rate*size;
+      double dur = std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count();
+      bw_bps->push_back(1e9*batch_data/dur);
+      start = finish;
+    }
+  }
+  auto end = std::chrono::high_resolution_clock::now();
+  double dur = std::chrono::duration_cast<std::chrono::nanoseconds>(end-begin).count();
+  bw_bps->push_back((uint64_t)size*((uint64_t)count/(dur/1e9)));
+  return snd->Free(buf);
+
+}
+kym::Status test_bw_recv(kym::connection::Receiver *rcv, int count, int size, std::vector<float> *bw_bps){
+  std::chrono::high_resolution_clock::time_point finish;
+  std::chrono::high_resolution_clock::time_point start;
+  start = std::chrono::high_resolution_clock::now();
+  auto begin = start;
   int i = 0;
   while(i<count){
     i++;
@@ -196,12 +248,8 @@ kym::Status test_bw_batch_recv(kym::connection::Receiver *rcv, int count, int si
       start = finish;
     }
   }
+  auto end = std::chrono::high_resolution_clock::now();
+  double dur = std::chrono::duration_cast<std::chrono::nanoseconds>(end-begin).count();
+  bw_bps->push_back(size*count/(dur/1e9));
   return kym::Status();
-}
-
-kym::Status test_bw_send(kym::connection::Sender *snd, int count, int size, std::vector<float> *bw_bps){
-  return kym::Status(kym::StatusCode::NotImplemented);
-}
-kym::Status test_bw_recv(kym::connection::Receiver *rcv, int count, int size, std::vector<float> *bw_bps){
-  return kym::Status(kym::StatusCode::NotImplemented);
 }

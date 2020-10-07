@@ -152,7 +152,7 @@ int main(int argc, char* argv[]) {
   }
 
   if(client){
-    std::chrono::milliseconds timespan(2000); // If we start the server at the same time we will wait a little
+    std::chrono::milliseconds timespan(4000); // If we start the server at the same time we will wait a little
     std::this_thread::sleep_for(timespan);
     auto conn_s = kym::connection::DialSendReceive(ip, 9999, src);
     if (!conn_s.ok()){

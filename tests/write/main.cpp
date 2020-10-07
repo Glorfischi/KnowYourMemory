@@ -235,7 +235,7 @@ int main(int argc, char* argv[]) {
     file.close();
   }
 
-  auto n = count;
+  auto n = measurements.size();
   std::sort (measurements.begin(), measurements.end());
   int q025 = (int)(n*0.025);
   int q500 = (int)(n*0.5);
