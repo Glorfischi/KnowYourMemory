@@ -1,7 +1,39 @@
 RoCE-01 ansible_ssh_host=172.17.5.101 ansible_ssh_user=vagrant
 RoCE-02 ansible_ssh_host=172.17.5.102 ansible_ssh_user=vagrant
 
+
 wg.glorfischi.xyz ansible_ssh_host=145.14.210.37 ansible_ssh_port=31521 ansible_ssh_user=fischi
+
+[ault]
+ault.cscs.ch
+ault01.cscs.ch
+ault02.cscs.ch
+ault03.cscs.ch
+ault04.cscs.ch
+ault05.cscs.ch
+ault06.cscs.ch
+ault07.cscs.ch
+ault08.cscs.ch
+ault09.cscs.ch
+ault10.cscs.ch
+ault11.cscs.ch
+ault12.cscs.ch
+ault13.cscs.ch
+ault14.cscs.ch
+ault15.cscs.ch
+ault16.cscs.ch
+ault17.cscs.ch
+ault18.cscs.ch
+ault19.cscs.ch
+ault20.cscs.ch
+ault21.cscs.ch
+
+[ault_server]
+[ault_client]
+[ault_runner:children]
+ault_server
+ault_client
+
 
 [rxe]
 RoCE-01

@@ -1,0 +1,7 @@
+---
+bench_type: pingpong
+bench_count: 1000000
+bench_sender: write
+bench_ack: read
+
+bench_msg_size: 16

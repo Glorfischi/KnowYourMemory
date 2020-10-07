@@ -1,0 +1,23 @@
+---
+- name: "SendReceive {{ bench_srq | ternary('SRQ', '') }} : {{ bench_type }}"
+  command: 
+    argv:
+      - "{{ project_dir }}/tests/send_recv/bin/sendrecv"
+      - "{{ bench_server | ternary('--server', '--client') }}"
+      - "-i"
+      - "{{ bench_server_ip }}"
+      - "--{{ bench_type }}"
+      - "-n"
+      - "{{ bench_count }}"
+      - "--out"
+      - "{{ project_dir }}/data/send-recv-{{ bench_srq | ternary('srq', '') }}-{{ bench_type }}-size{{ bench_msg_size }}-batch{{ bench_batch_size}}-{{ bench_server | ternary('server', 'client') }}-{{ ansible_hostname }}-{{ ansible_date_time.iso8601 }}.data"
+      - "{{ bench_srq | ternary('--srq', omit) }}"
+      - "--size"
+      - "{{ bench_msg_size }}"
+      - "--batch"
+      - "{{ bench_batch_size }}"
+  register: run_raw
+- debug:
+    verbosity: 1
+    var: run_raw
+ 
