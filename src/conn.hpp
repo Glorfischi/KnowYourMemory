@@ -41,6 +41,8 @@ class Sender {
     virtual StatusOr<SendRegion> GetMemoryRegion(size_t size) = 0;
     virtual Status Free(SendRegion region) = 0;
     virtual Status Send(SendRegion region) = 0;
+    virtual StatusOr<uint64_t> SendAsync(SendRegion region) = 0;
+    virtual Status Wait(uint64_t id) = 0;
 };
 
 class BatchSender{
@@ -48,7 +50,10 @@ class BatchSender{
     virtual ~BatchSender() = default;
     virtual StatusOr<SendRegion> GetMemoryRegion(size_t size) = 0;
     virtual Status Free(SendRegion region) = 0;
+    virtual StatusOr<uint64_t> SendAsync(SendRegion region) = 0;
     virtual Status Send(std::vector<SendRegion> regions) = 0;
+    virtual StatusOr<uint64_t> SendAsync(std::vector<SendRegion> regions) = 0;
+    virtual Status Wait(uint64_t id) = 0;
 };
 
 class Receiver {

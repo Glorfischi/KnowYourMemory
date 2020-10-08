@@ -55,7 +55,7 @@ endpoint::Options defaultOptions = {
   .initiator_depth =  0,
   .flow_control = 0,
   .retry_count = 0,  
-  .rnr_retry_count = inflight, 
+  .rnr_retry_count = 0, 
 };
 
 
@@ -218,6 +218,8 @@ SendReceiveConnection::SendReceiveConnection(endpoint::Endpoint *ep,
   this->ep_ = ep;
   this->rq_ = rq;
   this->rq_shared_ = rq_shared;
+  this->ackd_id_ = 0;
+  this->next_id_ = 1;
 }
 
 SendReceiveConnection::~SendReceiveConnection(){
@@ -250,12 +252,21 @@ StatusOr<SendRegion> SendReceiveConnection::GetMemoryRegion(size_t size){
   reg.lkey = mr.lkey;
   return reg;
 }
+
 Status SendReceiveConnection::Send(std::vector<SendRegion> regions){
+  auto id_stat = this->SendAsync(regions);
+  if (!id_stat.ok()){
+    return id_stat.status();
+  }
+  return this->Wait(id_stat.value());
+}
+StatusOr<uint64_t> SendReceiveConnection::SendAsync(std::vector<SendRegion> regions){
   int i = 0;
   int batch_size = regions.size();
   ibv_send_wr wrs[batch_size];
   ibv_sge sges[batch_size];
 
+  uint64_t id = this->next_id_++;
   for ( auto region : regions){
     struct ibv_sge *sge = &sges[i];
     ibv_send_wr *wr = &wrs[i];
@@ -265,7 +276,7 @@ Status SendReceiveConnection::Send(std::vector<SendRegion> regions){
     sge->length = region.length;
     sge->lkey =  region.lkey;
 
-    wr->wr_id = i;
+    wr->wr_id = id;
     wr->next = last ? NULL : &(wrs[i]);
     wr->sg_list = sge;
     wr->num_sge = 1;
@@ -275,31 +286,37 @@ Status SendReceiveConnection::Send(std::vector<SendRegion> regions){
   }
 
   struct ibv_send_wr *bad;
-  auto sendStatus = this->ep_->PostSendRaw(&(wrs[0]), &bad);
-  if (!sendStatus.ok()){
-      return sendStatus;
+  auto stat = this->ep_->PostSendRaw(&(wrs[0]), &bad);
+  if (!stat.ok()){
+    return stat;
   }
-
-  auto wcStatus = this->ep_->PollSendCq();
-  if (!wcStatus.ok()){
-    return wcStatus.status();
-  }
-  ibv_wc wc = wcStatus.value();
-  if (wc.wr_id != i){
-    return Status(StatusCode::Internal, "posible interleafing while sending a batch");
+  return id;
+}
+Status SendReceiveConnection::Wait(uint64_t id){
+  while (this->ackd_id_ < id){
+    auto wcStatus = this->ep_->PollSendCq();
+    if (!wcStatus.ok()){
+      return wcStatus.status();
+    }
+    ibv_wc wc = wcStatus.value();
+    this->ackd_id_ = wc.wr_id;
   }
   return Status();
 }
 Status SendReceiveConnection::Send(SendRegion region){
-  auto sendStatus = this->ep_->PostSend(0, region.lkey, region.addr, region.length);
+  auto id_stat = this->SendAsync(region);
+  if (!id_stat.ok()){
+    return id_stat.status();
+  }
+  return this->Wait(id_stat.value());
+}
+StatusOr<uint64_t> SendReceiveConnection::SendAsync(SendRegion region){
+  uint64_t id = this->next_id_++;
+  auto sendStatus = this->ep_->PostSend(id, region.lkey, region.addr, region.length);
   if (!sendStatus.ok()){
     return sendStatus;
   }
-  auto wcStatus = this->ep_->PollSendCq();
-  if (!wcStatus.ok()){
-    return wcStatus.status();
-  }
-  return Status();
+  return id;
 }
 Status SendReceiveConnection::Free(SendRegion region){
   memory::Region mr = memory::Region();

@@ -40,14 +40,20 @@ class SendReceiveConnection : public Connection, public BatchSender {
 
     StatusOr<SendRegion> GetMemoryRegion(size_t size);
     Status Send(std::vector<SendRegion> regions);
+    StatusOr<uint64_t> SendAsync(std::vector<SendRegion> regions);
     Status Send(SendRegion region);
+    StatusOr<uint64_t> SendAsync(SendRegion region);
     Status Free(SendRegion region);
+    Status Wait(uint64_t id);
 
     StatusOr<ReceiveRegion> Receive();
     Status Free(ReceiveRegion);
   private:
     memory::Allocator *allocator_;
     endpoint::Endpoint *ep_;
+
+    uint64_t ackd_id_;
+    uint64_t next_id_;
 
     endpoint::IReceiveQueue *rq_;
     bool rq_shared_;

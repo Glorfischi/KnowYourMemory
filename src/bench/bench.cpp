@@ -3,6 +3,7 @@
 #include "../conn.hpp"
 #include "../error.hpp"
 
+#include <iostream>
 #include <string>
 #include <vector>
 #include <chrono>
@@ -48,7 +49,6 @@ kym::Status test_lat_pong(kym::connection::Sender *snd, kym::connection::Receive
   // TODO(fischi) Warmup
   auto buf = buf_s.value();
   for(int i = 0; i<count; i++){
-    //std::cout << i << std::endl;
     *(int *)buf.addr = i;
     auto rcv_s = rcv->Receive();
     auto send_s = snd->Send(buf);
@@ -117,139 +117,158 @@ kym::Status test_lat_recv(kym::connection::Receiver *rcv, int count, std::vector
   return kym::Status();
 }
 
-// In which interval to sample the bandwidth, measured in number of send or received messages
-// Can vary a little when using batch sizes not divisible by 200
-const int test_bw_sample_rate = 200;
+kym::StatusOr<uint64_t> test_bw_batch_send(kym::connection::BatchSender *snd, int count, int size, int batch, int unack){
+  if (batch > unack){
+    return kym::Status(kym::StatusCode::InvalidArgument, "batch cannot be larger than unack");
+  }
+  if (unack > count){
+    return kym::Status(kym::StatusCode::InvalidArgument, "unack cannot be larger than count");
+  }
+  if (unack % batch){
+    std::cerr << "[INFO] falling back to unack: " << unack - (unack % batch) << std::endl;
+  }
+  if (count % batch){
+    std::cerr << "[INFO] falling back to count: " << count - (count % batch) << std::endl;
+  }
+  int unack_batch = unack/batch;
+  int count_batch = count/batch;
+  std::vector<kym::connection::SendRegion> batches[unack_batch];
+  for(int j = 0; j<unack_batch; j++){
+    batches[j] = std::vector<kym::connection::SendRegion>();
+    for(int i = 0; i<batch; i++){
+      auto buf_s = snd->GetMemoryRegion(size);
+      if (!buf_s.ok()){
+        return buf_s.status().Wrap("error allocating send region");
+      }
+      auto buf = buf_s.value();
+      *(int *)buf.addr = i;
+      batches[j].push_back(buf);
+    }
+  }
 
-kym::Status test_bw_batch_send(kym::connection::BatchSender *snd, int count, int size, int batch, std::vector<float> *bw_bps){
+  int sent = 0;
+  auto start = std::chrono::high_resolution_clock::now();
+  uint64_t ids[unack_batch];
+  for(int i = 0; i<unack_batch; i++){
+    auto send_s = snd->SendAsync(batches[i]);
+    if (!send_s.ok()){
+      for(auto ba : batches){
+        for(auto b : ba){
+          snd->Free(b);
+        }
+      }
+      return send_s.status().Wrap("error sending buffer");
+    }
+    sent += batch;
+    ids[i] = send_s.value();
+  }
+
+  for(int i = unack_batch; i<count_batch; i++){
+    //std::cout << i << std::endl;
+    auto stat = snd->Wait(ids[i%unack_batch]);
+    if (!stat.ok()){
+      for(auto ba : batches){
+        for(auto b : ba){
+          snd->Free(b);
+        }
+      }
+      return stat.Wrap("error waiting for buffer to be sent");
+    }
+    auto send_s = snd->SendAsync(batches[i%unack_batch]);
+    if (!send_s.ok()){
+      for(auto ba : batches){
+        for(auto b : ba){
+          snd->Free(b);
+        }
+      }
+      return send_s.status().Wrap("error sending buffer");
+    }
+    ids[i%unack_batch] = send_s.value();
+  }
+  auto end = std::chrono::high_resolution_clock::now();
+  
+  double dur = std::chrono::duration_cast<std::chrono::nanoseconds>(end-start).count();
+  return (double)size*(double)batch*count_batch/(dur/1e9);
+}
+
+
+kym::StatusOr<uint64_t> test_bw_send(kym::connection::Sender *snd, int count, int size, int unack){
   std::vector<kym::connection::SendRegion> bufs;
-  for(int i = 0; i<batch; i++){
+  for(int i = 0; i<unack; i++){
     auto buf_s = snd->GetMemoryRegion(size);
     if (!buf_s.ok()){
       return buf_s.status().Wrap("error allocating send region");
     }
     auto buf = buf_s.value();
+    *(int *)buf.addr = i;
     bufs.push_back(buf);
   }
-
-  bw_bps->reserve(count/test_bw_sample_rate);
-  int i = 0;
-  int sent_iterval = 0;
-  uint64_t data_interval = 0;
-
-  auto begin = std::chrono::high_resolution_clock::now();
-
-  while(i<count){
-    std::vector<kym::connection::SendRegion> regs = bufs;
-    int batch_data = batch*size;
-    if (count - i < batch){
-      regs = std::vector<kym::connection::SendRegion>(bufs.begin(), bufs.begin() + (count - i));
-      batch_data = (count - i)*size;
-    }
-    i+=batch;
-    auto send_s = snd->Send(bufs);
+  auto start = std::chrono::high_resolution_clock::now();
+  uint64_t ids[unack];
+  for(int i = 0; i<unack; i++){
+    // std::cout << i << std::endl;
+    auto send_s = snd->SendAsync(bufs[i]);
     if (!send_s.ok()){
       for(auto buf : bufs){
         snd->Free(buf);
       }
-      return send_s.Wrap("error sending buffer");
+      return send_s.status().Wrap("error sending buffer");
     }
-    sent_iterval += batch;
-    data_interval += batch_data;
+    ids[i] = send_s.value();
   }
-  auto end = std::chrono::high_resolution_clock::now();
-  for(auto buf : bufs){
-    snd->Free(buf);
-  }
-  double dur = std::chrono::duration_cast<std::chrono::nanoseconds>(end-begin).count();
-  bw_bps->push_back((double)size*(double)count/(dur/1e9));
-  return kym::Status();
-}
-
-kym::Status test_bw_batch_recv(kym::connection::Receiver *rcv, int count, int size, int batch, std::vector<float> *bw_bps){
-  auto begin = std::chrono::high_resolution_clock::now();
-  int i = 0;
-  while(i<count){
-    i++;
-    auto buf_s = rcv->Receive();
-    if (!buf_s.ok()){
-      return buf_s.status().Wrap("error receiving buffer");
+  for(int i = unack; i<count; i++){
+    // std::cout << i << std::endl;
+    auto stat = snd->Wait(ids[i%unack]);
+    if (!stat.ok()){
+      for(auto buf : bufs){
+        snd->Free(buf);
+      }
+      return stat.Wrap("error waiting for buffer to be sent");
     }
-    auto free_s = rcv->Free(buf_s.value());
-    if (!free_s.ok()){
-      return free_s.Wrap("error receiving buffer");
-    }
-  }
-  auto end = std::chrono::high_resolution_clock::now();
-  double dur = std::chrono::duration_cast<std::chrono::nanoseconds>(end-begin).count();
-  bw_bps->push_back((double)size*((double)count/(dur/1e9)));
-  return kym::Status();
-}
 
-kym::Status test_bw_send(kym::connection::Sender *snd, int count, int size, std::vector<float> *bw_bps){
-  auto buf_s = snd->GetMemoryRegion(size);
-  if (!buf_s.ok()){
-    return buf_s.status().Wrap("error allocating send region");
-  }
-  auto buf = buf_s.value();
-
-  bw_bps->reserve(count/test_bw_sample_rate);
-  int i = 0;
-  int sent_iterval = 0;
-  uint64_t data_interval = 0;
-
-  std::chrono::high_resolution_clock::time_point finish;
-  std::chrono::high_resolution_clock::time_point start;
-  start = std::chrono::high_resolution_clock::now();
-  auto begin = start;
-  while(i<count){
-    i++;
-    auto send_s = snd->Send(buf);
+    auto send_s = snd->SendAsync(bufs[i%unack]);
     if (!send_s.ok()){
-      snd->Free(buf);
-      return send_s.Wrap("error sending buffer");
+      for(auto buf : bufs){
+        snd->Free(buf);
+      }
+      return send_s.status().Wrap("error sending buffer");
     }
-    data_interval += size;
-    if (i%test_bw_sample_rate == 0 || i == count){
-      finish = std::chrono::high_resolution_clock::now();
-      uint64_t batch_data = (i == count) ? (i%test_bw_sample_rate)*size : test_bw_sample_rate*size;
-      double dur = std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count();
-      bw_bps->push_back(1e9*batch_data/dur);
-      start = finish;
-    }
+    ids[i%unack] = send_s.value();
   }
   auto end = std::chrono::high_resolution_clock::now();
-  double dur = std::chrono::duration_cast<std::chrono::nanoseconds>(end-begin).count();
-  bw_bps->push_back((uint64_t)size*((uint64_t)count/(dur/1e9)));
-  return snd->Free(buf);
-
+  double dur = std::chrono::duration_cast<std::chrono::nanoseconds>(end-start).count();
+  for(int i = 0; i<unack; i++){
+    snd->Wait(ids[i]);
+    snd->Free(bufs[i]);
+  }
+  return (double)size*((double)count/(dur/1e9));
 }
-kym::Status test_bw_recv(kym::connection::Receiver *rcv, int count, int size, std::vector<float> *bw_bps){
-  std::chrono::high_resolution_clock::time_point finish;
-  std::chrono::high_resolution_clock::time_point start;
-  start = std::chrono::high_resolution_clock::now();
-  auto begin = start;
-  int i = 0;
+kym::StatusOr<uint64_t> test_bw_recv(kym::connection::Receiver *rcv, int count, int size){
+  auto buf_s = rcv->Receive();
+  if (!buf_s.ok()){
+    return buf_s.status().Wrap("error receiving buffer");
+  }
+  //std::cout << "# GOT: " << *(int *)buf_s.value().addr << std::endl;
+  auto free_s = rcv->Free(buf_s.value());
+  if (!free_s.ok()){
+    return free_s.Wrap("error receiving buffer");
+  }
+  auto start = std::chrono::high_resolution_clock::now();
+  int i = 1;
   while(i<count){
     i++;
+    // std::cout << i << std::endl;
     auto buf_s = rcv->Receive();
     if (!buf_s.ok()){
       return buf_s.status().Wrap("error receiving buffer");
     }
+    //std::cout << "# GOT: " << *(int *)buf_s.value().addr << std::endl;
     auto free_s = rcv->Free(buf_s.value());
     if (!free_s.ok()){
       return free_s.Wrap("error receiving buffer");
     }
-    if (i%test_bw_sample_rate == 0 || i == count){
-      finish = std::chrono::high_resolution_clock::now();
-      uint64_t batch_data = (i == count) ? (i%test_bw_sample_rate)*size : test_bw_sample_rate*size;
-      double dur = std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count();
-      bw_bps->push_back(1e9*batch_data/dur);
-      start = finish;
-    }
   }
   auto end = std::chrono::high_resolution_clock::now();
-  double dur = std::chrono::duration_cast<std::chrono::nanoseconds>(end-begin).count();
-  bw_bps->push_back(size*count/(dur/1e9));
-  return kym::Status();
+  double dur = std::chrono::duration_cast<std::chrono::nanoseconds>(end-start).count();
+  return (double)size*(double)(count-1)/(dur/1e9);
 }
