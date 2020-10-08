@@ -74,9 +74,9 @@ class WriteReceiver : public Receiver {
 class WriteSender : public Sender, public BatchSender {
   public:
     WriteSender(endpoint::Endpoint *ep, memory::Allocator *alloc, ringbuffer::RemoteBuffer *rbuf, AckReceiver *ack) 
-      : ep_(ep), owns_ep_(true), alloc_(alloc), rbuf_(rbuf), ack_(ack) {};
+      : ep_(ep), owns_ep_(true), alloc_(alloc), rbuf_(rbuf), ack_(ack), ackd_id_(0), next_id_(1) {};
     WriteSender(endpoint::Endpoint *ep, bool owns_ep, memory::Allocator *alloc, ringbuffer::RemoteBuffer *rbuf, AckReceiver *ack) 
-      : ep_(ep), owns_ep_(owns_ep), alloc_(alloc), rbuf_(rbuf), ack_(ack) {};
+      : ep_(ep), owns_ep_(owns_ep), alloc_(alloc), rbuf_(rbuf), ack_(ack), ackd_id_(0), next_id_(1) {};
     ~WriteSender();
 
     Status Close();
@@ -84,7 +84,10 @@ class WriteSender : public Sender, public BatchSender {
 
     StatusOr<SendRegion> GetMemoryRegion(size_t size);
     Status Send(SendRegion region);
+    StatusOr<uint64_t> SendAsync(SendRegion region);
     Status Send(std::vector<SendRegion> regions);
+    StatusOr<uint64_t> SendAsync(std::vector<SendRegion> regions);
+    Status Wait(uint64_t id);
     Status Free(SendRegion region);
   protected:
     endpoint::Endpoint *ep_;
@@ -92,6 +95,11 @@ class WriteSender : public Sender, public BatchSender {
     memory::Allocator *alloc_;
     ringbuffer::RemoteBuffer *rbuf_;
     AckReceiver *ack_;
+
+    uint64_t ackd_id_;
+    uint64_t next_id_;
+
+
 };
 
 class WriteOffsetReceiver : public WriteReceiver {
@@ -121,8 +129,12 @@ class WriteOffsetSender : public WriteSender {
 
     StatusOr<SendRegion> GetMemoryRegion(size_t size);
     Status Send(SendRegion region);
+    StatusOr<uint64_t> SendAsync(SendRegion region);
     Status Send(std::vector<SendRegion> regions);
+    StatusOr<uint64_t> SendAsync(std::vector<SendRegion> regions);
+    Status Wait(uint64_t id);
     Status Free(SendRegion region);
+
   private:
     // TODO(Fischi): Write inline
     uint64_t tail_addr_;
@@ -153,11 +165,14 @@ class WriteImmSender : public WriteSender {
 
     StatusOr<SendRegion> GetMemoryRegion(size_t size);
     Status Send(SendRegion region);
+    StatusOr<uint64_t> SendAsync(SendRegion region);
     Status Send(std::vector<SendRegion> regions);
+    StatusOr<uint64_t> SendAsync(std::vector<SendRegion> regions);
+    Status Wait(uint64_t id);
     Status Free(SendRegion region);
 };
 
-class WriteConnection : public Connection {
+class WriteConnection : public Connection, public BatchSender {
   public:
     WriteConnection(WriteSender *snd, WriteReceiver *rcv) 
       : ep_(nullptr), snd_(snd), rcv_(rcv) {};
@@ -171,9 +186,17 @@ class WriteConnection : public Connection {
     StatusOr<ReceiveRegion> Receive(){return this->rcv_->Receive();};
     Status Free(ReceiveRegion reg){return this->rcv_->Free(reg);};
 
+
     StatusOr<SendRegion> GetMemoryRegion(size_t size){return this->snd_->GetMemoryRegion(size);};
+
     Status Send(SendRegion region){return this->snd_->Send(region);};
+    StatusOr<uint64_t> SendAsync(SendRegion region){return this->snd_->SendAsync(region);};
+
     Status Send(std::vector<SendRegion> regions){return this->snd_->Send(regions);};
+    StatusOr<uint64_t> SendAsync(std::vector<SendRegion> regions){return this->snd_->SendAsync(regions);};
+
+    Status Wait(uint64_t id){return this->snd_->Wait(id);};
+
     Status Free(SendRegion region){return this->snd_->Free(region);};
   private:
     endpoint::Endpoint *ep_;

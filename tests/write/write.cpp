@@ -36,16 +36,16 @@ namespace {
   endpoint::Options write_connection_opts{
   .qp_attr = {
     .cap = {
-      .max_send_wr = inflight,
-      .max_recv_wr = inflight,
-      .max_send_sge = 2,
-      .max_recv_sge = 2,
+      .max_send_wr = 100,
+      .max_recv_wr = 100,
+      .max_send_sge = 1,
+      .max_recv_sge = 1,
       .max_inline_data = 8,
     },
     .qp_type = IBV_QPT_RC,
   },
   .responder_resources = inflight,
-  .initiator_depth =  inflight,
+  .initiator_depth = inflight,
   .retry_count = 5,  
   .rnr_retry_count = 2, 
   };
@@ -147,6 +147,14 @@ StatusOr<SendRegion> WriteSender::GetMemoryRegion(size_t size){
 }
 
 Status WriteSender::Send(SendRegion reg){
+  auto id_stat = this->SendAsync(reg);
+  if (!id_stat.ok()){
+    return id_stat.status();
+  }
+  return this->Wait(id_stat.value()); 
+}
+StatusOr<uint64_t> WriteSender::SendAsync(SendRegion reg){
+  uint64_t id = this->next_id_++;
   uint32_t len = reg.length + 2*sizeof(uint32_t);
   auto addr_s = this->rbuf_->GetWriteAddr(len);
   if (!addr_s.ok()){
@@ -172,21 +180,37 @@ Status WriteSender::Send(SendRegion reg){
   *(uint32_t *)((size_t)reg.addr - sizeof(uint32_t)) = result.checksum();
 
 
-  auto stat = this->ep_->PostWrite(reg.context, reg.lkey,(void *)((size_t)reg.addr - 2*sizeof(uint32_t)), 
+  auto stat = this->ep_->PostWrite(id, reg.lkey,(void *)((size_t)reg.addr - 2*sizeof(uint32_t)), 
       len, addr, this->rbuf_->GetKey());
   if (!stat.ok()){
     return stat;
   }
-  auto wc_s = this->ep_->PollSendCq();
-  if (!wc_s.ok()){
-    return wc_s.status();
-  }
+  
   this->rbuf_->Write(len);
-  return Status();
+  return id;
 }
 
-Status WriteSender::Send(std::vector<SendRegion> regions){
+StatusOr<uint64_t> WriteSender::SendAsync(std::vector<SendRegion> regions){
   return Status(StatusCode::NotImplemented);
+}
+Status WriteSender::Send(std::vector<SendRegion> regions){
+  auto id_stat = this->SendAsync(regions);
+  if (!id_stat.ok()){
+    return id_stat.status();
+  }
+  return this->Wait(id_stat.value()); 
+}
+
+Status WriteSender::Wait(uint64_t id){
+  while (this->ackd_id_ < id){
+    auto wcStatus = this->ep_->PollSendCq();
+    if (!wcStatus.ok()){
+      return wcStatus.status();
+    }
+    ibv_wc wc = wcStatus.value();
+    this->ackd_id_ = wc.wr_id;
+  }
+  return Status();
 }
 
 Status WriteSender::Free(SendRegion region){
@@ -306,6 +330,15 @@ StatusOr<SendRegion> WriteOffsetSender::GetMemoryRegion(size_t size){
 }
 
 Status WriteOffsetSender::Send(SendRegion reg){
+  auto id_stat = this->SendAsync(reg);
+  if (!id_stat.ok()){
+    return id_stat.status();
+  }
+  return this->Wait(id_stat.value()); 
+}
+
+StatusOr<uint64_t> WriteOffsetSender::SendAsync(SendRegion reg){
+  auto id = this->next_id_++;
   uint32_t len = reg.length + sizeof(uint32_t);
   auto addr_s = this->rbuf_->GetWriteAddr(len);
   if (!addr_s.ok()){
@@ -331,7 +364,7 @@ Status WriteOffsetSender::Send(SendRegion reg){
   sge_off.length = sizeof(uint32_t);
 
   struct ibv_send_wr wr_off, *bad;
-  wr_off.wr_id = 0;
+  wr_off.wr_id = id;
   wr_off.next = NULL;
   wr_off.sg_list = &sge_off;
   wr_off.num_sge = 1;
@@ -347,7 +380,7 @@ Status WriteOffsetSender::Send(SendRegion reg){
   sge_data.lkey = reg.lkey;
 
   struct ibv_send_wr wr_data;
-  wr_data.wr_id = 1;
+  wr_data.wr_id = id;
   wr_data.next = &wr_off;
   wr_data.sg_list = &sge_data;
   wr_data.num_sge = 1;
@@ -361,16 +394,31 @@ Status WriteOffsetSender::Send(SendRegion reg){
     return stat;
   }
   
-  auto wc_s = this->ep_->PollSendCq();
-  if (!wc_s.ok()){
-    return wc_s.status();
-  }
   this->rbuf_->Write(len);
-  return Status();
+  return id;
 }
 
 Status WriteOffsetSender::Send(std::vector<SendRegion> regions){
+  auto id_stat = this->SendAsync(regions);
+  if (!id_stat.ok()){
+    return id_stat.status();
+  }
+  return this->Wait(id_stat.value()); 
+}
+StatusOr<uint64_t> WriteOffsetSender::SendAsync(std::vector<SendRegion> regions){
   return Status(StatusCode::NotImplemented);
+}
+
+Status WriteOffsetSender::Wait(uint64_t id){
+  while (this->ackd_id_ < id){
+    auto wcStatus = this->ep_->PollSendCq();
+    if (!wcStatus.ok()){
+      return wcStatus.status();
+    }
+    ibv_wc wc = wcStatus.value();
+    this->ackd_id_ = wc.wr_id;
+  }
+  return Status();
 }
 
 Status WriteOffsetSender::Free(SendRegion region){
@@ -450,6 +498,16 @@ StatusOr<SendRegion> WriteImmSender::GetMemoryRegion(size_t size){
 }
 
 Status WriteImmSender::Send(SendRegion reg){
+  auto id_stat = this->SendAsync(reg);
+  if (!id_stat.ok()){
+    return id_stat.status();
+  }
+  return this->Wait(id_stat.value()); 
+}
+
+
+StatusOr<uint64_t> WriteImmSender::SendAsync(SendRegion reg){
+  auto id = this->next_id_++;
   uint32_t len = reg.length;
   auto addr_s = this->rbuf_->GetWriteAddr(len);
   if (!addr_s.ok()){
@@ -465,20 +523,36 @@ Status WriteImmSender::Send(SendRegion reg){
   }
   uint64_t addr = addr_s.value();
 
-  auto stat = this->ep_->PostWriteWithImmidate(reg.context, reg.lkey, reg.addr, len, addr, this->rbuf_->GetKey(), len);
+  auto stat = this->ep_->PostWriteWithImmidate(id, reg.lkey, reg.addr, len, addr, this->rbuf_->GetKey(), len);
   if (!stat.ok()){
     return stat;
   }
-  auto wc_s = this->ep_->PollSendCq();
-  if (!wc_s.ok()){
-    return wc_s.status();
-  }
   this->rbuf_->Write(len);
-  return Status();
+  return id;
 }
 
 Status WriteImmSender::Send(std::vector<SendRegion> regions){
+  auto id_stat = this->SendAsync(regions);
+  if (!id_stat.ok()){
+    return id_stat.status();
+  }
+  return this->Wait(id_stat.value()); 
+}
+
+StatusOr<uint64_t> WriteImmSender::SendAsync(std::vector<SendRegion> regions){
   return Status(StatusCode::NotImplemented);
+}
+
+Status WriteImmSender::Wait(uint64_t id){
+  while (this->ackd_id_ < id){
+    auto wcStatus = this->ep_->PollSendCq();
+    if (!wcStatus.ok()){
+      return wcStatus.status();
+    }
+    ibv_wc wc = wcStatus.value();
+    this->ackd_id_ = wc.wr_id;
+  }
+  return Status();
 }
 
 Status WriteImmSender::Free(SendRegion region){

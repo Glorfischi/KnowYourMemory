@@ -35,7 +35,8 @@ cxxopts::ParseResult parse(int argc, char* argv[]) {
       ("source", "source IP address", cxxopts::value<std::string>()->default_value(""))
       ("n,iters",  "Number of exchanges" , cxxopts::value<int>()->default_value("1000"))
       ("s,size",  "Size of message to exchange", cxxopts::value<int>()->default_value("60"))
-      ("batch",  "Number of messages to send in a single batch. Only relevant for bandwidth benchmark", cxxopts::value<int>()->default_value("20"))
+      ("batch",  "Number of messages to send in a single batch. Only relevant for bandwidth benchmark", cxxopts::value<int>()->default_value("1"))
+      ("unack",  "Number of messages that can be unacknowleged. Only relevant for bandwidth benchmark", cxxopts::value<int>()->default_value("100"))
       ("sender", "Write sender type (write, writeImm, writeOff)", cxxopts::value<std::string>()->default_value("write"))
       ("ack", "Write acknowledger type (read, send)", cxxopts::value<std::string>()->default_value("write"))
       ("out", "filename to output measurements", cxxopts::value<std::string>()->default_value(""))
@@ -80,6 +81,7 @@ int main(int argc, char* argv[]) {
   int count = flags["iters"].as<int>();  
   int size = flags["size"].as<int>();  
   int batch = flags["batch"].as<int>();  
+  int unack = flags["unack"].as<int>();  
 
 
   bool server = flags["server"].as<bool>();  
@@ -146,7 +148,13 @@ int main(int argc, char* argv[]) {
     if (lat) {
       stat = test_lat_recv(conn, count, &measurements);
     } else if (bw) {
-      stat = test_bw_recv(conn, count, size, &measurements);
+      auto bw_s = test_bw_recv(conn, count, size);
+      if (!bw_s.ok()){
+        std::cerr << "Error running benchmark: " << bw_s.status() << std::endl;
+        return 1;
+      }
+      std::cerr << "## Bandwidth Receiver (MB/s)" << std::endl;
+      std::cout << (double)bw_s.value()/(1024*1024) << std::endl;
     } else {
       stat = test_lat_pong(conn, conn, count, size);
     }
@@ -204,8 +212,23 @@ int main(int argc, char* argv[]) {
       stat = test_lat_send(conn, count, size, &measurements);
       std::cout << "## Latency Sender" << std::endl;
     } else if (bw) {
-      stat = test_bw_send(conn, count, size, &measurements);
-      std::cout << "## Bandwith Sender" << std::endl;
+      if (batch > 1){
+        auto bw_s = test_bw_batch_send(conn, count, size, batch, unack);
+        if (!bw_s.ok()){
+          std::cerr << "Error running benchmark: " << bw_s.status() << std::endl;
+          return 1;
+        }
+        std::cerr << "## Bandwidth Sender (MB/s)" << std::endl;
+        std::cout << (double)bw_s.value()/(1024*1024) << std::endl;
+      } else {
+        auto bw_s = test_bw_send(conn, count, size, unack);
+        if (!bw_s.ok()){
+          std::cerr << "Error running benchmark: " << bw_s.status() << std::endl;
+          return 1;
+        }
+        std::cerr << "## Bandwidth Sender (MB/s)" << std::endl;
+        std::cout << (double)bw_s.value()/(1024*1024) << std::endl;
+      }
     } else {
       stat = test_lat_ping(conn, conn, count, size, &measurements);
       std::cout << "## Pingpong Sender" << std::endl;
