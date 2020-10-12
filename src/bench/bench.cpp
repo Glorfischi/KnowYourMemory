@@ -248,7 +248,7 @@ kym::StatusOr<uint64_t> test_bw_recv(kym::connection::Receiver *rcv, int count, 
   if (!buf_s.ok()){
     return buf_s.status().Wrap("error receiving buffer");
   }
-  //std::cout << "# GOT: " << *(int *)buf_s.value().addr << std::endl;
+  // std::cout << "# GOT: " << *(int *)buf_s.value().addr << std::endl;
   auto free_s = rcv->Free(buf_s.value());
   if (!free_s.ok()){
     return free_s.Wrap("error receiving buffer");

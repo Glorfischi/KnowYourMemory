@@ -25,7 +25,7 @@ namespace connection {
 
 namespace {
   uint32_t write_buf_size = 128*1024;
-  uint8_t inflight = 15;
+  uint8_t inflight = 16;
   struct conn_details {
     WriteOpts opts; // 2 Bytes
     ringbuffer::BufferContext buffer_ctx; // 16 Bytes
@@ -36,8 +36,8 @@ namespace {
   endpoint::Options write_connection_opts{
   .qp_attr = {
     .cap = {
-      .max_send_wr = 100,
-      .max_recv_wr = 100,
+      .max_send_wr = 200,
+      .max_recv_wr = 200,
       .max_send_sge = 1,
       .max_recv_sge = 1,
       .max_inline_data = 8,
@@ -46,7 +46,7 @@ namespace {
   },
   .responder_resources = inflight,
   .initiator_depth = inflight,
-  .retry_count = 5,  
+  .retry_count = 15,  
   .rnr_retry_count = 2, 
   };
 }
@@ -190,8 +190,78 @@ StatusOr<uint64_t> WriteSender::SendAsync(SendRegion reg){
   return id;
 }
 
+
+StatusOr<uint64_t> get_write_addr_or_die(ringbuffer::RemoteBuffer *rbuf, AckReceiver *ack, uint32_t len){
+  auto addr_s = rbuf->GetWriteAddr(len);
+  if (!addr_s.ok()){
+    auto head_s = ack->Get();
+    if (!head_s.ok()){
+      return head_s.status().Wrap("error getting new head");
+    }
+    rbuf->UpdateHead(head_s.value());
+    addr_s = rbuf->GetWriteAddr(len);
+    while (!addr_s.ok()){
+      head_s = ack->Get();
+      if (!head_s.ok()){
+        return addr_s.status().Wrap(head_s.status().message());
+      }
+      rbuf->UpdateHead(head_s.value());
+      addr_s = rbuf->GetWriteAddr(len);
+    }
+  }
+  return addr_s;
+}
+
 StatusOr<uint64_t> WriteSender::SendAsync(std::vector<SendRegion> regions){
-  return Status(StatusCode::NotImplemented);
+  uint64_t id = this->next_id_++;
+
+  int i = 0;
+  int batch_size = regions.size();
+  ibv_send_wr wrs[batch_size];
+  ibv_sge sges[batch_size];
+
+
+  // TODO(fischi): We need to recover when a send fails.
+  for (auto reg : regions) {
+    uint32_t len = reg.length + 2*sizeof(uint32_t);
+    auto addr_s = get_write_addr_or_die(this->rbuf_, this->ack_, len);
+    if(!addr_s.ok()){
+      return addr_s.status().Wrap("error sending batch. Might be in inconsistent state");
+    }
+    this->rbuf_->Write(len);
+
+    boost::crc_32_type result;
+    result.process_bytes((void *)((size_t)reg.addr - 2*sizeof(uint32_t)), sizeof(uint32_t));
+    result.process_bytes(reg.addr, reg.length);
+    *(uint32_t *)((size_t)reg.addr - sizeof(uint32_t)) = result.checksum();
+
+    struct ibv_sge *sge = &sges[i];
+    ibv_send_wr *wr = &wrs[i];
+    bool last = (++i == batch_size);
+
+    sge->addr = ((size_t)reg.addr - 2*sizeof(uint32_t));
+    sge->length = len;
+    sge->lkey =  reg.lkey;
+
+    wr->wr_id = id;
+    wr->next = last ? NULL : &(wrs[i]);
+    wr->sg_list = sge;
+    wr->num_sge = 1;
+    wr->opcode = IBV_WR_RDMA_WRITE;
+    wr->wr.rdma.remote_addr = addr_s.value();
+    wr->wr.rdma.rkey = this->rbuf_->GetKey();
+
+    wr->send_flags = last ? IBV_SEND_SIGNALED : 0;  
+
+  }
+
+  struct ibv_send_wr *bad;
+  auto stat = this->ep_->PostSendRaw(&(wrs[0]), &bad);
+  if (!stat.ok()){
+    return stat;
+  }
+  
+  return id;
 }
 Status WriteSender::Send(std::vector<SendRegion> regions){
   auto id_stat = this->SendAsync(regions);
@@ -340,17 +410,9 @@ Status WriteOffsetSender::Send(SendRegion reg){
 StatusOr<uint64_t> WriteOffsetSender::SendAsync(SendRegion reg){
   auto id = this->next_id_++;
   uint32_t len = reg.length + sizeof(uint32_t);
-  auto addr_s = this->rbuf_->GetWriteAddr(len);
+  auto addr_s = get_write_addr_or_die(this->rbuf_, this->ack_, len);
   if (!addr_s.ok()){
-    auto head_s = this->ack_->Get();
-    if (!head_s.ok()){
-      return addr_s.status().Wrap(head_s.status().message());
-    }
-    this->rbuf_->UpdateHead(head_s.value());
-    addr_s = this->rbuf_->GetWriteAddr(len);
-    if (!addr_s.ok()){
-      return addr_s.status();
-    }
+    return addr_s.status();
   }
   uint64_t addr = addr_s.value();
   auto tail_s = this->rbuf_->GetNextTail(len);
@@ -391,6 +453,7 @@ StatusOr<uint64_t> WriteOffsetSender::SendAsync(SendRegion reg){
 
   auto stat = this->ep_->PostSendRaw(&wr_data, &bad);
   if (!stat.ok()){
+    std::cerr << "bad_id " << bad->wr_id << std::endl;
     return stat;
   }
   
@@ -406,7 +469,65 @@ Status WriteOffsetSender::Send(std::vector<SendRegion> regions){
   return this->Wait(id_stat.value()); 
 }
 StatusOr<uint64_t> WriteOffsetSender::SendAsync(std::vector<SendRegion> regions){
-  return Status(StatusCode::NotImplemented);
+  uint64_t id = this->next_id_++;
+
+  int i = 0;
+  int batch_size = regions.size();
+  ibv_send_wr wrs[batch_size+1];
+  ibv_sge sges[batch_size+1];
+
+
+  // TODO(fischi): We need to recover when a send fails.
+  for (auto reg : regions) {
+    uint32_t len = reg.length + sizeof(uint32_t);
+    auto addr_s = get_write_addr_or_die(this->rbuf_, this->ack_, len);
+    if(!addr_s.ok()){
+      return addr_s.status().Wrap("error sending batch. Might be in inconsistent state");
+    }
+    this->rbuf_->Write(len);
+
+    struct ibv_sge *sge = &sges[i];
+    ibv_send_wr *wr = &wrs[i];
+    i++;
+
+    sge->addr = (size_t)reg.addr - sizeof(uint32_t);
+    sge->length = len;
+    sge->lkey =  reg.lkey;
+
+    wr->wr_id = i+100;
+    wr->next = &(wrs[i]);
+    wr->sg_list = sge;
+    wr->num_sge = 1;
+    wr->opcode = IBV_WR_RDMA_WRITE;
+    wr->wr.rdma.remote_addr = addr_s.value();
+    wr->wr.rdma.rkey = this->rbuf_->GetKey();
+
+    wr->send_flags = 0;
+  }
+  auto tail = this->rbuf_->GetTail();
+  sges[i].addr = (uintptr_t)&tail;
+  sges[i].length = sizeof(uint32_t);
+
+  wrs[i].wr_id = id;
+  wrs[i].next = NULL;
+  wrs[i].sg_list = &sges[i];
+  wrs[i].num_sge = 1;
+  wrs[i].opcode = IBV_WR_RDMA_WRITE;
+  wrs[i].wr.rdma.remote_addr = this->tail_addr_;
+  wrs[i].wr.rdma.rkey = this->tail_key_;
+  wrs[i].send_flags = IBV_SEND_SIGNALED | IBV_SEND_INLINE;  
+
+
+
+  struct ibv_send_wr *bad;
+  auto stat = this->ep_->PostSendRaw(&(wrs[0]), &bad);
+  if (!stat.ok()){
+    std::cerr << "bad_id " << bad->wr_id << std::endl;
+    return stat;
+  }
+  
+  return id;
+
 }
 
 Status WriteOffsetSender::Wait(uint64_t id){
@@ -509,17 +630,9 @@ Status WriteImmSender::Send(SendRegion reg){
 StatusOr<uint64_t> WriteImmSender::SendAsync(SendRegion reg){
   auto id = this->next_id_++;
   uint32_t len = reg.length;
-  auto addr_s = this->rbuf_->GetWriteAddr(len);
+  auto addr_s = get_write_addr_or_die(this->rbuf_, this->ack_, len);
   if (!addr_s.ok()){
-    auto head_s = this->ack_->Get();
-    if (!head_s.ok()){
-      return addr_s.status().Wrap(head_s.status().message());
-    }
-    this->rbuf_->UpdateHead(head_s.value());
-    addr_s = this->rbuf_->GetWriteAddr(len);
-    if (!addr_s.ok()){
-      return addr_s.status();
-    }
+    return addr_s.status();
   }
   uint64_t addr = addr_s.value();
 
@@ -540,7 +653,50 @@ Status WriteImmSender::Send(std::vector<SendRegion> regions){
 }
 
 StatusOr<uint64_t> WriteImmSender::SendAsync(std::vector<SendRegion> regions){
-  return Status(StatusCode::NotImplemented);
+  uint64_t id = this->next_id_++;
+
+  int i = 0;
+  int batch_size = regions.size();
+  ibv_send_wr wrs[batch_size];
+  ibv_sge sges[batch_size];
+
+
+  // TODO(fischi): We need to recover when a send fails.
+  for (auto reg : regions) {
+    uint32_t len = reg.length;
+    auto addr_s = get_write_addr_or_die(this->rbuf_, this->ack_, len);
+    if(!addr_s.ok()){
+      return addr_s.status().Wrap("error sending batch. Might be in inconsistent state");
+    }
+    this->rbuf_->Write(len);
+
+    struct ibv_sge *sge = &sges[i];
+    ibv_send_wr *wr = &wrs[i];
+    bool last = (++i == batch_size);
+
+    sge->addr = (size_t)reg.addr;
+    sge->length = len;
+    sge->lkey =  reg.lkey;
+
+    wr->wr_id = id;
+    wr->next = last ? NULL : &(wrs[i]);
+    wr->sg_list = sge;
+    wr->num_sge = 1;
+    wr->imm_data = len;
+    wr->opcode = IBV_WR_RDMA_WRITE_WITH_IMM;
+    wr->wr.rdma.remote_addr = addr_s.value();
+    wr->wr.rdma.rkey = this->rbuf_->GetKey();
+
+    wr->send_flags = last ? IBV_SEND_SIGNALED : 0;  
+  }
+
+  struct ibv_send_wr *bad;
+  auto stat = this->ep_->PostSendRaw(&(wrs[0]), &bad);
+  if (!stat.ok()){
+    return stat;
+  }
+  
+  return id;
 }
 
 Status WriteImmSender::Wait(uint64_t id){
