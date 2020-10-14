@@ -24,8 +24,8 @@ namespace kym {
 namespace connection {
 
 namespace {
-  uint32_t write_buf_size = 128*1024;
-  uint8_t inflight = 16;
+  uint32_t write_buf_size = 128*1024*1024;
+  uint32_t inflight = 300;
   struct conn_details {
     WriteOpts opts; // 2 Bytes
     ringbuffer::BufferContext buffer_ctx; // 16 Bytes
@@ -36,19 +36,20 @@ namespace {
   endpoint::Options write_connection_opts{
   .qp_attr = {
     .cap = {
-      .max_send_wr = 200,
-      .max_recv_wr = 200,
+      .max_send_wr = inflight,
+      .max_recv_wr = inflight,
       .max_send_sge = 1,
       .max_recv_sge = 1,
       .max_inline_data = 8,
     },
     .qp_type = IBV_QPT_RC,
   },
-  .responder_resources = inflight,
-  .initiator_depth = inflight,
+  .responder_resources = 16,
+  .initiator_depth = 16,
   .retry_count = 15,  
-  .rnr_retry_count = 2, 
+  .rnr_retry_count = 0,
   };
+
 }
 
 /*
