@@ -37,6 +37,8 @@ kym::endpoint::Options opts = {
   .initiator_depth =  8,
   .retry_count = 4,  
   .rnr_retry_count = 1, 
+  .native_qp = false,
+  .inline_recv = 0, 
 };
 
 struct conn_info {
@@ -85,7 +87,7 @@ int server(std::string ip, int clients){
 
   // Setup DM MR
   struct ibv_context *ctx = ln->GetContext();
-  struct ibv_pd *pd = ln->GetPdP();
+  struct ibv_pd *pd = ln->GetPd();
   struct ibv_alloc_dm_attr attr = {};
   int len = 1024;
   attr.length = len;
@@ -208,7 +210,7 @@ int client(std::string ip, int n, int clients, bool use_dm){
         key = ci->ram_key;
       }
       void *buf = malloc(1024);
-      ibv_mr *counter = ibv_reg_mr(ep->GetPdP(), buf, 1024, IBV_ACCESS_LOCAL_WRITE);
+      ibv_mr *counter = ibv_reg_mr(ep->GetPd(), buf, 1024, IBV_ACCESS_LOCAL_WRITE);
       if (counter == nullptr){
         free(buf);
         ep->Close();

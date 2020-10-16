@@ -130,7 +130,7 @@ StatusOr<ReadAckReceiver *> GetReadAckReceiver(endpoint::Endpoint *ep, Acknowled
   if (offset == nullptr){
     Status(StatusCode::Internal, "Error allocating memory");
   }
-  auto mr = ibv_reg_mr(ep->GetPdP(), offset, sizeof(offset), IBV_ACCESS_LOCAL_WRITE);
+  auto mr = ibv_reg_mr(ep->GetPd(), offset, sizeof(offset), IBV_ACCESS_LOCAL_WRITE);
   if (mr == nullptr){
     Status(StatusCode::Internal, "Error registering mr");
   }

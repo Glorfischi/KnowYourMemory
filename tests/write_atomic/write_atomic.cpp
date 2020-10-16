@@ -55,6 +55,8 @@ namespace {
     .initiator_depth =  write_atomic_outstanding,
     .retry_count = 5,  
     .rnr_retry_count = 2, 
+    .native_qp = false,
+    .inline_recv = 0,
   };
 
 }
@@ -76,7 +78,7 @@ StatusOr<std::unique_ptr<WriteAtomicSender>> DialWriteAtomic(std::string ip, int
 
   auto pd = ep->GetPd();
   struct write_atomic_meta *rbuf_meta = (struct write_atomic_meta *)calloc(1, sizeof(struct write_atomic_meta));
-  struct ibv_mr *rbuf_meta_mr = ibv_reg_mr(&pd, rbuf_meta, sizeof(struct write_atomic_meta), IBV_ACCESS_LOCAL_WRITE);  
+  struct ibv_mr *rbuf_meta_mr = ibv_reg_mr(pd, rbuf_meta, sizeof(struct write_atomic_meta), IBV_ACCESS_LOCAL_WRITE);  
 
   connectionInfo *ci;
   ep->GetConnectionInfo((void **)&ci);
@@ -102,13 +104,13 @@ StatusOr<std::unique_ptr<WriteAtomicListener>> ListenWriteAtomic(std::string ip,
     return magic_stat.status().Wrap("error initialzing magic buffer while accepting");
   }
   auto pd = ln->GetPd();
-  auto buf_mr = ibv_reg_mr(&pd, magic_stat.value(), 2 * write_atomic_buf_size, 
+  auto buf_mr = ibv_reg_mr(pd, magic_stat.value(), 2 * write_atomic_buf_size, 
       IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);  
   auto buf_meta = (struct write_atomic_meta *)calloc(1, sizeof(struct write_atomic_meta));
-  auto buf_meta_mr = ibv_reg_mr(&pd, buf_meta, sizeof(struct write_atomic_meta),
+  auto buf_meta_mr = ibv_reg_mr(pd, buf_meta, sizeof(struct write_atomic_meta),
       IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_ATOMIC);  
   auto rcv_buf = (char *)calloc(write_atomic_outstanding, sizeof(char));
-  auto rcv_mr = ibv_reg_mr(&pd, rcv_buf, write_atomic_outstanding * sizeof(char),
+  auto rcv_mr = ibv_reg_mr(pd, rcv_buf, write_atomic_outstanding * sizeof(char),
       IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);  
 
   return std::make_unique<WriteAtomicListener>(std::move(ln), buf_mr, buf_meta_mr, rcv_mr, write_atomic_outstanding);

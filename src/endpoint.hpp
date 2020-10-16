@@ -38,6 +38,8 @@ struct Options {
 	uint8_t flow_control;
 	uint8_t retry_count;		/* ignored when accepting */
 	uint8_t rnr_retry_count;
+  bool native_qp; // to use native interface for creating a QP connecion instead of rdma_create_qp
+  uint32_t inline_recv; 
 };
 
 
@@ -52,11 +54,13 @@ class Endpoint {
     Status Close();
 
     ibv_context *GetContext();
-    ibv_pd GetPd();
-    ibv_pd *GetPdP();
+    ibv_pd *GetPd();
     ibv_srq *GetSRQ();
     struct ibv_cq *GetSendCQ();
     struct ibv_cq *GetRecvCQ();
+
+     // for supporting IDs and native QPs
+    void SetQp(struct ibv_qp*  qp){ this->qp_ = qp;   this->id_->qp = qp;  };
 
 
     // Returns the length of the received private data on connection establishment and returns a pointer to it in buf
@@ -80,10 +84,17 @@ class Endpoint {
     StatusOr<struct ibv_wc> PollRecvCq();
     StatusOr<struct ibv_wc> PollRecvCqOnce();
   private:
-    rdma_cm_id *id_;
+    rdma_cm_id * const id_;
     
     void *private_data_;
     size_t private_data_len_;
+
+    // for supporting IDs and native QPs
+    struct ibv_srq* srq_;
+    struct ibv_pd*  pd_;
+    struct ibv_cq*  scq_;
+    struct ibv_cq*  rcq_;
+    struct ibv_qp*  qp_;
 };
 
 class Listener {
@@ -94,8 +105,7 @@ class Listener {
     Status Close();
 
     ibv_context *GetContext();
-    ibv_pd GetPd();
-    ibv_pd *GetPdP();
+    ibv_pd *GetPd();
 
     StatusOr<Endpoint *> Accept(Options opts);
   private:

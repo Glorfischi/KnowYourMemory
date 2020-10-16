@@ -44,9 +44,8 @@ Status ReceiveQueue::PostMR(uint32_t wr_id){
 
 }
 StatusOr<ReceiveQueue *> GetReceiveQueue(Endpoint *ep, size_t transfer_size, size_t inflight){
-  ibv_pd pd = ep->GetPd();
   char* buf = (char*)malloc(transfer_size*inflight);
-  struct ibv_mr * mr = ibv_reg_mr(&pd, buf, transfer_size*inflight, IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);  
+  struct ibv_mr * mr = ibv_reg_mr(ep->GetPd(), buf, transfer_size*inflight, IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);  
   for (size_t i = 0; i < inflight; i++){
     auto regStatus = ep->PostRecv(i, mr->lkey, (void *)((uint64_t)mr->addr + i*transfer_size), transfer_size); 
     if (!regStatus.ok()){
@@ -103,17 +102,17 @@ Status SharedReceiveQueue::PostMR(uint32_t wr_id){
 struct ibv_srq *SharedReceiveQueue::GetSRQ(){
   return this->srq_;
 }
-StatusOr<SharedReceiveQueue *> GetSharedReceiveQueue(struct ibv_pd pd, size_t transfer_size, size_t inflight){
+StatusOr<SharedReceiveQueue *> GetSharedReceiveQueue(struct ibv_pd *pd, size_t transfer_size, size_t inflight){
   struct ibv_srq_init_attr srq_init_attr = {0};
   srq_init_attr.attr.max_sge = 1;
   srq_init_attr.attr.max_wr = inflight;
-  auto srq = ibv_create_srq(&pd, &srq_init_attr);
+  auto srq = ibv_create_srq(pd, &srq_init_attr);
   if (srq == nullptr){
     return Status(StatusCode::Internal, "error " + std::to_string(errno) + " creating ibv_srq");
   }
 
   char* buf = (char*)calloc(inflight, transfer_size);
-  struct ibv_mr * mr = ibv_reg_mr(&pd, buf, transfer_size*inflight, IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);  
+  struct ibv_mr * mr = ibv_reg_mr(pd, buf, transfer_size*inflight, IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);  
 
   for (size_t i = 0; i < inflight; i++){
     struct ibv_sge sge;

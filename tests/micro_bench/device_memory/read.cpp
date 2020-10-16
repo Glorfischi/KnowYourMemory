@@ -36,6 +36,8 @@ kym::endpoint::Options opts = {
   .initiator_depth =  5,
   .retry_count = 8,  
   .rnr_retry_count = 0, 
+  .native_qp = false,
+  .inline_recv = 0,
 };
 
 struct conn_info {
@@ -80,7 +82,7 @@ int server(std::string ip){
 
   // Setup DM MR
   struct ibv_context *ctx = ln->GetContext();
-  struct ibv_pd *pd = ln->GetPdP();
+  struct ibv_pd *pd = ln->GetPd();
   struct ibv_alloc_dm_attr attr = {};
   int len = 1024;
   attr.length = len;
@@ -133,7 +135,7 @@ int server(std::string ip){
   }
   auto ep = conn_s.value();
   void *buf = malloc(16);
-  struct ibv_mr *mr = ibv_reg_mr(ep->GetPdP(), buf, 16, IBV_ACCESS_REMOTE_WRITE  | IBV_ACCESS_LOCAL_WRITE);
+  struct ibv_mr *mr = ibv_reg_mr(ep->GetPd(), buf, 16, IBV_ACCESS_REMOTE_WRITE  | IBV_ACCESS_LOCAL_WRITE);
   auto stat = ep->PostRecv(42, mr->lkey, mr->addr, mr->length);
   if (!stat.ok()){
     std::cerr << "Error posting server mr " << stat << std::endl;
@@ -188,7 +190,7 @@ int client(std::string ip, int count){
     std::cerr << "Error registering dst memory" << errno << std::endl;
     return 1;
   }
-  struct ibv_mr *src_mr = ibv_reg_mr(ep->GetPdP(), src, 16, IBV_ACCESS_LOCAL_WRITE);
+  struct ibv_mr *src_mr = ibv_reg_mr(ep->GetPd(), src, 16, IBV_ACCESS_LOCAL_WRITE);
   if (src_mr == nullptr) {
     std::cerr << "Error registering dst mr" << errno << std::endl;
     perror("error");

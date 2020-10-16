@@ -1,7 +1,7 @@
 PREFIX = ../..
 
 CC = g++
-LDFLAGS =  -libverbs -lpthread -lrdmacm
+LDFLAGS =  -libverbs -lpthread -lrdmacm -lmlx5
 CFLAGS += -Wall -I$(PREFIX)/include  -I$(PREFIX)/src -I$(PREFIX)/external -I$(PREFIX)/src/bench
 CXXFLAGS = $(CFLAGS)
 

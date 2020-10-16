@@ -85,7 +85,7 @@ class SharedReceiveQueue : public IReceiveQueue {
     ibv_mr* mr_;
     size_t transfer_size_;
 };
-StatusOr<SharedReceiveQueue *> GetSharedReceiveQueue(struct ibv_pd pd, size_t transfer_size, size_t inflight);
+StatusOr<SharedReceiveQueue *> GetSharedReceiveQueue(struct ibv_pd *pd, size_t transfer_size, size_t inflight);
 
 
 

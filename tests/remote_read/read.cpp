@@ -46,6 +46,8 @@ endpoint::Options read_connection_default_opts = {
   .initiator_depth =  5,
   .retry_count = 5,  
   .rnr_retry_count = 8, 
+  .native_qp = false,
+  .inline_recv = 0,
 };
 
 
@@ -201,11 +203,11 @@ ReadConnection::ReadConnection(std::shared_ptr<endpoint::Endpoint> ep, std::shar
   : ep_(ep), allocator_(allocator), ack_(ack), ack_send_buf_(ack_source), ack_remote_addr_(ack_remote_addr), ack_remote_key_(ack_remote_key) {
   // TODO(fischi) Parameterize
   size_t transfer_size = sizeof(struct ReadRequest);
-  ibv_pd pd = this->ep_->GetPd();
+  ibv_pd *pd = this->ep_->GetPd();
   for (int i = 0; i < 10; i++){
     // TODO(Fischi) Maybe we should replace that was a call to an allocator?
     char* buf = (char*)malloc(transfer_size);
-    struct ibv_mr * mr = ibv_reg_mr(&pd, buf, transfer_size, IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);  
+    struct ibv_mr * mr = ibv_reg_mr(pd, buf, transfer_size, IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);  
 
     // TODO(Fischi) Error handling. This should not be in the constructor
     auto regStatus = this->ep_->PostRecv(i, mr->lkey, mr->addr, transfer_size); 

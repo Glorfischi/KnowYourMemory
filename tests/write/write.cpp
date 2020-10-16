@@ -48,6 +48,8 @@ namespace {
   .initiator_depth = 16,
   .retry_count = 15,  
   .rnr_retry_count = 0,
+  .native_qp = false,
+  .inline_recv = 0,
   };
 
 }
@@ -885,7 +887,7 @@ StatusOr<WriteSender *> WriteListener::AcceptSender(WriteOpts opts){
   local_conn_details.opts = opts;
 
   
-  auto stat = initSender(this->listener_->GetPdP(), opts, &alloc);
+  auto stat = initSender(this->listener_->GetPd(), opts, &alloc);
   if (!stat.ok()){
     return stat.Wrap("error initalizing sender details");
   }
@@ -942,7 +944,7 @@ StatusOr<WriteReceiver *> WriteListener::AcceptReceiver(WriteOpts opts){
   conn_details local_conn_details;
   local_conn_details.opts = opts;
 
-  auto stat = initReceiver(this->listener_->GetPdP(), opts, &rbuf, &ack, &metadata);
+  auto stat = initReceiver(this->listener_->GetPd(), opts, &rbuf, &ack, &metadata);
   if (!stat.ok()){
     return stat.Wrap("Error initalizing connection details");
   }
@@ -1013,11 +1015,11 @@ StatusOr<WriteConnection *> WriteListener::AcceptConnection(WriteOpts opts){
 
   memory::Allocator *alloc;
 
-  auto stat = initReceiver(this->listener_->GetPdP(), opts, &rbuf, &ack, &metadata);
+  auto stat = initReceiver(this->listener_->GetPd(), opts, &rbuf, &ack, &metadata);
   if (!stat.ok()){
     return stat.Wrap("Error initalizing receiver details");
   }
-  stat = initSender(this->listener_->GetPdP(), opts, &alloc);
+  stat = initSender(this->listener_->GetPd(), opts, &alloc);
   if (!stat.ok()){
     return stat.Wrap("error initalizing sender details");
   }
@@ -1140,7 +1142,7 @@ StatusOr<WriteSender*> DialWriteSender(std::string ip, int port, WriteOpts opts)
   }
   endpoint::Endpoint *ep = ep_s.value();
   
-  auto stat = initSender(ep->GetPdP(), opts, &alloc);
+  auto stat = initSender(ep->GetPd(), opts, &alloc);
   if (!stat.ok()){
     return stat.Wrap("error initalizing sender details");
   }
@@ -1202,7 +1204,7 @@ StatusOr<WriteReceiver*> DialWriteReceiver(std::string ip, int port, WriteOpts o
   }
   endpoint::Endpoint *ep = ep_s.value();
   
-  auto stat = initReceiver(ep->GetPdP(), opts, &rbuf, &ack, &metadata);
+  auto stat = initReceiver(ep->GetPd(), opts, &rbuf, &ack, &metadata);
   if (!stat.ok()){
     return stat.Wrap("Error initalizing connection details");
   }
@@ -1274,11 +1276,11 @@ StatusOr<WriteConnection*> DialWriteConnection(std::string ip, int port, WriteOp
   }
   endpoint::Endpoint *ep = ep_s.value();
 
-  auto stat = initReceiver(ep->GetPdP(), opts, &rbuf, &ack, &metadata);
+  auto stat = initReceiver(ep->GetPd(), opts, &rbuf, &ack, &metadata);
   if (!stat.ok()){
     return stat.Wrap("Error initalizing receiver details");
   }
-  stat = initSender(ep->GetPdP(), opts, &alloc);
+  stat = initSender(ep->GetPd(), opts, &alloc);
   if (!stat.ok()){
     return stat.Wrap("error initalizing sender details");
   }

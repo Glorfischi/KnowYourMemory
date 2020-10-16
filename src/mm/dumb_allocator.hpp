@@ -25,14 +25,13 @@ namespace memory {
 class DumbAllocator : public Allocator {
   public:
     ~DumbAllocator() = default;
-    DumbAllocator(struct ibv_pd pd);
     DumbAllocator(struct ibv_pd *pd);
 
     StatusOr<Region> Alloc(size_t size);
     Status Free(kym::memory::Region region);
 
   private:
-    struct ibv_pd pd_;
+    struct ibv_pd * const pd_;
 };
 
 

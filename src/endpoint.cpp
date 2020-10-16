@@ -15,6 +15,8 @@
 #include <ostream>
 #include <rdma/rdma_cma.h>
 #include <infiniband/verbs.h> 
+#include <infiniband/mlx5dv.h>
+
 #include <string>
 
 #include "error.hpp"
@@ -78,10 +80,7 @@ Status Endpoint::Close() {
 ibv_context *Endpoint::GetContext(){
   return this->id_->verbs;
 }
-ibv_pd Endpoint::GetPd(){
-  return *this->id_->pd;
-}
-ibv_pd *Endpoint::GetPdP(){
+ibv_pd *Endpoint::GetPd(){
   return this->id_->pd;
 }
 ibv_srq *Endpoint::GetSRQ(){
@@ -360,23 +359,102 @@ StatusOr<Endpoint *> Listener::Accept(Options opts){
     opts.qp_attr.srq = srq;
   }
 
-  ret = rdma_create_qp(conn_id, this->id_->pd, &opts.qp_attr);
-  if (ret) {
-    // TODO(Fischi) Map error codes
-    perror("ERROR");
-    return Status(StatusCode::Internal, "accept: error " + std::to_string(ret) + " getting creating qp");
+  struct ibv_qp *qp = NULL;
+  if(opts.native_qp){ // use native interface 
+    struct ibv_qp_attr qp_attr;
+    int qp_attr_mask;
+
+    /*struct ibv_cq * cq = ibv_create_cq(conn_id->verbs, 10, NULL, NULL, 0 );
+    opts.qp_attr.send_cq = cq;
+    opts.qp_attr.recv_cq = cq;*/
+
+    assert(opts.qp_attr.send_cq != NULL && "for native QP, send CQ must be specified"); // see man ibv_create_cq
+    assert(opts.qp_attr.recv_cq != NULL && "for native QP, receive CQ must be specified");
+    assert(this->id_->pd != NULL);
+
+    if(opts.inline_recv != 0){
+      printf("The code is not tested. Try to use inline recv %u \n",opts.inline_recv);
+      struct ibv_qp_init_attr_ex attr_ex;
+      struct mlx5dv_qp_init_attr attr_dv;
+      memset(&attr_ex, 0, sizeof(attr_ex));
+      memset(&attr_dv, 0, sizeof(attr_dv));
+
+    
+      attr_ex.pd = this->id_->pd;
+      attr_ex.comp_mask =  IBV_QP_INIT_ATTR_PD;
+      attr_ex.qp_type = opts.qp_attr.qp_type;
+      attr_ex.send_cq = opts.qp_attr.send_cq;
+      attr_ex.recv_cq = opts.qp_attr.recv_cq;
+      attr_ex.srq = opts.qp_attr.srq;
+      attr_ex.cap.max_send_wr = opts.qp_attr.cap.max_send_wr;
+      attr_ex.cap.max_recv_wr = opts.qp_attr.cap.max_recv_wr;
+      attr_ex.cap.max_send_sge = opts.qp_attr.cap.max_send_sge;
+      attr_ex.cap.max_recv_sge = opts.qp_attr.cap.max_recv_sge;
+      attr_ex.cap.max_inline_data = opts.qp_attr.cap.max_inline_data;
+
+      attr_dv.comp_mask = MLX5DV_QP_INIT_ATTR_MASK_QP_CREATE_FLAGS;
+      attr_dv.create_flags = MLX5DV_QP_CREATE_ALLOW_SCATTER_TO_CQE;
+      qp = mlx5dv_create_qp(conn_id->verbs, &attr_ex,&attr_dv);
+    } else {
+      qp = ibv_create_qp(this->id_->pd , &opts.qp_attr);
+    }
+
+    if(!qp){
+      perror("ERROR");
+      return Status(StatusCode::Internal, "accept: error " + std::to_string(ret) + " creating native qp");
+    }
+ 
+    // INIT state
+    qp_attr.qp_state = IBV_QPS_INIT;
+    ret = rdma_init_qp_attr(conn_id, &qp_attr, &qp_attr_mask);
+    if (ret)
+      return Status(StatusCode::Internal, "accept: error " + std::to_string(ret) + " getting attr qp on INIT");
+    ret = ibv_modify_qp(qp, &qp_attr, qp_attr_mask);
+    if (ret)
+      return Status(StatusCode::Internal, "accept: error " + std::to_string(ret) + " setting attr qp to INIT");
+
+    // RTR state 
+    qp_attr.qp_state = IBV_QPS_RTR;
+    ret = rdma_init_qp_attr(conn_id, &qp_attr, &qp_attr_mask);
+    if (ret)
+      return Status(StatusCode::Internal, "accept: error " + std::to_string(ret) + " getting attr qp on RTR");
+    ret = ibv_modify_qp(qp, &qp_attr, qp_attr_mask);
+
+    if (ret)
+      return Status(StatusCode::Internal, "accept: error " + std::to_string(ret) + " setting attr qp to RTR");
+    qp_attr.qp_state = IBV_QPS_RTS;
+    ret = rdma_init_qp_attr(conn_id, &qp_attr, &qp_attr_mask);
+    if (ret)
+      return Status(StatusCode::Internal, "accept: error " + std::to_string(ret) + " getting attr qp on RTS");
+    ret = ibv_modify_qp(qp, &qp_attr, qp_attr_mask);
+    if (ret)
+      return Status(StatusCode::Internal, "accept: error " + std::to_string(ret) + " setting attr qp to RTS");
+
+    conn_param.qp_num = qp->qp_num;
+    printf("create qp %u\n",qp->qp_num);
+    
+
+  } else { // use RDMA CM for creating a QP
+    ret = rdma_create_qp(conn_id, this->id_->pd, &opts.qp_attr);
+    if (ret) {
+      // TODO(Fischi) Map error codes
+      perror("ERROR");
+      return Status(StatusCode::Internal, "accept: error " + std::to_string(ret) + " getting creating qp");
+    }
   }
-  
   ret = rdma_accept(conn_id, &conn_param);
   if (ret) {
     perror("ERROR");
     return Status(StatusCode::Internal, "accept: error " + std::to_string(ret) + " accepting connection");
   }
+
   conn_id->srq = opts.qp_attr.srq;
 
   
-  
-  return new Endpoint(conn_id, private_data, private_data_len);
+  Endpoint *ep = new Endpoint(conn_id, private_data, private_data_len);
+  if(qp) ep->SetQp(qp); // it is not good as we need to destroy it. Endpoint should have fields for self-created objects.
+
+  return ep;
 }
 
 Listener::Listener(rdma_cm_id *id) : id_(id) {
@@ -385,10 +463,8 @@ Listener::Listener(rdma_cm_id *id) : id_(id) {
 Listener::~Listener(){
 }
 
-ibv_pd Listener::GetPd(){
-  return *this->id_->pd;
-}
-ibv_pd *Listener::GetPdP(){
+ibv_pd *Listener::GetPd(){
+  assert(this->id_->pd != nullptr && "PD has not been created");
   return this->id_->pd;
 }
 ibv_context *Listener::GetContext(){
@@ -424,7 +500,7 @@ StatusOr<Endpoint *> Create(std::string ip, int port, Options opts){
 
   struct rdma_cm_id *id;
 
-  // setup endpoint, also creates qp
+  // setup endpoint, also can create qp
   ret = rdma_create_ep(&id, addrinfo, opts.pd, NULL); 
   if (ret) {
     return Status(StatusCode::Internal, "Error " + std::to_string(errno) + " creating endpoint");
@@ -438,15 +514,33 @@ StatusOr<Endpoint *> Create(std::string ip, int port, Options opts){
       return Status(StatusCode::Internal, "error " + std::to_string(errno) + " creating ibv_srq");
     }
   }
-  ret = rdma_create_qp(id, id->pd, &opts.qp_attr);
-  if (ret) {
-    return Status(StatusCode::Internal, "dial: error creating qp");
+
+  struct ibv_qp * qp;
+  if(opts.native_qp){
+    /*struct ibv_cq * cq = ibv_create_cq(id->verbs, 10, NULL, NULL, 0 );
+    opts.qp_attr.send_cq = cq;
+    opts.qp_attr.recv_cq = cq;*/
+
+    assert(opts.qp_attr.send_cq != NULL && "for native QP, send CQ must be specified"); // see man ibv_create_cq
+    assert(opts.qp_attr.recv_cq != NULL && "for native QP, receive CQ must be specified");
+    assert(id->pd != NULL);
+ 
+    qp = ibv_create_qp(id->pd , &opts.qp_attr);
+  } else {
+    ret = rdma_create_qp(id, id->pd, &opts.qp_attr);
+    if (ret) {
+      return Status(StatusCode::Internal, "dial: error creating qp");
+    }
   }
+
 
   // cleanup addrinfo, we don't need it anymore
   rdma_freeaddrinfo(addrinfo);
 
-  return new Endpoint(id);
+  Endpoint *ep = new Endpoint(id);
+  if(qp) ep->SetQp(qp);
+
+  return ep;
 }
 Status Endpoint::Connect(Options opts){
   struct rdma_conn_param conn_param;
@@ -459,12 +553,17 @@ Status Endpoint::Connect(Options opts){
   conn_param.private_data_len = opts.private_data_len;
   conn_param.flow_control = opts.flow_control;
 
+  if(opts.native_qp){
+    conn_param.qp_num = this->qp_->qp_num;
+  }
+
   // connect to remote
   int ret = rdma_connect(this->id_, &conn_param);
   if (ret) {
     perror("ERROR");
     return Status(StatusCode::Internal, "Error " + std::to_string(ret) + " connecting to remote");
   }
+ 
   // Set connection data
   size_t private_data_len = this->id_->event->param.conn.private_data_len;
   void * private_data = nullptr;
@@ -474,6 +573,46 @@ Status Endpoint::Connect(Options opts){
   }
   this->private_data_ = private_data;
   this->private_data_len_ = private_data_len;
+
+
+  if(opts.native_qp){ 
+    printf("The code block is not tested.\n");
+    struct ibv_qp_attr qp_attr;
+    int qp_attr_mask;
+
+    // INIT state
+    qp_attr.qp_state = IBV_QPS_INIT;
+    ret = rdma_init_qp_attr(this->id_, &qp_attr, &qp_attr_mask);
+    if (ret)
+      return Status(StatusCode::Internal, "connect: error " + std::to_string(ret) + " getting attr qp on INIT");
+    ret = ibv_modify_qp(this->qp_, &qp_attr, qp_attr_mask);
+    if (ret)
+      return Status(StatusCode::Internal, "connect: error " + std::to_string(ret) + " setting attr qp to INIT");
+
+    // RTR state 
+    qp_attr.qp_state = IBV_QPS_RTR;
+    ret = rdma_init_qp_attr(this->id_, &qp_attr, &qp_attr_mask);
+    if (ret)
+      return Status(StatusCode::Internal, "connect: error " + std::to_string(ret) + " getting attr qp on RTR");
+    ret = ibv_modify_qp(this->qp_, &qp_attr, qp_attr_mask);
+
+    if (ret)
+      return Status(StatusCode::Internal, "connect: error " + std::to_string(ret) + " setting attr qp to RTR");
+    qp_attr.qp_state = IBV_QPS_RTS;
+    ret = rdma_init_qp_attr(this->id_, &qp_attr, &qp_attr_mask);
+    if (ret)
+      return Status(StatusCode::Internal, "connect: error " + std::to_string(ret) + " getting attr qp on RTS");
+    ret = ibv_modify_qp(this->qp_, &qp_attr, qp_attr_mask);
+    if (ret)
+      return Status(StatusCode::Internal, "connect: error " + std::to_string(ret) + " setting attr qp to RTS");
+
+    ret = rdma_establish(this->id_);
+    if (ret) {
+      perror("ERROR");
+      return Status(StatusCode::Internal, "Error " + std::to_string(ret) + " connecting to remote using rdma_establish");
+    }
+  }
+
   return Status();
 }
 
@@ -494,6 +633,7 @@ StatusOr<Listener *> Listen(std::string ip, int port){
   int ret;
   struct rdma_addrinfo hints;
   struct rdma_addrinfo *addrinfo;
+  struct rdma_cm_id *id;
 
   memset(&hints, 0, sizeof hints);
   hints.ai_port_space = RDMA_PS_TCP;
@@ -504,17 +644,8 @@ StatusOr<Listener *> Listen(std::string ip, int port){
     // TODO(Fischi) Map error codes
     return Status(StatusCode::Internal, "Error getting address info");
   }
-  
-  struct rdma_cm_id *id;
-  struct rdma_conn_param conn_param;
  
-  memset(&conn_param, 0 , sizeof conn_param);
-  conn_param.responder_resources = 0;  
-  conn_param.initiator_depth =  0;  
-  conn_param.retry_count = 8;  
-  conn_param.rnr_retry_count = 3; 
-
-  // setup endpoint, also creates qp(?)
+  // setup endpoint
   ret = rdma_create_ep(&id, addrinfo, NULL, NULL); 
   if (ret) {
     // TODO(Fischi) Map error codes
@@ -529,6 +660,8 @@ StatusOr<Listener *> Listen(std::string ip, int port){
     // TODO(Fischi) Map error codes
     return Status(StatusCode::Internal, "listening failed");
   }
+
+  assert(id->pd!=nullptr && "pd is null");
 
   return new Listener(id);
 }
