@@ -364,7 +364,9 @@ StatusOr<Endpoint *> Listener::Accept(Options opts){
     struct ibv_qp_attr qp_attr;
     int qp_attr_mask;
 
-    /*struct ibv_cq * cq = ibv_create_cq(conn_id->verbs, 10, NULL, NULL, 0 );
+    /*
+    // the creation of CQ should be outside. It is here for debugging.
+    struct ibv_cq * cq = ibv_create_cq(conn_id->verbs, 10, NULL, NULL, 0 );
     opts.qp_attr.send_cq = cq;
     opts.qp_attr.recv_cq = cq;*/
 
@@ -394,7 +396,8 @@ StatusOr<Endpoint *> Listener::Accept(Options opts){
 
       attr_dv.comp_mask = MLX5DV_QP_INIT_ATTR_MASK_QP_CREATE_FLAGS;
       attr_dv.create_flags = MLX5DV_QP_CREATE_ALLOW_SCATTER_TO_CQE;
-      qp = mlx5dv_create_qp(conn_id->verbs, &attr_ex,&attr_dv);
+
+      //qp = mlx5dv_create_qp(conn_id->verbs, &attr_ex,&attr_dv); // for correct linking should be added -lmlx5
     } else {
       qp = ibv_create_qp(this->id_->pd , &opts.qp_attr);
     }
@@ -500,11 +503,56 @@ StatusOr<Endpoint *> Create(std::string ip, int port, Options opts){
 
   struct rdma_cm_id *id;
 
+
+#ifdef WITH_MANUAL_RDMACM  // to manage events and connection manually
+  struct rdma_cm_event *event;
+
+  struct rdma_event_channel * cm_channel = rdma_create_event_channel();
+  if (cm_channel == NULL) {
+    return Status(StatusCode::Internal, "Error " + std::to_string(errno) + " creating event channel");
+  }
+
+  ret = rdma_create_id(cm_channel, &id, NULL, RDMA_PS_TCP);
+  if (ret) {
+    return Status(StatusCode::Internal, "Error " + std::to_string(errno) + " creating id endpoint");
+  }
+
+  ret = rdma_resolve_addr(id, NULL, addrinfo->ai_dst_addr, 2000);
+  if (ret) {
+    return Status(StatusCode::Internal, "Error " + std::to_string(errno) + " resolving addresses to the remote endpoint");
+  }
+ 
+  ret = rdma_get_cm_event(cm_channel, &event);
+  if(event->event != RDMA_CM_EVENT_ADDR_RESOLVED){
+    return Status(StatusCode::Internal, "Error " + std::to_string(errno) + " creating id endpoint");
+  }
+  rdma_ack_cm_event(event);
+
+  ret = rdma_resolve_route(id, 2000);
+  if (ret) {
+    return Status(StatusCode::Internal, "Error " + std::to_string(errno) + " resolving route to the remote endpoint");
+  }
+
+  ret = rdma_get_cm_event(cm_channel, &event);
+  if(event->event != RDMA_CM_EVENT_ROUTE_RESOLVED){
+    return Status(StatusCode::Internal, "Error " + std::to_string(errno) + " creating id endpoint");
+  }
+  assert(event->id == id && "Unexpected route resolved event");
+  rdma_ack_cm_event(event);
+
+  id->channel = cm_channel;
+#else 
+
   // setup endpoint, also can create qp
   ret = rdma_create_ep(&id, addrinfo, opts.pd, NULL); 
   if (ret) {
     return Status(StatusCode::Internal, "Error " + std::to_string(errno) + " creating endpoint");
   }
+   
+#endif
+
+  assert(id->pd != NULL && "pd is null");
+
   if (opts.use_srq && opts.qp_attr.srq == nullptr){
     struct ibv_srq_init_attr srq_init_attr;
     srq_init_attr.attr.max_sge = opts.qp_attr.cap.max_recv_sge;
@@ -517,14 +565,16 @@ StatusOr<Endpoint *> Create(std::string ip, int port, Options opts){
 
   struct ibv_qp * qp;
   if(opts.native_qp){
-    /*struct ibv_cq * cq = ibv_create_cq(id->verbs, 10, NULL, NULL, 0 );
+    /*
+    // the creation of CQ should be outside. It is here for debugging.
+    struct ibv_cq * cq = ibv_create_cq(id->verbs, 10, NULL, NULL, 0 );
     opts.qp_attr.send_cq = cq;
     opts.qp_attr.recv_cq = cq;*/
 
     assert(opts.qp_attr.send_cq != NULL && "for native QP, send CQ must be specified"); // see man ibv_create_cq
     assert(opts.qp_attr.recv_cq != NULL && "for native QP, receive CQ must be specified");
     assert(id->pd != NULL);
- 
+
     qp = ibv_create_qp(id->pd , &opts.qp_attr);
   } else {
     ret = rdma_create_qp(id, id->pd, &opts.qp_attr);
@@ -555,7 +605,9 @@ Status Endpoint::Connect(Options opts){
 
   if(opts.native_qp){
     conn_param.qp_num = this->qp_->qp_num;
+    this->id_->qp = NULL; // we need to NULL it here as connect uses this information
   }
+ 
 
   // connect to remote
   int ret = rdma_connect(this->id_, &conn_param);
@@ -563,7 +615,17 @@ Status Endpoint::Connect(Options opts){
     perror("ERROR");
     return Status(StatusCode::Internal, "Error " + std::to_string(ret) + " connecting to remote");
   }
- 
+
+#ifdef WITH_MANUAL_RDMACM
+  // code in case events are handled manually.
+  struct rdma_cm_event *event;
+  ret = rdma_get_cm_event(this->id_->channel, &event);
+  if(event->event != RDMA_CM_EVENT_CONNECT_RESPONSE && event->event != RDMA_CM_EVENT_ESTABLISHED){
+    return Status(StatusCode::Internal, "Error " + std::to_string(errno) + " on rdma connect");
+  }
+  rdma_ack_cm_event(event);
+#endif
+
   // Set connection data
   size_t private_data_len = this->id_->event->param.conn.private_data_len;
   void * private_data = nullptr;
@@ -572,11 +634,9 @@ Status Endpoint::Connect(Options opts){
     memcpy(private_data, this->id_->event->param.conn.private_data, private_data_len);
   }
   this->private_data_ = private_data;
-  this->private_data_len_ = private_data_len;
-
+  this->private_data_len_ = private_data_len; 
 
   if(opts.native_qp){ 
-    printf("The code block is not tested.\n");
     struct ibv_qp_attr qp_attr;
     int qp_attr_mask;
 
@@ -611,8 +671,9 @@ Status Endpoint::Connect(Options opts){
       perror("ERROR");
       return Status(StatusCode::Internal, "Error " + std::to_string(ret) + " connecting to remote using rdma_establish");
     }
-  }
 
+    this->id_->qp =  this->qp_; // for compatibility with the rest of the code
+  }
   return Status();
 }
 

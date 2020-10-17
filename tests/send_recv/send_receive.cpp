@@ -82,8 +82,6 @@ StatusOr<SendReceiveConnection *> DialSendReceive(std::string ip, int port, std:
     opts.src = src.c_str();
   }
 
-  opts.native_qp = true;
-
   auto epStatus = kym::endpoint::Dial(ip, port, opts);
   if (!epStatus.ok()){
     return epStatus.status();
@@ -175,8 +173,7 @@ StatusOr<SendReceiveConnection *> SendReceiveListener::Accept(){
   if (this->srq_ != nullptr){
     opts.qp_attr.srq = this->srq_->GetSRQ();
   }
-  opts.native_qp = true;
-  printf("native qp \n");
+
   auto epStatus = this->listener_->Accept(opts);
   if (!epStatus.ok()){
     return epStatus.status();
