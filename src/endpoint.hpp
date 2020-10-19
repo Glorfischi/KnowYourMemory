@@ -70,6 +70,7 @@ class Endpoint {
     Status PostWrite(uint64_t ctx, uint32_t lkey, void *addr, size_t size, uint64_t remote_addr, uint32_t rkey);
     Status PostWriteWithImmidate(uint64_t ctx, uint32_t lkey, void *addr, size_t size, uint64_t remote_addr, 
         uint32_t rkey, uint32_t imm);
+    Status PostWriteInline(uint64_t ctx, void *addr, size_t size, uint64_t remote_addr, uint32_t rkey);
     Status PostImmidate(uint64_t ctx, uint32_t imm);
     Status PostFetchAndAdd(uint64_t ctx, uint64_t add, uint32_t lkey, uint64_t *addr, uint64_t remote_addr, uint32_t rkey);
     StatusOr<struct ibv_wc> PollSendCq();

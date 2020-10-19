@@ -218,6 +218,25 @@ Status Endpoint::PostWriteWithImmidate(uint64_t ctx, uint32_t lkey, void *addr, 
   return this->PostSendRaw(&wr, &bad);
 }
 
+Status Endpoint::PostWriteInline(uint64_t ctx, void *addr, size_t size, uint64_t remote_addr, uint32_t rkey){
+  struct ibv_sge sge;
+  sge.addr = (uintptr_t)addr;
+  sge.length = size;
+  sge.lkey =  0;
+  struct ibv_send_wr wr, *bad;
+
+  wr.wr_id = ctx;
+  wr.next = NULL;
+  wr.sg_list = &sge;
+  wr.num_sge = 1;
+  wr.opcode = IBV_WR_RDMA_WRITE;
+  wr.send_flags = IBV_SEND_SIGNALED | IBV_SEND_INLINE;  
+  wr.wr.rdma.remote_addr = remote_addr;
+  wr.wr.rdma.rkey = rkey;
+
+  return this->PostSendRaw(&wr, &bad);
+
+}
 Status Endpoint::PostFetchAndAdd(uint64_t ctx, uint64_t add, uint32_t lkey, uint64_t *addr, uint64_t remote_addr, uint32_t rkey){
   struct ibv_sge sge;
   sge.addr = (uintptr_t)addr;
