@@ -233,23 +233,46 @@ StatusOr<ReadRequest> ReadConnection::ReceiveRequest(){
 }
 
 Status ReadConnection::ReadInto(void *addr, uint32_t key, ReadRequest req){
-  // TODO(Fischi) Join this in a single doorbell
-  auto stat = this->ep_->PostRead(0, key, addr, req.length, req.addr, req.key);
-  if (!stat.ok()){
-    return stat;
-  }
-  auto wc_stat = this->ep_->PollSendCq();
-  if (!wc_stat.ok()){
-    return wc_stat.status();
-  }
   char one = 1;
-  stat = this->ep_->PostWriteInline(0, &one, sizeof(one), req.addr-1, req.key);
+  struct ibv_sge sge_ack;
+  sge_ack.addr = (uintptr_t)&one;
+  sge_ack.length = sizeof(char);
+
+  struct ibv_send_wr wr_ack, *bad;
+  wr_ack.wr_id = 0;
+  wr_ack.next = NULL;
+  wr_ack.sg_list = &sge_ack;
+  wr_ack.num_sge = 1;
+  wr_ack.opcode = IBV_WR_RDMA_WRITE;
+  wr_ack.wr.rdma.remote_addr = req.addr-1;
+  wr_ack.wr.rdma.rkey = req.key;
+  wr_ack.send_flags = IBV_SEND_SIGNALED | IBV_SEND_INLINE | IBV_SEND_FENCE;  
+
+
+  struct ibv_sge sge_data;
+  sge_data.addr = (size_t)addr;
+  sge_data.length = req.length;
+  sge_data.lkey = key;
+
+  struct ibv_send_wr wr_data;
+  wr_data.wr_id = 1;
+  wr_data.next = &wr_ack;
+  wr_data.sg_list = &sge_data;
+  wr_data.num_sge = 1;
+  wr_data.opcode = IBV_WR_RDMA_READ;
+  wr_data.wr.rdma.remote_addr = req.addr;
+  wr_data.wr.rdma.rkey = req.key;
+  wr_data.send_flags = 0;  
+
+  auto stat = this->ep_->PostSendRaw(&wr_data, &bad);
   if (!stat.ok()){
+    std::cerr << "bad_id " << bad->wr_id << std::endl;
     return stat;
   }
   auto rwcStatus = this->ep_->PollSendCq();
   return rwcStatus.status();
 }
+
 StatusOr<ReceiveRegion> ReadConnection::Receive(){
   auto req_s = this->ReceiveRequest();
   if (!req_s.ok()){
