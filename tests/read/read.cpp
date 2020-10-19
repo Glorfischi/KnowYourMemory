@@ -169,7 +169,8 @@ StatusOr<uint64_t> ReadConnection::SendAsync(SendRegion region){
   if (!sendStatus.ok()){
     return sendStatus;
   }
-  // ToDO(Fischi) We don't actually need to wait for this, but keeping track of these wr_ids is a little tedious so let's add it later
+  // ToDO(Fischi) We don't actually need to wait for this, but keeping track of these wr_ids is a little tedious so let's 
+  // add it later
   auto wcStatus = this->ep_->PollSendCq();
   if (!wcStatus.ok()){
     return wcStatus.status();
@@ -191,8 +192,27 @@ Status ReadConnection::Free(SendRegion region){
   return this->allocator_->Free(mr);
 }
 
+StatusOr<ReceiveRegion> ReadConnection::RegisterReceiveRegion(void *addr, uint32_t length){
+  struct ibv_mr * mr = ibv_reg_mr(this->ep_->GetPdP(), addr, length, IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);  
+  ReceiveRegion reg;
+  reg.addr = addr;
+  reg.length = length;
+  reg.lkey = mr->lkey;
+  reg.context = (uint64_t)mr;
+  return reg;
+}
+Status ReadConnection::DeregisterReceiveRegion(ReceiveRegion reg){
+  int ret = ibv_dereg_mr((struct ibv_mr *)reg.context);
+  if (ret) {
+    // TODO(Fischi) Map error codes
+    return Status(StatusCode::Unknown, "free: error deregistering mr");
+  }
+  return Status();
+}
+
+
 // TODO(Fischi) We need some kind of async receive, o/w this will block a long time and we will not utilize nearly enough bw
-StatusOr<ReceiveRegion> ReadConnection::Receive(){
+StatusOr<ReadRequest> ReadConnection::ReceiveRequest(){
   auto wcStatus = this->ep_->PollRecvCq();
   if (!wcStatus.ok()){
     return wcStatus.status();
@@ -200,15 +220,44 @@ StatusOr<ReceiveRegion> ReadConnection::Receive(){
   struct ibv_wc wc = wcStatus.value();
   auto mr = this->rq_->GetMR(wc.wr_id);
   ReadRequest *req = (ReadRequest *)mr.addr;
-  auto len = req->length;
-  auto addr = req->addr;
-  auto key = req->key;
+  // We need to copy to stack o/w it might be overwritten
+  ReadRequest res;
+  res.length = req->length;
+  res.addr = req->addr;
+  res.key = req->key;
   auto stat = this->rq_->PostMR(wc.wr_id);
   if (!stat.ok()){
     return stat;
   }
+  return res;
+}
 
-  auto regStat = this->allocator_->Alloc(len);
+Status ReadConnection::ReadInto(void *addr, uint32_t key, ReadRequest req){
+  // TODO(Fischi) Join this in a single doorbell
+  auto stat = this->ep_->PostRead(0, key, addr, req.length, req.addr, req.key);
+  if (!stat.ok()){
+    return stat;
+  }
+  auto wc_stat = this->ep_->PollSendCq();
+  if (!wc_stat.ok()){
+    return wc_stat.status();
+  }
+  char one = 1;
+  stat = this->ep_->PostWriteInline(0, &one, sizeof(one), req.addr-1, req.key);
+  if (!stat.ok()){
+    return stat;
+  }
+  auto rwcStatus = this->ep_->PollSendCq();
+  return rwcStatus.status();
+}
+StatusOr<ReceiveRegion> ReadConnection::Receive(){
+  auto req_s = this->ReceiveRequest();
+  if (!req_s.ok()){
+    return req_s.status();
+  }
+  ReadRequest req = req_s.value();
+  
+  auto regStat = this->allocator_->Alloc(req.length);
   if (!regStat.ok()){
     return regStat.status();
   }
@@ -218,27 +267,28 @@ StatusOr<ReceiveRegion> ReadConnection::Receive(){
   rcvReg.addr = reg.addr;
   rcvReg.length = reg.length;
   rcvReg.context = reg.context;
-  
 
-  // TODO(Fischi) Join this in a single doorbell
-  stat = this->ep_->PostRead(0, reg.lkey, reg.addr, reg.length, addr, key);
+  auto stat = this->ReadInto(rcvReg.addr, reg.lkey, req);
   if (!stat.ok()){
     return stat;
   }
-  auto wc_stat = this->ep_->PollSendCq();
-  if (!wc_stat.ok()){
-    return wc_stat.status();
-  }
-  char one = 1;
-  stat = this->ep_->PostWriteInline(0, &one, sizeof(one), addr-1, key);
-  if (!stat.ok()){
-    return stat;
-  }
-  auto rwcStatus = this->ep_->PollSendCq();
-  if (!rwcStatus.ok()){
-    return rwcStatus.status();
-  }
+  
   return rcvReg;
+}
+StatusOr<uint32_t> ReadConnection::Receive(ReceiveRegion reg){
+  auto req_s = this->ReceiveRequest();
+  if (!req_s.ok()){
+    return req_s.status();
+  }
+  ReadRequest req = req_s.value();
+  if (reg.length < req.length){
+    return Status(StatusCode::InvalidArgument, "Recieve Region to small");
+  }
+  auto stat = this->ReadInto(reg.addr, reg.lkey, req);
+  if (!stat.ok()){
+    return stat;
+  }
+  return req.length;
 }
 
 Status ReadConnection::Free(ReceiveRegion region){

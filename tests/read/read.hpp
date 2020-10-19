@@ -50,14 +50,23 @@ class ReadConnection : public Connection {
     Status Free(SendRegion region);
 
 
-    // StatusOr<ReceiveRegion> GetReceiveRegion(size_t size);
     StatusOr<ReceiveRegion> Receive();
-    // Status Receive(ReceiveRegion reg);
     Status Free(ReceiveRegion);
+
+    StatusOr<ReceiveRegion> RegisterReceiveRegion(void *addr, uint32_t length);
+    Status DeregisterReceiveRegion(ReceiveRegion reg);
+    // Receive directly into provided memory region. The provided region must be a (or be contained in )a region
+    // registered by RegisterReceiveRegion. It will return the number of bytes written.
+    StatusOr<uint32_t> Receive(ReceiveRegion reg);
+
   private:
     endpoint::Endpoint *ep_;
     memory::Allocator *allocator_;
     endpoint::IReceiveQueue *rq_;
+
+
+    StatusOr<ReadRequest> ReceiveRequest();
+    Status ReadInto(void *addr, uint32_t key, ReadRequest req);
 };
 
 StatusOr<ReadConnection *> DialRead(std::string ip, int port);

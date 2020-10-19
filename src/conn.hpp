@@ -23,6 +23,7 @@ struct ReceiveRegion {
   uint64_t    context;
 	void *      addr;
 	uint32_t    length;
+	uint32_t    lkey;
 };
 
 struct SendRegion {

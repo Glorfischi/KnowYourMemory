@@ -37,6 +37,7 @@ cxxopts::ParseResult parse(int argc, char* argv[]) {
       ("s,size",  "Size of message to exchange", cxxopts::value<int>()->default_value("60"))
       ("unack",  "Number of messages that can be unacknowleged. Only relevant for bandwidth benchmark", cxxopts::value<int>()->default_value("100"))
       ("out", "filename to output measurements", cxxopts::value<std::string>()->default_value(""))
+      ("autoalloc", "Whether allocate a new receive region on every receive", cxxopts::value<bool>())
      ;
  
     auto result = options.parse(argc, argv);
@@ -59,6 +60,35 @@ cxxopts::ParseResult parse(int argc, char* argv[]) {
   }
 }
 
+kym::Status read_test_lat_recv(kym::connection::ReadConnection *rcv, int count, int size, std::vector<float> *lat_us){
+  lat_us->reserve(count);
+  void *buf = calloc(1, size);
+
+  auto reg_s = rcv->RegisterReceiveRegion(buf, size);
+  if (!reg_s.ok()){
+    return reg_s.status().Wrap("Error registering receive region");
+  }
+  kym::connection::ReceiveRegion reg = reg_s.value();
+
+  for(int i = 0; i<count; i++){
+    //std::cout << i << std::endl;
+    auto start = std::chrono::high_resolution_clock::now();
+    auto stat = rcv->Receive(reg);
+    if (!stat.ok()){
+      return stat.status().Wrap("error receiving buffer");
+    }
+    // std::cout << "# GOT: " << *(int *)buf_s.value().addr << std::endl;
+    if (*(int *)reg.addr != i){
+      return kym::Status(kym::StatusCode::Internal, "transmission error exepected " + std::to_string(i) + " got " + std::to_string(*(int *)reg.addr));
+    }
+    auto finish = std::chrono::high_resolution_clock::now();
+    lat_us->push_back(std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count()/1000.0);
+  }
+  rcv->DeregisterReceiveRegion(reg);
+  free(buf);
+  return kym::Status();
+}
+
 
 
 
@@ -71,6 +101,7 @@ int main(int argc, char* argv[]) {
 
   bool bw = flags["bw"].as<bool>();  
   bool lat = flags["lat"].as<bool>();  
+  bool autoalloc = flags["autoalloc"].as<bool>();  
 
   int count = flags["iters"].as<int>();  
   int size = flags["size"].as<int>();  
@@ -100,7 +131,11 @@ int main(int argc, char* argv[]) {
 
     kym::Status stat;
     if (lat) {
-      stat = test_lat_recv(conn, count, &measurements);
+      if (autoalloc){
+        stat = test_lat_recv(conn, count, &measurements);
+      } else {
+        stat = read_test_lat_recv(conn, count, size, &measurements);
+      }
     } else if (bw) {
       auto bw_s = test_bw_recv(conn, count, size);
       if (!bw_s.ok()){
