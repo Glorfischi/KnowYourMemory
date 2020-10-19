@@ -88,6 +88,84 @@ kym::Status read_test_lat_recv(kym::connection::ReadConnection *rcv, int count, 
   free(buf);
   return kym::Status();
 }
+kym::Status read_test_lat_ping(kym::connection::ReadConnection *conn, int count, int size, std::vector<float> *lat_us){
+  lat_us->reserve(count);
+  void *rbuf = calloc(1, size);
+  auto reg_s = conn->RegisterReceiveRegion(rbuf, size);
+  if (!reg_s.ok()){
+    return reg_s.status().Wrap("Error registering receive region");
+  }
+  kym::connection::ReceiveRegion reg = reg_s.value();
+
+  auto buf_s = conn->GetMemoryRegion(size);
+  if (!buf_s.ok()){
+    return buf_s.status().Wrap("error allocating send region");
+  }
+  // TODO(fischi) Warmup
+  auto buf = buf_s.value();
+  for(int i = 0; i<count; i++){
+    //std::cout << i << std::endl;
+    *(int *)buf.addr = i;
+    auto start = std::chrono::high_resolution_clock::now();
+    auto send_s = conn->Send(buf);
+    if (!send_s.ok()){
+      conn->Free(buf);
+      conn->DeregisterReceiveRegion(reg);
+      free(rbuf);
+      return send_s.Wrap("error sending buffer");
+    }
+    auto rcv_s = conn->Receive(reg);
+    auto finish = std::chrono::high_resolution_clock::now();
+    if (!rcv_s.ok()){
+      conn->Free(buf);
+      conn->DeregisterReceiveRegion(reg);
+      free(rbuf);
+      return rcv_s.status().Wrap("error receiving buffer");
+    }
+    lat_us->push_back(std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count()/1000.0);
+  }
+  conn->DeregisterReceiveRegion(reg);
+  free(rbuf);
+  return conn->Free(buf);
+
+}
+kym::Status read_test_lat_pong(kym::connection::ReadConnection *conn, int count, int size){
+  auto buf_s = conn->GetMemoryRegion(size);
+  if (!buf_s.ok()){
+    return buf_s.status().Wrap("error allocating send region");
+  }
+  void *rbuf = calloc(1, size);
+  auto reg_s = conn->RegisterReceiveRegion(rbuf, size);
+  if (!reg_s.ok()){
+    return reg_s.status().Wrap("Error registering receive region");
+  }
+  kym::connection::ReceiveRegion reg = reg_s.value();
+
+  // TODO(fischi) Warmup
+  auto buf = buf_s.value();
+  for(int i = 0; i<count; i++){
+    *(int *)buf.addr = i;
+    auto rcv_s = conn->Receive(reg);
+    auto send_s = conn->Send(buf);
+    if (!rcv_s.ok()){
+      conn->DeregisterReceiveRegion(reg);
+      free(rbuf);
+
+      conn->Free(buf);
+      return rcv_s.status().Wrap("error receiving buffer");
+    }
+    if (!send_s.ok()){
+      conn->DeregisterReceiveRegion(reg);
+      free(rbuf);
+
+      conn->Free(buf);
+      return send_s.Wrap("error sending buffer");
+    }
+  }
+  conn->DeregisterReceiveRegion(reg);
+  free(rbuf);
+  return conn->Free(buf);
+}
 
 
 
@@ -145,7 +223,11 @@ int main(int argc, char* argv[]) {
       std::cerr << "## Bandwidth Receiver (MB/s)" << std::endl;
       std::cout << (double)bw_s.value()/(1024*1024) << std::endl;
     } else {
-      stat = test_lat_pong(conn, conn, count, size);
+      if (autoalloc){
+        stat = test_lat_pong(conn, conn, count, size);
+      } else {
+        stat = read_test_lat_pong(conn, count, size);
+      }
     }
     if (!stat.ok()){
       std::cerr << "Error running benchmark: " << stat << std::endl;
@@ -184,7 +266,11 @@ int main(int argc, char* argv[]) {
       std::cerr << "## Bandwidth Sender (MB/s)" << std::endl;
       std::cout << (double)bw_s.value()/(1024*1024) << std::endl;
     } else {
-      stat = test_lat_ping(conn, conn, count, size, &measurements);
+      if (autoalloc){
+        stat = test_lat_ping(conn, conn, count, size, &measurements);
+      } else {
+        stat = read_test_lat_ping(conn, count, size, &measurements);
+      }
       std::cerr << "## Pingpong Sender" << std::endl;
     }
     if (!stat.ok()){
