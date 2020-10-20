@@ -232,14 +232,27 @@ StatusOr<ReadRequest> ReadConnection::ReceiveRequest(){
   return res;
 }
 
-Status ReadConnection::ReadInto(void *addr, uint32_t key, ReadRequest req){
+Status ReadConnection::WaitReceive(uint64_t id){
+  while (this->ackd_rcv_id_ < id){
+    auto wcStatus = this->ep_->PollSendCq();
+    if (!wcStatus.ok()){
+      return wcStatus.status();
+    }
+    ibv_wc wc = wcStatus.value();
+    this->ackd_rcv_id_ = wc.wr_id;
+  }
+  return Status();
+}
+
+StatusOr<uint64_t> ReadConnection::ReadInto(void *addr, uint32_t key, ReadRequest req){
   char one = 1;
+  uint64_t id = this->next_rcv_id_++;
   struct ibv_sge sge_ack;
   sge_ack.addr = (uintptr_t)&one;
   sge_ack.length = sizeof(char);
 
   struct ibv_send_wr wr_ack, *bad;
-  wr_ack.wr_id = 0;
+  wr_ack.wr_id = id;
   wr_ack.next = NULL;
   wr_ack.sg_list = &sge_ack;
   wr_ack.num_sge = 1;
@@ -255,7 +268,7 @@ Status ReadConnection::ReadInto(void *addr, uint32_t key, ReadRequest req){
   sge_data.lkey = key;
 
   struct ibv_send_wr wr_data;
-  wr_data.wr_id = 1;
+  wr_data.wr_id = 100000+id;
   wr_data.next = &wr_ack;
   wr_data.sg_list = &sge_data;
   wr_data.num_sge = 1;
@@ -269,9 +282,9 @@ Status ReadConnection::ReadInto(void *addr, uint32_t key, ReadRequest req){
     std::cerr << "bad_id " << bad->wr_id << std::endl;
     return stat;
   }
-  auto rwcStatus = this->ep_->PollSendCq();
-  return rwcStatus.status();
+  return id;
 }
+
 
 StatusOr<ReceiveRegion> ReadConnection::Receive(){
   auto req_s = this->ReceiveRequest();
@@ -291,11 +304,14 @@ StatusOr<ReceiveRegion> ReadConnection::Receive(){
   rcvReg.length = reg.length;
   rcvReg.context = reg.context;
 
-  auto stat = this->ReadInto(rcvReg.addr, reg.lkey, req);
+  auto id_s = this->ReadInto(rcvReg.addr, reg.lkey, req);
+  if (!id_s.ok()){
+    return id_s.status();
+  }
+  auto stat = this->WaitReceive(id_s.value());
   if (!stat.ok()){
     return stat;
   }
-  
   return rcvReg;
 }
 StatusOr<uint32_t> ReadConnection::Receive(ReceiveRegion reg){
@@ -307,12 +323,37 @@ StatusOr<uint32_t> ReadConnection::Receive(ReceiveRegion reg){
   if (reg.length < req.length){
     return Status(StatusCode::InvalidArgument, "Recieve Region to small");
   }
-  auto stat = this->ReadInto(reg.addr, reg.lkey, req);
+  auto id_s = this->ReadInto(reg.addr, reg.lkey, req);
+  if (!id_s.ok()){
+    return id_s.status();
+  }
+  auto stat = this->WaitReceive(id_s.value());
   if (!stat.ok()){
     return stat;
   }
   return req.length;
 }
+
+StatusOr<uint64_t> ReadConnection::ReceiveAsync(ReceiveRegion reg){
+  return this->ReceiveAsync(reg, nullptr);
+}
+
+StatusOr<uint64_t> ReadConnection::ReceiveAsync(ReceiveRegion reg, uint32_t *length){
+  auto req_s = this->ReceiveRequest();
+  if (!req_s.ok()){
+    return req_s.status();
+  }
+  ReadRequest req = req_s.value();
+  if (reg.length < req.length){
+    return Status(StatusCode::InvalidArgument, "Recieve Region to small");
+  }
+  if (length){
+    *length = req.length;
+  }
+  return this->ReadInto(reg.addr, reg.lkey, req);
+}
+
+
 
 Status ReadConnection::Free(ReceiveRegion region){
   memory::Region mr = memory::Region();

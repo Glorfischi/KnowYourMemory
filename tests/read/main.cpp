@@ -13,6 +13,7 @@
 
 #include <ctime>
 #include <iomanip>
+#include <vector>
 
 #include "cxxopts.hpp"
 
@@ -167,6 +168,65 @@ kym::Status read_test_lat_pong(kym::connection::ReadConnection *conn, int count,
   return conn->Free(buf);
 }
 
+kym::StatusOr<uint64_t> read_test_bw_recv(kym::connection::ReadConnection *rcv, int count, int size, int unack){
+  void *rbuf = calloc(unack, size);
+  auto reg_s = rcv->RegisterReceiveRegion(rbuf, unack*size);
+  if (!reg_s.ok()){
+    return reg_s.status().Wrap("Error registering receive region");
+  }
+  kym::connection::ReceiveRegion reg = reg_s.value();
+  std::vector<kym::connection::ReceiveRegion> regs;
+  uint64_t ids[unack];
+  for (int i = 0; i<unack; i++){
+    regs.push_back(kym::connection::ReceiveRegion{
+      .context = (uint64_t)i,
+	    .addr = (void *)((size_t)reg.addr + i*size),
+	    .length = (uint32_t)size,
+	    .lkey = reg.lkey
+    });
+  }
+
+  for(int i = 0; i<unack; i++){
+    auto id_s = rcv->ReceiveAsync(regs[i]);
+    if (!id_s.ok()){
+      return id_s.status().Wrap("error receiving buffer");
+    }
+    ids[i] = id_s.value();
+  }
+  
+  auto start = std::chrono::high_resolution_clock::now();
+  int i = unack;
+  while(i<count){
+    auto stat = rcv->WaitReceive(ids[i%unack]);
+    if (!stat.ok()){
+      rcv->DeregisterReceiveRegion(reg);
+      free(rbuf);
+      return stat.Wrap("error waiting for buffer to be received");
+    }
+    auto id_s = rcv->ReceiveAsync(regs[i%unack]);
+    if (!id_s.ok()){
+      rcv->DeregisterReceiveRegion(reg);
+      free(rbuf);
+      return id_s.status().Wrap("error receiving buffer");
+    }
+    ids[i%unack] = id_s.value();
+    i++;
+  }
+  for(int i = 0; i<unack; i++){
+    auto stat = rcv->WaitReceive(ids[i]);
+    if (!stat.ok()){
+      rcv->DeregisterReceiveRegion(reg);
+      free(rbuf);
+      return stat.Wrap("error waiting for buffer to be received");
+    }
+  }
+  auto end = std::chrono::high_resolution_clock::now();
+  rcv->DeregisterReceiveRegion(reg);
+  free(rbuf);
+  double dur = std::chrono::duration_cast<std::chrono::nanoseconds>(end-start).count();
+  return (double)size*(double)(count-unack)/(dur/1e9);
+}
+
 
 
 
@@ -215,7 +275,12 @@ int main(int argc, char* argv[]) {
         stat = read_test_lat_recv(conn, count, size, &measurements);
       }
     } else if (bw) {
-      auto bw_s = test_bw_recv(conn, count, size);
+      kym::StatusOr<uint64_t> bw_s;
+      if (autoalloc){
+        bw_s = test_bw_recv(conn, count, size);
+      } else {
+        bw_s = read_test_bw_recv(conn, count, size, unack);
+      }
       if (!bw_s.ok()){
         std::cerr << "Error running benchmark: " << bw_s.status() << std::endl;
         return 1;

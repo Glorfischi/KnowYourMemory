@@ -36,7 +36,7 @@ struct ReadRequest {
 class ReadConnection : public Connection {
   public:
     ReadConnection(endpoint::Endpoint *ep, memory::Allocator *allocator, endpoint::IReceiveQueue *rq)
-      : ep_(ep), allocator_(allocator), rq_(rq){};
+      : ep_(ep), allocator_(allocator), rq_(rq), ackd_rcv_id_(0), next_rcv_id_(1){};
     ~ReadConnection();
 
     Status Close();
@@ -59,14 +59,23 @@ class ReadConnection : public Connection {
     // registered by RegisterReceiveRegion. It will return the number of bytes written.
     StatusOr<uint32_t> Receive(ReceiveRegion reg);
 
+
+    // Receives into provided memory region. Will return an id to WaitReceive on. If provided it will return the
+    // number of bytes written to length
+    StatusOr<uint64_t> ReceiveAsync(ReceiveRegion reg);
+    StatusOr<uint64_t> ReceiveAsync(ReceiveRegion reg, uint32_t *length);
+    Status WaitReceive(uint64_t id);
+
   private:
     endpoint::Endpoint *ep_;
     memory::Allocator *allocator_;
     endpoint::IReceiveQueue *rq_;
 
+    uint64_t ackd_rcv_id_;
+    uint64_t next_rcv_id_;
 
     StatusOr<ReadRequest> ReceiveRequest();
-    Status ReadInto(void *addr, uint32_t key, ReadRequest req);
+    StatusOr<uint64_t> ReadInto(void *addr, uint32_t key, ReadRequest req);
 };
 
 StatusOr<ReadConnection *> DialRead(std::string ip, int port);
