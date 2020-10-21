@@ -331,7 +331,7 @@ StatusOr<Endpoint *> Listener::Accept(Options opts){
   }
   // Set connection data
   size_t private_data_len = conn_id->event->param.conn.private_data_len;
-  void * private_data;
+  void * private_data = NULL;
   if (private_data_len) {
     private_data = calloc(1, private_data_len);
     memcpy(private_data, conn_id->event->param.conn.private_data, private_data_len);
@@ -563,7 +563,7 @@ StatusOr<Endpoint *> Create(std::string ip, int port, Options opts){
     }
   }
 
-  struct ibv_qp * qp;
+  struct ibv_qp * qp = NULL;
   if(opts.native_qp){
     /*
     // the creation of CQ should be outside. It is here for debugging.

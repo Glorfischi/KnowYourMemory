@@ -19,13 +19,15 @@ TSRCS=  ./write_test.cpp ./write.cpp ./acknowledge.cpp $(SRCPATH)/endpoint.cpp $
 			 $(SRCPATH)/ring_buffer/magic_buffer.cpp
 TOBJS= $(TSRCS:.cpp=.o)
 
+all: CFLAGS += -O2
 all: $(OBJS)
 	mkdir -pm 755 $(BINDIR)
 	$(CC) $(CFLAGS) -o $(BIN) $(OBJS) $(LDFLAGS)
 
-test: $(TOBJS)
+debug: CFLAGS += -DDEBUG -g -O0
+debug: $(OBJS)
 	mkdir -pm 755 $(BINDIR)
-	$(CC) $(CFLAGS) -o $(BINDIR)/test $(TOBJS) $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $(BIN) $(OBJS) $(LDFLAGS)S)
 
 clean:
 	@echo "##### CLEAN-UP #####"

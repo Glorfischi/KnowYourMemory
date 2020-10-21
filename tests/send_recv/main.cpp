@@ -20,6 +20,10 @@
 
 #include "send_receive.hpp"
 
+#include "debug.h"
+
+
+
 cxxopts::ParseResult parse(int argc, char* argv[]) {
   cxxopts::Options options(argv[0], "sendrecv");
   try {
@@ -87,7 +91,17 @@ int main(int argc, char* argv[]) {
 
   std::vector<float> measurements;
 
+  info(stdout,"This message is always printed. I can also unclude data %d.\
+   it is possible to use another stream instead of stdout.\
+   For example, You can have a global field in namespace for that\n",count); 
+  info_wtime(stdout,"This message is always printed. It also includes time \n");
+  
+  text(stdout,"This message is printed only in debug mode. I can also unclude data %d \n",server);
+  text_wtime(stdout,"This message is printed only in debug mode. It also includes time \n");
+  debug(stdout,"This message is printed only in debug mode. It also includes time and file/function info\n");
+
   if (server){
+      
       kym::connection::SendReceiveConnection *conn;
       kym::connection::SendReceiveListener *ln;
       if (srq){
