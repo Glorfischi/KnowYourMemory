@@ -193,7 +193,7 @@ Status ReadConnection::Free(SendRegion region){
 }
 
 StatusOr<ReceiveRegion> ReadConnection::RegisterReceiveRegion(void *addr, uint32_t length){
-  struct ibv_mr * mr = ibv_reg_mr(this->ep_->GetPdP(), addr, length, IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);  
+  struct ibv_mr * mr = ibv_reg_mr(this->ep_->GetPd(), addr, length, IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);  
   ReceiveRegion reg;
   reg.addr = addr;
   reg.length = length;

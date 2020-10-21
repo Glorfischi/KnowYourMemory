@@ -6,3 +6,4 @@ REMOTE=${REMOTE:="ault.cscs.ch:~"}
 rsync -av $PROJ_DIR/src $REMOTE/KnowYourMemory
 rsync -av $PROJ_DIR/tests $REMOTE/KnowYourMemory
 rsync -av $PROJ_DIR/tools $REMOTE/KnowYourMemory
+rsync -av $PROJ_DIR/external $REMOTE/KnowYourMemory

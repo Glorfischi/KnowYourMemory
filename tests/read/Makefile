@@ -13,9 +13,17 @@ SRCS=  ./main.cpp ./read.cpp $(SRCPATH)/endpoint.cpp $(SRCPATH)/mm/dumb_allocato
 			 $(SRCPATH)/bench/bench.cpp  $(SRCPATH)/receive_queue.cpp 
 OBJS= $(SRCS:.cpp=.o)
 
+all: CFLAGS += -O2
 all: $(OBJS)
 	mkdir -pm 755 $(BINDIR)
 	$(CC) $(CFLAGS) -o $(BIN) $(OBJS) $(LDFLAGS)
+
+debug: CFLAGS += -DDEBUG -g -O0
+debug: $(OBJS)
+	mkdir -pm 755 $(BINDIR)
+	$(CC) $(CFLAGS) -o $(BIN) $(OBJS) $(LDFLAGS)
+
+
 
 clean:
 	@echo "##### CLEAN-UP #####"
