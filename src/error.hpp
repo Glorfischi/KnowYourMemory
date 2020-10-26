@@ -42,6 +42,9 @@ class Status {
 };
 
 inline std::ostream& operator<<(std::ostream& os, Status const& status) {
+  if (status.message().empty()){
+    return os << "Statuscode " << (int)status.code();
+  }
   return os << status.message();
 }
 

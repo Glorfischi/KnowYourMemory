@@ -2,6 +2,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <exception>
+#include <fstream>
 #include <iostream>
 #include <memory>
 #include <ostream>
@@ -9,23 +10,47 @@
 #include <thread>
 #include <chrono>
 
+#include <ctime>
+#include <iomanip>
+
 #include "cxxopts.hpp"
 
 #include "conn.hpp"
+#include "bench/bench.hpp"
 
 #include "write_atomic.hpp"
+
+#include "debug.h"
+
+
 
 cxxopts::ParseResult parse(int argc, char* argv[]) {
   cxxopts::Options options(argv[0], "sendrecv");
   try {
     options.add_options()
-      ("s,server", "Whether to act as a server", cxxopts::value<bool>())
+      ("bw", "Whether to test bandwidth", cxxopts::value<bool>())
+      ("lat", "Whether to test latency", cxxopts::value<bool>())
+      ("pingpong", "Whether to test pingpong latency", cxxopts::value<bool>())
+      ("client", "Whether to as client only", cxxopts::value<bool>())
+      ("server", "Whether to as server only", cxxopts::value<bool>())
       ("i,address", "IP address to connect to", cxxopts::value<std::string>())
-      ("n,count", "How many times to repeat measurement", cxxopts::value<int>()->default_value("1000"))
+      ("source", "source IP address", cxxopts::value<std::string>()->default_value(""))
+      ("n,iters",  "Number of exchanges" , cxxopts::value<int>()->default_value("1000"))
+      ("s,size",  "Size of message to exchange", cxxopts::value<int>()->default_value("1024"))
+      ("unack",  "Number of messages that can be unacknowleged. Only relevant for bandwidth benchmark", cxxopts::value<int>()->default_value("100"))
+      ("batch",  "Number of messages to send in a single batch. Only relevant for bandwidth benchmark", cxxopts::value<int>()->default_value("1"))
+      ("out", "filename to output measurements", cxxopts::value<std::string>()->default_value(""))
      ;
  
     auto result = options.parse(argc, argv);
     if (!result.count("address")) {
+      std::cerr << "Specify an address" << std::endl;
+      std::cerr << options.help({""}) << std::endl;
+      exit(1);
+    }
+
+    if (!result.count("lat") && !result.count("bw") && !result.count("pingpong")) {
+      std::cerr << "Either perform latency or bandwidth benchmark" << std::endl;
       std::cerr << options.help({""}) << std::endl;
       exit(1);
     }
@@ -37,138 +62,151 @@ cxxopts::ParseResult parse(int argc, char* argv[]) {
   }
 }
 
-void write_atomic_test_send(std::unique_ptr<kym::connection::WriteAtomicSender> conn, int count, int thread){
-    std::vector<float> latency_m;
-
-    auto buf_s = conn->GetMemoryRegion(2*1024);
-    if (!buf_s.ok()){
-      std::cerr << "Error allocating send region " << buf_s.status().message() << std::endl;
-      conn->Close();
-      return;
-    }
-    auto buf = buf_s.value();
-    *(uint64_t *)buf.addr = 0;
-
-    for(int i = 0; i<count; i++){
-      *(uint64_t *)buf.addr = i;
-      //std::cout << "Sending " << thread << " " << i << std::endl;
-      auto start = std::chrono::high_resolution_clock::now();
-      auto send_s = conn->Send(buf);
-      if (!send_s.ok()){
-        std::cerr << "Error sending buffer " << send_s.message() << std::endl;
-        conn->Free(buf);
-        conn->Close();
-        return;
-      }
-      auto finish = std::chrono::high_resolution_clock::now();
-      latency_m.push_back(std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count()/1000.0);
-    }
-
-    std::chrono::milliseconds timespan(1000);
-    std::this_thread::sleep_for((1+thread)*timespan); // Poor mans mutex
-    conn->Free(buf);
-    conn->Close();
-
-    auto n = count;
-    std::sort (latency_m.begin(), latency_m.end());
-    int q025 = (int)(n*0.025);
-    int q500 = (int)(n*0.5);
-    int q975 = (int)(n*0.975);
-    std::cout << "## Thread " << thread << std::endl;
-    std::cout << "q025" << "\t" << "q50" << "\t" << "q975" << std::endl;
-    std::cout << latency_m[q025] << "\t" << latency_m[q500] << "\t" << latency_m[q975] << std::endl;
-}
 
 
-void write_atomic_test_recv(std::unique_ptr<kym::connection::WriteAtomicListener> ln, int count, int threads){
-  std::vector<float> latency_m;
-
-  for (int i = 0; i<threads; i++){
-    auto conn_s = ln->Accept();
-    if (!conn_s.ok()){
-      std::cerr << "Error accepting " << i << " " << conn_s.message() << std::endl;
-      return;
-    }
-  }
-
-  for(int i = 0; i<count*threads; i++){
-    auto start = std::chrono::high_resolution_clock::now();
-    auto buf_s = ln->Receive();
-    if (!buf_s.ok()){
-      std::cerr << "Error receiving buffer " << buf_s.status().message() << std::endl;
-      ln->Close();
-      return;
-    }
-    auto buf = buf_s.value();
-    // std::cout << *(uint64_t *)buf.addr << std::endl;
-    auto free_s = ln->Free(buf_s.value());
-    if (!free_s.ok()){
-      std::cerr << free_s << std::endl;
-      return;
-    }
-    auto finish = std::chrono::high_resolution_clock::now();
-    latency_m.push_back(std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count()/1000.0);
-  }
-  ln->Close();
-  std::chrono::milliseconds timespan(1000);
-  //std::this_thread::sleep_for((1+threads)*timespan); // Poor mans mutex
-  auto n = count;
-  std::sort (latency_m.begin(), latency_m.end());
-  int q025 = (int)(n*0.025);
-  int q500 = (int)(n*0.5);
-  int q975 = (int)(n*0.975);
-  std::cout << "## Server " << std::endl;
-  std::cout << "q025" << "\t" << "q50" << "\t" << "q975" << std::endl;
-  std::cout << latency_m[q025] << "\t" << latency_m[q500] << "\t" << latency_m[q975] << std::endl;
-
-}
 
 
 int main(int argc, char* argv[]) {
   auto flags = parse(argc,argv);
   std::string ip = flags["address"].as<std::string>();  
-  int count = flags["count"].as<int>();  
+  std::string src = flags["source"].as<std::string>();  
+
+  std::string filename = flags["out"].as<std::string>();  
 
 
-  std::cout << "#### Testing WriteDuplex Latency ####" << std::endl;
-  auto ln_s = kym::connection::ListenWriteAtomic(ip, 9999);
-  if (!ln_s.ok()){
-    std::cerr << "Error listening " << ln_s.status().message() << std::endl;
-    return 1;
-  }
-  auto ln = ln_s.value();
+  bool bw = flags["bw"].as<bool>();  
+  bool lat = flags["lat"].as<bool>();  
 
-  std::thread server_thread(write_atomic_test_recv, std::move(ln), count, 7);
-  std::chrono::milliseconds timespan(1000);
-  std::this_thread::sleep_for(timespan);
- 
-  std::unique_ptr<kym::connection::WriteAtomicSender> snds[7];
-  std::thread snd_threads[7];
-  for (int i = 0; i < 7; i++){
-    auto conn_s = kym::connection::DialWriteAtomic(ip, 9999);
+
+  int count = flags["iters"].as<int>();  
+  int size = flags["size"].as<int>();  
+  int batch = flags["batch"].as<int>();  
+  int unack = flags["unack"].as<int>();  
+
+
+  bool server = flags["server"].as<bool>();  
+  bool client = flags["client"].as<bool>();  
+
+  std::vector<float> measurements;
+  
+  kym::connection::WriteAtomicInstance *inst = new kym::connection::WriteAtomicInstance();
+
+  if (server){
+    auto stat = inst->Listen(ip, 9999);
+    if (!stat.ok()){
+      std::cerr << "Error listening " << stat;
+      inst->Close();
+      delete inst;
+      exit(1);
+    }
+    auto conn_s = inst->Accept();
     if (!conn_s.ok()){
-      std::cerr << "Error dialing connection" << conn_s.status().message() << std::endl;
+      std::cerr << "Error Accepting " << conn_s.status() << std::endl;
+      inst->Close();
+      delete inst;
+      exit(1);
+    }
+    auto conn = conn_s.value();
+    auto sr_s = conn->GetMemoryRegion(sizeof(int));
+    if (!sr_s.ok()){
+      std::cerr << "Error getting send region " << sr_s.status() << std::endl;
+      conn->Close();
+      inst->Close();
+      delete conn;
+      delete inst;
+      exit(1);
+    }
+    auto sr = sr_s.value();
+    int data = 420;
+    memcpy(sr.addr, &data, sizeof(data));
+    auto rr_s = inst->Receive();
+    if (!rr_s.ok()){
+      std::cerr << "Error receiving " << rr_s.status() << std::endl;
+      conn->Close();
+      inst->Close();
+      delete conn;
+      delete inst;
+      exit(1);
+    }
+    std::cout << "GOT " << *(int *)rr_s.value().addr << std::endl;
+ 
+    stat = conn->Send(sr);
+    if (!stat.ok()){
+      std::cerr << "Error sending " << stat << std::endl;
+      conn->Close();
+      inst->Close();
+      delete conn;
+      delete inst;
+      exit(1);
+    }
+
+    
+    conn->Close();
+    delete conn;
+  }
+
+  if(client){
+    std::chrono::milliseconds timespan(1000); // If we start the server at the same time we will wait a little
+    std::this_thread::sleep_for(timespan);
+    auto conn_s = inst->Dial(ip, 9999);
+    if (!conn_s.ok()){
+      std::cerr << "Error Dialing " << conn_s.status() << std::endl;
+      inst->Close();
+      delete inst;
       return 1;
     }
-    snds[i] = conn_s.value();
+    auto conn = conn_s.value();
+    auto sr_s = conn->GetMemoryRegion(sizeof(int));
+    if (!sr_s.ok()){
+      std::cerr << "Error getting send region " << sr_s.status() << std::endl;
+      conn->Close();
+      inst->Close();
+      delete conn;
+      delete inst;
+      exit(1);
+    }
+    auto sr = sr_s.value();
+    int data = 1337;
+    memcpy(sr.addr, &data, sizeof(data));
+
+    auto stat = conn->Send(sr);
+    if (!stat.ok()){
+      std::cerr << "Error sending " << stat << std::endl;
+      conn->Close();
+      inst->Close();
+      delete conn;
+      delete inst;
+      exit(1);
+    }
+
+    auto rr_s = inst->Receive();
+    if (!rr_s.ok()){
+      std::cerr << "Error receiving " << rr_s.status() << std::endl;
+      conn->Close();
+      inst->Close();
+      delete conn;
+      delete inst;
+      exit(1);
+    }
+    std::cout << "GOT " << *(int *)rr_s.value().addr << std::endl;
+    
+    inst->Free(rr_s.value());
+    conn->Close();
+    delete conn;
   }
 
-  for (int i = 0; i < 7; i++){
-    snd_threads[i] = std::thread(write_atomic_test_send, std::move(snds[i]), count, i);
+  if (!filename.empty()){
+    std::cout << "writing" << std::endl;
+    std::ofstream file(filename);
+    for (float f : measurements){
+      file << f << "\n";
+    }
+    file.close();
   }
-  for (int i = 0; i < 7; i++){
-    snd_threads[i].join();
-  }
-  server_thread.join();
-  
-  /*auto n = count;
-  std::sort (latency_m.begin(), latency_m.end());
-  int q025 = (int)(n*0.025);
-  int q500 = (int)(n*0.5);
-  int q975 = (int)(n*0.975);
-  std::cout << "q025" << "\t" << "q50" << "\t" << "q975" << std::endl;
-  std::cout << latency_m[q025] << "\t" << latency_m[q500] << "\t" << latency_m[q975] << std::endl;*/
-  
+
+  inst->Close();
+  delete inst;
+
   return 0;
 }
  

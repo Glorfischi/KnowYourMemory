@@ -447,7 +447,7 @@ StatusOr<Endpoint *> Listener::Accept(Options opts){
 
       //qp = mlx5dv_create_qp(conn_id->verbs, &attr_ex,&attr_dv); // for correct linking should be added -lmlx5
     } else {
-      qp = ibv_create_qp(this->id_->pd , &opts.qp_attr);
+      qp = ibv_create_qp(this->id_->pd, &opts.qp_attr);
     }
 
     if(!qp){
@@ -488,6 +488,7 @@ StatusOr<Endpoint *> Listener::Accept(Options opts){
   } else { // use RDMA CM for creating a QP
     debug(stderr, "create qp\n");
     ret = rdma_create_qp(conn_id, this->id_->pd, &opts.qp_attr);
+    debug(stderr, "created qp with:\tpd %p | qp %p | srq %p \n", conn_id->pd, conn_id->qp, conn_id->srq);
     if (ret) {
       // TODO(Fischi) Map error codes
       perror("ERROR");
@@ -510,6 +511,7 @@ StatusOr<Endpoint *> Listener::Accept(Options opts){
   Endpoint *ep = new Endpoint(conn_id, private_data, private_data_len);
   if(qp) ep->SetQp(qp); // it is not good as we need to destroy it. Endpoint should have fields for self-created objects.
 
+  debug(stderr, "setup id with: pd %p | qp %p | srq %p \n", conn_id->pd, conn_id->qp, conn_id->srq);
   return ep;
 }
 
@@ -609,11 +611,29 @@ StatusOr<Endpoint *> Create(std::string ip, int port, Options opts){
 
   assert(id->pd != NULL && "pd is null");
 
+    // cleanup addrinfo, we don't need it anymore
+  rdma_freeaddrinfo(addrinfo);
+
+  Endpoint *ep = new Endpoint(id);
+
+  return ep;
+}
+Status Endpoint::Connect(Options opts){
+  struct rdma_conn_param conn_param;
+  conn_param.responder_resources = opts.responder_resources;  
+  conn_param.initiator_depth =  opts.initiator_depth; 
+  conn_param.retry_count = opts.retry_count;  
+  conn_param.rnr_retry_count = opts.rnr_retry_count; 
+
+  conn_param.private_data = opts.private_data;
+  conn_param.private_data_len = opts.private_data_len;
+  conn_param.flow_control = opts.flow_control;
+
   if (opts.use_srq && opts.qp_attr.srq == nullptr){
     struct ibv_srq_init_attr srq_init_attr;
     srq_init_attr.attr.max_sge = opts.qp_attr.cap.max_recv_sge;
     srq_init_attr.attr.max_wr = opts.qp_attr.cap.max_recv_wr;
-    auto srq = ibv_create_srq(id->pd, &srq_init_attr);
+    auto srq = ibv_create_srq(this->id_->pd, &srq_init_attr);
     if (srq == nullptr){
       return Status(StatusCode::Internal, "error " + std::to_string(errno) + " creating ibv_srq");
     }
@@ -629,42 +649,24 @@ StatusOr<Endpoint *> Create(std::string ip, int port, Options opts){
 
     assert(opts.qp_attr.send_cq != NULL && "for native QP, send CQ must be specified"); // see man ibv_create_cq
     assert(opts.qp_attr.recv_cq != NULL && "for native QP, receive CQ must be specified");
-    assert(id->pd != NULL);
+    assert(this->id_->pd != NULL);
 
-    qp = ibv_create_qp(id->pd , &opts.qp_attr);
+    qp = ibv_create_qp(this->id_->pd, &opts.qp_attr);
+    this->SetQp(qp);
+    conn_param.qp_num = this->qp_->qp_num;
+    this->id_->qp = NULL; // we need to NULL it here as connect uses this information
   } else {
-    ret = rdma_create_qp(id, id->pd, &opts.qp_attr);
+    
+    debug(stderr, "creating qp with:\tpd: %p | srq %p\n", this->id_->pd, opts.qp_attr.srq);
+    int ret = rdma_create_qp(this->id_, this->id_->pd, &opts.qp_attr);
     if (ret) {
       return Status(StatusCode::Internal, "dial: error creating qp");
     }
+    debug(stderr, "created qp with:\tpd %p | qp %p | srq %p \n", this->id_->pd, this->id_->qp, this->id_->srq);
+    this->id_->srq = opts.qp_attr.srq;
   }
-
-  // cleanup addrinfo, we don't need it anymore
-  rdma_freeaddrinfo(addrinfo);
-
-  Endpoint *ep = new Endpoint(id);
-  if(qp) ep->SetQp(qp);
-
-  return ep;
-}
-Status Endpoint::Connect(Options opts){
-  struct rdma_conn_param conn_param;
-  conn_param.responder_resources = opts.responder_resources;  
-  conn_param.initiator_depth =  opts.initiator_depth; 
-  conn_param.retry_count = opts.retry_count;  
-  conn_param.rnr_retry_count = opts.rnr_retry_count; 
-
-  conn_param.private_data = opts.private_data;
-  conn_param.private_data_len = opts.private_data_len;
-  conn_param.flow_control = opts.flow_control;
-
-  if(opts.native_qp){
-    conn_param.qp_num = this->qp_->qp_num;
-    this->id_->qp = NULL; // we need to NULL it here as connect uses this information
-  }
- 
-
   // connect to remote
+  debug(stderr, "connecting to remote with: pd %p | qp %p | srq %p \n", this->id_->pd, this->id_->qp, this->id_->srq);
   int ret = rdma_connect(this->id_, &conn_param);
   if (ret) {
     perror("ERROR");
@@ -730,7 +732,7 @@ Status Endpoint::Connect(Options opts){
 
     this->id_->qp =  this->qp_; // for compatibility with the rest of the code
   }
-  debug(stderr, "connected with qp %d", this->id_->qp->qp_num);
+  debug(stderr, "setup id with: pd %p | qp %p | srq %p \n", this->id_->pd, this->id_->qp, this->id_->srq);
   return Status();
 }
 
