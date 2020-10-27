@@ -3,6 +3,8 @@
 #include "../conn.hpp"
 #include "../error.hpp"
 
+#include "debug.h"
+
 #include <iostream>
 #include <string>
 #include <vector>
@@ -80,6 +82,7 @@ kym::Status test_lat_send(kym::connection::Sender *snd, int count, int size, std
   }
   auto buf = buf_s.value();
   for(int i = 0; i<count; i++){
+    debug(stderr, "LAT SEND: %d\n",i);
     //std::cout << i << std::endl;
     *(int *)buf.addr = i;
     auto start = std::chrono::high_resolution_clock::now();
@@ -97,6 +100,7 @@ kym::Status test_lat_recv(kym::connection::Receiver *rcv, int count, std::vector
   lat_us->reserve(count);
 
   for(int i = 0; i<count; i++){
+    debug(stderr, "LAT RECEIVE: %d\n",i);
     // std::cout << i << std::endl;
     auto start = std::chrono::high_resolution_clock::now();
     auto buf_s = rcv->Receive();

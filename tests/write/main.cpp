@@ -104,7 +104,7 @@ int main(int argc, char* argv[]) {
   } else {
     opts.acknowledger = kym::connection::kAcknowledgerRead;
   }
-  opts.buffer = kym::connection::kBufferMagic;
+  opts.buffer = kym::connection::kBufferReverse;
 
 
 

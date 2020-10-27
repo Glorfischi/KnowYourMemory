@@ -55,7 +55,6 @@ class ReverseRemoteBuffer : public RemoteBuffer {
     StatusOr<uint32_t>GetNextTail(uint32_t len);
     StatusOr<uint64_t>Write(uint32_t len);
   private:
-
     uint64_t addr_;
     uint32_t length_;
     uint32_t key_;

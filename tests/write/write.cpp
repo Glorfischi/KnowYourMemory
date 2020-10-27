@@ -15,6 +15,7 @@
 #include "mm/dumb_allocator.hpp"
 #include "receive_queue.hpp"
 #include "ring_buffer/ring_buffer.hpp"
+#include "ring_buffer/reverse_buffer.hpp"
 
 #include "acknowledge.hpp"
 
@@ -24,7 +25,7 @@ namespace kym {
 namespace connection {
 
 namespace {
-  uint32_t write_buf_size = 128*1024*1024;
+  uint32_t write_buf_size = 4*1024;
   uint32_t inflight = 300;
   struct conn_details {
     WriteOpts opts; // 2 Bytes
@@ -763,6 +764,15 @@ Status initReceiver(struct ibv_pd *pd, WriteOpts opts, ringbuffer::Buffer **rbuf
         *rbuf = rbuf_s.value();
         break;
       }
+    case kBufferReverse:
+      {
+        auto rbuf_s = ringbuffer::NewReverseRingBuffer(pd, write_buf_size); 
+        if (!rbuf_s.ok()){
+          return rbuf_s.status().Wrap("error setting up reverse receive buffer");
+        }
+        *rbuf = rbuf_s.value();
+        break;
+      }
     default:
       return Status(StatusCode::InvalidArgument, "unkown buffer option");
   }
@@ -841,6 +851,11 @@ Status connectSender(endpoint::Endpoint * ep, conn_details det, ringbuffer::Remo
     case kBufferMagic:
       {
         *rbuf = new ringbuffer::MagicRemoteBuffer(det.buffer_ctx);
+        break;
+      }
+    case kBufferReverse:
+      {
+        *rbuf = new ringbuffer::ReverseRemoteBuffer(det.buffer_ctx);
         break;
       }
     default:

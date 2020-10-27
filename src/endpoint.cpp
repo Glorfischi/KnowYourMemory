@@ -19,6 +19,8 @@
 
 #include <string>
 
+#include "debug.h"
+
 #include "error.hpp"
 
 namespace kym {
@@ -193,6 +195,7 @@ Status Endpoint::PostWrite(uint64_t ctx, uint32_t lkey, void *addr, size_t size,
   wr.wr.rdma.remote_addr = remote_addr;
   wr.wr.rdma.rkey = rkey;
 
+  debug(stderr, "PostWrite to remote\t[remote_addr: %p, rkey: %d, length %ld]\n", (void *)remote_addr, rkey, size);  
   return this->PostSendRaw(&wr, &bad);
 }
 
@@ -214,6 +217,7 @@ Status Endpoint::PostWriteWithImmidate(uint64_t ctx, uint32_t lkey, void *addr, 
   wr.wr.rdma.rkey = rkey;
   wr.imm_data = imm;
 
+  debug(stderr, "PostWriteImm to remote\t[remote_addr: %p, rkey: %d, length %ld]\n", (void *)remote_addr, rkey, size);  
   return this->PostSendRaw(&wr, &bad);
 }
 

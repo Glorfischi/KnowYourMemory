@@ -4,6 +4,8 @@
 #include "ring_buffer/magic_buffer.hpp"
 #include "error.hpp"
 
+#include "debug.h"
+
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
@@ -26,11 +28,12 @@ StatusOr<ReverseRingBuffer*> NewReverseRingBuffer(struct ibv_pd *pd, uint32_t si
     FreeMagicBuffer(buf, size);
     return Status(StatusCode::Internal, "error registering mr");
   }
+  debug(stderr, "Registered MR for reverse buffer\t[addr: %p, key: %d, length %ld, end: %p]\n", mr->addr, mr->rkey, mr->length, (char *)mr->addr + mr->length);  
   return new ReverseRingBuffer(mr);
 }
 
 ReverseRingBuffer::ReverseRingBuffer(struct ibv_mr *mr) : mr_(mr){
-  this->addr_ = (char *)mr->addr + mr->length;
+  this->addr_ = (char *)mr->addr;
   this->length_ = mr->length/2;
 
   this->head_ = 0;
@@ -38,9 +41,10 @@ ReverseRingBuffer::ReverseRingBuffer(struct ibv_mr *mr) : mr_(mr){
 }
 
 void *ReverseRingBuffer::Read(uint32_t len) {
-  uint32_t read_offset = this->read_ptr_;
   // Wrap arround front
   this->read_ptr_ = (this->read_ptr_ > len) ? this->read_ptr_ - len : this->length_ + this->read_ptr_ - len;
+  uint32_t read_offset = this->read_ptr_;
+  debug(stderr, "Reverse buffer read\t[read_offset: %d]\n", read_offset);
   this->outstanding_.push_back(read_offset);
   return (void *)((size_t)this->addr_ + read_offset);
 }
@@ -103,7 +107,15 @@ uint32_t ReverseRemoteBuffer::GetKey() {
 uint32_t ReverseRemoteBuffer::GetTail(){
   return this->tail_;
 }
+
 StatusOr<uint64_t> ReverseRemoteBuffer::GetWriteAddr(uint32_t len){
+  auto tail_s = this->GetNextTail(len);
+  if (!tail_s.ok()){
+    return tail_s.status();
+  }
+  return this->addr_ + tail_s.value();
+}
+StatusOr<uint32_t> ReverseRemoteBuffer::GetNextTail(uint32_t len){
   // Check if there is space to send
   if (this->head_ == this->tail_ && this->full_){
     return Status(StatusCode::Unknown, "buffer is full");
@@ -120,24 +132,18 @@ StatusOr<uint64_t> ReverseRemoteBuffer::GetWriteAddr(uint32_t len){
     return Status(StatusCode::Unknown, "not enough free space for message");
   }
 
-  return this->addr_ + this->tail_;
+  return (this->tail_ > len) ? this->tail_ - len : this->tail_ + this->length_ - len;
 }
-StatusOr<uint32_t> ReverseRemoteBuffer::GetNextTail(uint32_t len){
-  auto tail_s = this->GetWriteAddr(len);
+StatusOr<uint64_t> ReverseRemoteBuffer::Write(uint32_t len){
+  auto tail_s = this->GetNextTail(len);
   if (!tail_s.ok()){
     return tail_s.status();
   }
-  return (this->tail_ > len) ? this->tail_ - len : this->tail_ + this->length_ - len;
-}
-StatusOr<uint64_t> MagicRemoteBuffer::Write(uint32_t len){
-  auto tail_s = this->GetWriteAddr(len);
-  if (!tail_s.ok()){
-    return tail_s;
-  }
-  this->tail_ = (this->tail_ > len) ? this->tail_ - len : this->tail_ + this->length_ - len;
+  debug(stderr, "Reverse buffer update tail\t[old_tail: %d, new_tail %d]\n", this->tail_, tail_s.value());
+  this->tail_ = tail_s.value();
   this->full_ = (this->tail_ == this->head_);
 
-  return tail_s;
+  return this->addr_ + tail_s.value();
 }
 
 
