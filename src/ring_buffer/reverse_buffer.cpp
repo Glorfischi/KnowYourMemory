@@ -50,11 +50,11 @@ void *ReverseRingBuffer::Read(uint32_t len) {
 }
 
 void *ReverseRingBuffer::GetReadPtr() {
-  return (char *)this->addr_ + this->read_ptr_;
+  return (char *)this->addr_ + this->GetReadOff();
 }
 
 uint32_t ReverseRingBuffer::GetReadOff() {
-  return this->read_ptr_;
+  return (this->read_ptr_ > 0) ? this->read_ptr_ - 1 : this->length_ - 1;
 }
 
 uint32_t ReverseRingBuffer::Free(void *addr) {

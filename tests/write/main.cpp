@@ -96,6 +96,8 @@ int main(int argc, char* argv[]) {
     opts.sender = kym::connection::kSenderWriteImm;
   } else if (sender.compare("writeOff") == 0){
     opts.sender = kym::connection::kSenderWriteOffset;
+  } else if (sender.compare("writeRev") == 0){
+    opts.sender = kym::connection::kSenderWriteReverse;
   } else {
     opts.sender = kym::connection::kSenderWrite;
   }
