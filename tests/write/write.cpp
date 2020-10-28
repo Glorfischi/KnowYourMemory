@@ -26,7 +26,7 @@ namespace kym {
 namespace connection {
 
 namespace {
-  uint32_t write_buf_size = 4*1024;
+  uint32_t write_buf_size = 4*1024*1024;
   uint32_t inflight = 300;
   struct conn_details {
     WriteOpts opts; // 2 Bytes

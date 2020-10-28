@@ -1,6 +1,5 @@
 #include "reverse.hpp"
 
-#include <bits/stdint-uintn.h>
 #include <cstddef>
 #include <cstdint>
 #include <infiniband/verbs.h>
@@ -35,13 +34,17 @@ StatusOr<ReceiveRegion> WriteReverseReceiver::Receive(){
   ReceiveRegion reg;
 
   // We check the last byte. If this byte was written in all x86 systems we know the write is completed
-  volatile char *next = (volatile char *)this->rbuf_->GetReadPtr();
-  debug(stderr, "Spinning for next message\t[next: %p, offset: %d]\n", next, this->rbuf_->GetReadOff());  
+  volatile char *next = ((volatile char *)this->rbuf_->GetReadPtr()) + this->length_;
+  volatile uint32_t *msg_len_addr = (volatile uint32_t *)(next - sizeof(uint32_t));
+  debug(stderr, "Spinning for next message\t[next: %p, offset: %d, msg_len_addr: %p]\n",
+      next, this->rbuf_->GetReadOff(), msg_len_addr);  
   while (*next == 0){}
+  debug(stderr, "Spunn next message\t[*next: %d]\n", *next);
+
   // We cannot spin on the length, as we cannot be certain that the complete 4 bytes have been written when we
   // read it. Giving us some potentially interesting message lengths
   // Also we might acutally roll over the beginning of the buffer. To prevent that let's skip to the mirrored buffer..
-  uint32_t msg_len = *(uint32_t *)(next + this->length_ - sizeof(uint32_t));
+  uint32_t msg_len = *msg_len_addr;
 
   
   void *addr = this->rbuf_->Read(msg_len);
@@ -82,6 +85,7 @@ StatusOr<SendRegion> WriteReverseSender::GetMemoryRegion(size_t size){
   reg.context = buf.context;
 
   // Set indicator byte
+  *(char *)buf.addr = 0;
   *((char *)buf.addr + buf.length - sizeof(char)) = 1;
   *(uint32_t *)((char *)buf.addr + buf.length - sizeof(char) - sizeof(uint32_t)) = size + sizeof(uint32_t) + sizeof(char);
 
