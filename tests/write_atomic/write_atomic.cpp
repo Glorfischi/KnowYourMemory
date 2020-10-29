@@ -20,7 +20,7 @@
 #include "conn.hpp"
 #include "mm.hpp"
 #include "mm/dumb_allocator.hpp"
-#include "receive_queue.hpp"
+#include "shared_receive_queue.hpp"
 
 #include "debug.h"
 
@@ -221,26 +221,29 @@ StatusOr<ReceiveRegion> WriteAtomicInstance::Receive(){
     return stat.Wrap("error reposing receive buffer");
   }
 
+  int32_t local_off = wc.imm_data % this->buf_size_;
   ReceiveRegion reg;
   reg.context = wc.imm_data;
-  reg.addr = (void *)((uint64_t)this->buf_mr_->addr + wc.imm_data);
+  reg.addr = (void *)((uint64_t)this->buf_mr_->addr + local_off);
   reg.length = wc.byte_len;
   return reg;
 }
 Status WriteAtomicInstance::Free(ReceiveRegion reg){
-  // TODO(fischi) Locks!
-  // FIXME(fischi) Untested!
-  uint64_t global_offset = (this->buf_meta_->head / this->buf_size_) * this->buf_size_ +  reg.context;
-  uint64_t end = global_offset+reg.length;
-  while (this->freed_regions_.count(end)){
-    uint64_t tmp = this->freed_regions_[end];
-    this->freed_regions_.erase(end);
-    end = tmp;
+  // TODO(fischi) Locks?
+  uint64_t global_start = reg.context;  // the beginning of the to be freed buffer as a unique global offset
+  uint64_t global_end = global_start+reg.length; // the end of the freed buffer as a unique global offset
+  // freed_regions is a hashmap that maps the start of a freed region to the end of it
+  // if there exists a freed region that starts at the end of the region we currently freeing we merge them
+  while (this->freed_regions_.count(global_end)){
+    uint64_t tmp = this->freed_regions_[global_end];
+    this->freed_regions_.erase(global_end);
+    global_end = tmp;
   }
-  if (global_offset == this->buf_meta_->head){
-    this->buf_meta_->head = end;
+  // If the region we are freeing is the head, we update it otherwise add the regions to the freed_regions map
+  if (global_start == this->buf_meta_->head){
+    this->buf_meta_->head = global_end;
   } else {
-    this->freed_regions_[global_offset] = end;
+    this->freed_regions_[global_start] = global_end;
   }
   return Status();
 }
@@ -282,6 +285,10 @@ Status WriteAtomicConnection::Send(SendRegion region){
     return Status(StatusCode::InvalidArgument, "message too large");
   }
 
+  // We add the length of our message to the remote tail. We get the tail before our addition, so this is our (global)
+  // write address.
+  // We talk about global and local offsets. Global means 64 bit address that we wraps around. The local address is 32 bit
+  // and equalt to g_off % buf_len. The global offset is unique.
   auto fetch_stat = this->ep_->PostFetchAndAdd(region.context, region.length, this->rbuf_meta_mr_->lkey, 
       &this->rbuf_meta_->tail, (uint64_t)&((struct write_atomic_meta *)this->rbuf_meta_vaddr_)->tail, this->rbuf_meta_rkey_);
   if (!fetch_stat.ok()){
@@ -294,6 +301,7 @@ Status WriteAtomicConnection::Send(SendRegion region){
 
   // FIXME(Fischi) We should NEVER fail in here. If we do the buffer is in an inconsistent state
 
+  // We check if there is space to write. We essentiall reserve space without knowing if we can actually write to it.
   while(this->rbuf_meta_->head + this->rbuf_size_ <= this->rbuf_meta_->tail + region.length){
     auto read_stat = this->ep_->PostRead(region.context, this->rbuf_meta_mr_->lkey, &this->rbuf_meta_->head, sizeof(this->rbuf_meta_->head),
         (uint64_t)&((struct write_atomic_meta *)this->rbuf_meta_vaddr_)->head, this->rbuf_meta_rkey_);
@@ -307,10 +315,10 @@ Status WriteAtomicConnection::Send(SendRegion region){
     // TODO(fischi) Maybe add some kind of backoff?
   }
 
-  uint32_t write_off = this->rbuf_meta_->tail % this->rbuf_size_;
+  uint32_t local_off = this->rbuf_meta_->tail % this->rbuf_size_; // We calculate the local offset to know where to write to.
 
   auto send_stat = this->ep_->PostWriteWithImmidate(1, region.lkey, region.addr, region.length, 
-      this->rbuf_vaddr_ + write_off, this->rbuf_rkey_, write_off);
+      this->rbuf_vaddr_ + local_off, this->rbuf_rkey_, this->rbuf_meta_->tail);
   if (!send_stat.ok()){
     return send_stat;
   }

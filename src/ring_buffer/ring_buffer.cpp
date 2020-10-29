@@ -146,6 +146,7 @@ uint32_t MagicRingBuffer::GetReadOff() {
 }
 
 uint32_t MagicRingBuffer::Free(void *addr) {
+  // starting offset of our to be freed buffer
   uint32_t region_start = (size_t)addr - (size_t)this->addr_;
   
   auto front  = this->outstanding_.begin();

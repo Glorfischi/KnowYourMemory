@@ -16,7 +16,7 @@
 
 #include "error.hpp"
 #include "endpoint.hpp"
-#include "receive_queue.hpp"
+#include "shared_receive_queue.hpp"
 
 #include "conn.hpp"
 #include "mm.hpp"
@@ -33,7 +33,7 @@ struct write_atomic_inst_opts {
   uint32_t buf_size;
 };
 namespace {
-  write_atomic_inst_opts default_write_atomic_inst_opts = {
+  const write_atomic_inst_opts default_write_atomic_inst_opts = {
     .buf_size=10*1024*1024,
   };
 }
@@ -42,7 +42,7 @@ struct write_atomic_conn_opts {
   bool standalone_receive; // Whether the resulting connection handles receiving. O/w the instance will handle incomming messages
 };
 namespace {
-  write_atomic_conn_opts default_write_atomic_conn_opts = {
+  const write_atomic_conn_opts default_write_atomic_conn_opts = {
     .standalone_receive  = false,
   };
 }

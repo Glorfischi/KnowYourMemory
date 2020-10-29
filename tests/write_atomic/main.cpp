@@ -76,6 +76,7 @@ int main(int argc, char* argv[]) {
 
   bool bw = flags["bw"].as<bool>();  
   bool lat = flags["lat"].as<bool>();  
+  bool pingpong = flags["pingpong"].as<bool>();  
 
 
   int count = flags["iters"].as<int>();  
@@ -99,6 +100,7 @@ int main(int argc, char* argv[]) {
       delete inst;
       exit(1);
     }
+    debug(stderr, "listening\n");
     auto conn_s = inst->Accept();
     if (!conn_s.ok()){
       std::cerr << "Error Accepting " << conn_s.status() << std::endl;
@@ -107,40 +109,16 @@ int main(int argc, char* argv[]) {
       exit(1);
     }
     auto conn = conn_s.value();
-    auto sr_s = conn->GetMemoryRegion(sizeof(int));
-    if (!sr_s.ok()){
-      std::cerr << "Error getting send region " << sr_s.status() << std::endl;
-      conn->Close();
-      inst->Close();
-      delete conn;
-      delete inst;
-      exit(1);
+    debug(stderr, "accepted\n");
+    
+    if (lat) {
+      stat = test_lat_recv(inst, count);
+    } else if (pingpong) {
+      stat = test_lat_pong(conn, inst, count, size);
     }
-    auto sr = sr_s.value();
-    int data = 420;
-    memcpy(sr.addr, &data, sizeof(data));
-    auto rr_s = inst->Receive();
-    if (!rr_s.ok()){
-      std::cerr << "Error receiving " << rr_s.status() << std::endl;
-      conn->Close();
-      inst->Close();
-      delete conn;
-      delete inst;
-      exit(1);
-    }
-    std::cout << "GOT " << *(int *)rr_s.value().addr << std::endl;
- 
-    stat = conn->Send(sr);
     if (!stat.ok()){
       std::cerr << "Error sending " << stat << std::endl;
-      conn->Close();
-      inst->Close();
-      delete conn;
-      delete inst;
-      exit(1);
     }
-
-    
     conn->Close();
     delete conn;
   }
@@ -155,48 +133,22 @@ int main(int argc, char* argv[]) {
       delete inst;
       return 1;
     }
+    
     auto conn = conn_s.value();
-    auto sr_s = conn->GetMemoryRegion(sizeof(int));
-    if (!sr_s.ok()){
-      std::cerr << "Error getting send region " << sr_s.status() << std::endl;
-      conn->Close();
-      inst->Close();
-      delete conn;
-      delete inst;
-      exit(1);
+    kym::Status stat;
+    if (lat) {
+      stat = test_lat_send(conn, count, size, &measurements);
+    } else if (pingpong) {
+      stat = test_lat_ping(conn, inst, count, size, &measurements);
     }
-    auto sr = sr_s.value();
-    int data = 1337;
-    memcpy(sr.addr, &data, sizeof(data));
-
-    auto stat = conn->Send(sr);
     if (!stat.ok()){
       std::cerr << "Error sending " << stat << std::endl;
-      conn->Close();
-      inst->Close();
-      delete conn;
-      delete inst;
-      exit(1);
     }
-
-    auto rr_s = inst->Receive();
-    if (!rr_s.ok()){
-      std::cerr << "Error receiving " << rr_s.status() << std::endl;
-      conn->Close();
-      inst->Close();
-      delete conn;
-      delete inst;
-      exit(1);
-    }
-    std::cout << "GOT " << *(int *)rr_s.value().addr << std::endl;
-    
-    inst->Free(rr_s.value());
     conn->Close();
     delete conn;
   }
 
   if (!filename.empty()){
-    std::cout << "writing" << std::endl;
     std::ofstream file(filename);
     for (float f : measurements){
       file << f << "\n";
@@ -204,8 +156,20 @@ int main(int argc, char* argv[]) {
     file.close();
   }
 
+
   inst->Close();
   delete inst;
+  auto n = measurements.size();
+  if (n == 0){
+    return 0;
+  }
+  std::sort (measurements.begin(), measurements.end());
+  int q025 = (int)(n*0.025);
+  int q500 = (int)(n*0.5);
+  int q975 = (int)(n*0.975);
+  std::cout << "q025" << "\t" << "q50" << "\t" << "q975" << std::endl;
+  std::cout << measurements[q025] << "\t" << measurements[q500] << "\t" << measurements[q975] << std::endl;
+
 
   return 0;
 }

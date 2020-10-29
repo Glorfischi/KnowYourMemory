@@ -9,8 +9,8 @@ BINDIR = ./bin
 SRCPATH = $(PREFIX)/src
 
 BIN = $(BINDIR)/writeatomic
-SRCS=  ./main.cpp ./write_atomic.cpp $(SRCPATH)/endpoint.cpp $(SRCPATH)/receive_queue.cpp \
-			 $(SRCPATH)/ring_buffer/magic_buffer.cpp $(SRCPATH)/mm/dumb_allocator.cpp 
+SRCS=  ./main.cpp ./write_atomic.cpp $(SRCPATH)/endpoint.cpp $(SRCPATH)/shared_receive_queue.cpp \
+			 $(SRCPATH)/ring_buffer/magic_buffer.cpp $(SRCPATH)/mm/dumb_allocator.cpp $(SRCPATH)/bench/bench.cpp
 OBJS= $(SRCS:.cpp=.o)
 
 all: CFLAGS += -O2
