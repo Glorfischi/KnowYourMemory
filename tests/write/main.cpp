@@ -104,6 +104,7 @@ int main(int argc, char* argv[]) {
   } else if (sender.compare("writeRev") == 0){
     opts.buffer = kym::connection::kBufferReverse;
     opts.sender = kym::connection::kSenderWriteReverse;
+    opts.buffer = kym::connection::kBufferReverse;
   } else {
     opts.sender = kym::connection::kSenderWrite;
   }
