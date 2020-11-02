@@ -55,10 +55,15 @@ int get_rdma_addr(const char *src, const char *dst, const char *port,
 
 
 Endpoint::Endpoint(rdma_cm_id *id) : id_(id){
+  debug(stderr, "New Endpoint\t[id: %p, pd: %p, qp: %p, rcv_cq: %p, snd_cp: %p, srq: %p, rcv_cq %p, rcv_cqe %d]\n", 
+      id, id->pd, id->qp, id->recv_cq, id->send_cq, id->srq, this->id_->recv_cq, this->id_->recv_cq->cqe);
   // std::cout << "dev " << id->verbs->device->name << std::endl;
   // std::cout << "id " << id <<  " pd " << id->pd << " qp " << id->qp << " verbs " << id->verbs << std::endl; 
 }
 Endpoint::Endpoint(rdma_cm_id* id, void *private_data, size_t private_data_len) : id_(id), private_data_(private_data), private_data_len_(private_data_len){
+  debug(stderr, "New Endpoint\t[id: %p, pd: %p, qp: %p, rcv_cq: %p, snd_cp: %p, srq: %p, rcv_cq %p, rcv_cqe %d]\n", 
+      id, id->pd, id->qp, id->recv_cq, id->send_cq, id->srq, this->id_->recv_cq, this->id_->recv_cq->cqe);
+
   // std::cout << "dev " << id->verbs->device->name << std::endl;
   // std::cout << "id " << id <<  " pd " << id->pd << " qp " << id->qp << " verbs " << id->verbs << std::endl; 
 }
@@ -449,6 +454,12 @@ StatusOr<Endpoint *> Listener::Accept(Options opts){
       return Status(StatusCode::Internal, "accept: error " + std::to_string(ret) + " getting creating qp");
     }
   }
+  if (opts.qp_attr.recv_cq){
+    conn_id->recv_cq = opts.qp_attr.recv_cq;
+  }
+  if (opts.qp_attr.send_cq){
+    conn_id->send_cq = opts.qp_attr.send_cq;
+  }
   ret = rdma_accept(conn_id, &conn_param);
   if (ret) {
     perror("ERROR");
@@ -585,6 +596,12 @@ StatusOr<Endpoint *> Create(std::string ip, int port, Options opts){
     if (ret) {
       return Status(StatusCode::Internal, "dial: error creating qp");
     }
+  }
+  if (opts.qp_attr.recv_cq){
+    id->recv_cq = opts.qp_attr.recv_cq;
+  }
+  if (opts.qp_attr.send_cq){
+    id->send_cq = opts.qp_attr.send_cq;
   }
 
 

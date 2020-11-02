@@ -12,7 +12,8 @@ SRCPATH = $(PREFIX)/src
 
 BIN = $(BINDIR)/sendrecv
 SRCS =  ./main.cpp ./send_receive.cpp $(SRCPATH)/endpoint.cpp $(SRCPATH)/receive_queue.cpp $(SRCPATH)/mm/dumb_allocator.cpp  \
-				$(SRCPATH)/bench/bench.cpp
+				$(SRCPATH)/bench/bench.cpp $(SRCPATH)/async_events.cpp
+
 
 OBJS = $(SRCS:.cpp=.o)
 PLOT = $(PLOTDIR)/latency.png
@@ -20,7 +21,7 @@ PLOT = $(PLOTDIR)/latency.png
 all: CFLAGS += -O2
 all: $(OBJS)
 	mkdir -pm 755 $(BINDIR)
-	$(CC) $(CFLAGS) -o $(BIN) $(OBJS) $(LDFLAGS)
+	MLX5_SINGLE_THREADED=0 $(CC) $(CFLAGS) -o $(BIN) $(OBJS) $(LDFLAGS)
 
 plot: $(PLOT)
 

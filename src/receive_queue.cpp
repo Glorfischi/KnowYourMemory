@@ -18,6 +18,9 @@
 #include <string>
 #include <vector>
 
+#include <mutex>
+
+#include "debug.h"
 #include "endpoint.hpp"
 #include "error.hpp"
 
@@ -93,7 +96,9 @@ Status SharedReceiveQueue::PostMR(uint32_t wr_id){
   wr.sg_list = &sge;
   wr.num_sge = 1;
  
+  this->lock_.lock();
   int ret = ibv_post_srq_recv(this->srq_, &wr, &bad);
+  this->lock_.unlock();
   if (ret) {
     return Status(StatusCode::Internal, "error  " + std::to_string(ret) + " reposting buffer to SharedReceiveQueue");
   }
@@ -110,6 +115,8 @@ StatusOr<SharedReceiveQueue *> GetSharedReceiveQueue(struct ibv_pd *pd, size_t t
   if (srq == nullptr){
     return Status(StatusCode::Internal, "error " + std::to_string(errno) + " creating ibv_srq");
   }
+  
+  debug(stderr, "Created SRQ [ctx: %p, srq_ctx: %p]\n", srq->context, srq->srq_context);
 
   char* buf = (char*)calloc(inflight, transfer_size);
   struct ibv_mr * mr = ibv_reg_mr(pd, buf, transfer_size*inflight, IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);  

@@ -48,6 +48,8 @@ class SendReceiveConnection : public Connection, public BatchSender {
 
     StatusOr<ReceiveRegion> Receive();
     Status Free(ReceiveRegion);
+
+    endpoint::Endpoint *GetEndpoint(){ return this->ep_; };
   private:
     memory::Allocator *allocator_;
     endpoint::Endpoint *ep_;
@@ -74,6 +76,7 @@ class SendReceiveListener {
     Status Close();
 
     StatusOr<SendReceiveConnection *> Accept();
+    endpoint::Listener *GetListener(){return this->listener_;};
   private:
     endpoint::Listener *listener_;
     endpoint::SharedReceiveQueue *srq_;

@@ -1,6 +1,5 @@
 #include "send_receive.hpp"
 
-#include <assert.h>
 
 #include <cstdint>
 #include <cstddef>
@@ -30,6 +29,7 @@ namespace connection {
 namespace {
 
 const uint64_t inflight = 200;
+const uint64_t max_conn = 50;
 
 endpoint::Options defaultOptions = {
   .pd = NULL,
@@ -54,8 +54,8 @@ endpoint::Options defaultOptions = {
   .responder_resources = 0,
   .initiator_depth =  0,
   .flow_control = 0,
-  .retry_count = 0,  
-  .rnr_retry_count = 0, 
+  .retry_count = 10,  
+  .rnr_retry_count = 10, 
   .native_qp = false,
   .inline_recv = 0,
 };
@@ -158,7 +158,7 @@ StatusOr<SendReceiveListener *> ListenSharedReceive(std::string ip, int port) {
   endpoint::Listener *ln = lnStatus.value();
 
   //TODO(Fischi) parameterize
-  auto srq_stat = endpoint::GetSharedReceiveQueue(ln->GetPd(), 16*1024, inflight);
+  auto srq_stat = endpoint::GetSharedReceiveQueue(ln->GetPd(), 16*1024, max_conn*inflight);
   if (!srq_stat.ok()){
     return srq_stat.status().Wrap("error creating shared receive queue");
   }
@@ -171,6 +171,10 @@ StatusOr<SendReceiveListener *> ListenSharedReceive(std::string ip, int port) {
 StatusOr<SendReceiveConnection *> SendReceiveListener::Accept(){
   kym::endpoint::Options opts = defaultOptions;
   if (this->srq_ != nullptr){
+    // Create a bigger cq when using srq as spikes can overrun a cq
+    struct ibv_cq * cq = ibv_create_cq(this->listener_->GetContext(), max_conn*inflight, NULL, NULL, 0);
+
+    opts.qp_attr.recv_cq = cq;
     opts.qp_attr.srq = this->srq_->GetSRQ();
   }
 
@@ -190,7 +194,7 @@ StatusOr<SendReceiveConnection *> SendReceiveListener::Accept(){
     }
     rq = rq_stat.value();
   } else {
-    rq = this->srq_;
+        rq = this->srq_;
   }
 
   auto conn = new SendReceiveConnection(ep, rq, this->srq_ != nullptr, allocator);

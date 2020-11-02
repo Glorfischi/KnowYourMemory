@@ -82,7 +82,7 @@ kym::Status test_lat_send(kym::connection::Sender *snd, int count, int size, std
   }
   auto buf = buf_s.value();
   for(int i = 0; i<count; i++){
-    debug(stderr, "LAT SEND: %d\n",i);
+    //debug(stderr, "LAT SEND: %d\n",i);
     //std::cout << i << std::endl;
     *(int *)buf.addr = i;
     auto start = std::chrono::high_resolution_clock::now();
@@ -96,13 +96,12 @@ kym::Status test_lat_send(kym::connection::Sender *snd, int count, int size, std
   }
   return snd->Free(buf);
 }
-kym::Status test_lat_recv(kym::connection::Receiver *rcv, int count, std::vector<float> *lat_us){
-  lat_us->reserve(count);
-
+kym::Status test_lat_recv(kym::connection::Receiver *rcv, int count){
   for(int i = 0; i<count; i++){
-    debug(stderr, "LAT RECEIVE: %d\n",i);
+    if (i%500 == 0) {
+      //debug(stderr, "LAT RECEIVE: %d\t[rcv: %p]\n",i, rcv);
+    };
     // std::cout << i << std::endl;
-    auto start = std::chrono::high_resolution_clock::now();
     auto buf_s = rcv->Receive();
     if (!buf_s.ok()){
       return buf_s.status().Wrap("error receiving buffer");
@@ -115,8 +114,6 @@ kym::Status test_lat_recv(kym::connection::Receiver *rcv, int count, std::vector
     if (!free_s.ok()){
       return free_s.Wrap("error receiving buffer");
     }
-    auto finish = std::chrono::high_resolution_clock::now();
-    lat_us->push_back(std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count()/1000.0);
   }
   return kym::Status();
 }

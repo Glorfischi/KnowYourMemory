@@ -10,12 +10,12 @@
 #ifndef KNY_RECEIVE_QUEUE_HPP_
 #define KNY_RECEIVE_QUEUE_HPP_
 
-#include <cstdint>
-#include <memory>
 #include <stddef.h>
 
+#include <cstdint>
 #include <infiniband/verbs.h> 
 #include <vector>
+#include <mutex>
 
 #include "endpoint.hpp"
 #include "error.hpp"
@@ -71,7 +71,10 @@ StatusOr<ReceiveQueue *> GetReceiveQueue(Endpoint *ep, size_t transfer_size, siz
  */
 class SharedReceiveQueue : public IReceiveQueue {
   public:
-    SharedReceiveQueue(struct ibv_srq *srq, ibv_mr* mr, size_t transfer_size): srq_(srq), mr_(mr), transfer_size_(transfer_size){}; 
+    SharedReceiveQueue(struct ibv_srq *srq, ibv_mr* mr, size_t transfer_size): 
+      srq_(srq), mr_(mr), transfer_size_(transfer_size), max_unposted_(30), unposted_(0){
+        this->to_post_.reserve(this->max_unposted_);
+      }; 
     ~SharedReceiveQueue() = default;
 
     Status Close();
@@ -84,6 +87,11 @@ class SharedReceiveQueue : public IReceiveQueue {
     struct ibv_srq *srq_;
     ibv_mr* mr_;
     size_t transfer_size_;
+
+    int max_unposted_;
+    int unposted_;
+    std::vector<uint64_t> to_post_;
+    std::mutex lock_;
 };
 StatusOr<SharedReceiveQueue *> GetSharedReceiveQueue(struct ibv_pd *pd, size_t transfer_size, size_t inflight);
 
