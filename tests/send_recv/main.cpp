@@ -77,6 +77,7 @@ int main(int argc, char* argv[]) {
 
   bool bw = flags["bw"].as<bool>();  
   bool lat = flags["lat"].as<bool>();  
+  bool pingpong = flags["pingpong"].as<bool>();  
 
   bool srq = flags["srq"].as<bool>();  
 
@@ -112,8 +113,7 @@ int main(int argc, char* argv[]) {
         }
         ln = ln_s.value();
       }
-      struct ibv_context *ctx = ln->GetListener()->GetContext();
-      ae_thread = DebugTrailAsyncEvents(ctx);
+      ae_thread = DebugTrailAsyncEvents(ln->GetListener()->GetContext());
       
       for (int i = 0; i<conn_count; i++){
         auto conn_s = ln->Accept();
@@ -171,8 +171,7 @@ int main(int argc, char* argv[]) {
       }
       kym::connection::SendReceiveConnection *conn = conn_s.value();
       if (i == 0) {
-        struct ibv_context *ctx = conn->GetEndpoint()->GetContext();
-        ae_thread = DebugTrailAsyncEvents(ctx);
+        ae_thread = DebugTrailAsyncEvents(conn->GetEndpoint()->GetContext());
       }
       conns[i] = conn;
       workers.push_back(std::thread([i, bw, lat, conn, count, batch, size, unack, &measurements](){
@@ -208,7 +207,6 @@ int main(int argc, char* argv[]) {
             std::cerr << "Error running benchmark: " << stat << std::endl;
             return 1;
           }
-          std::cout << "## Latency Sender" << std::endl;
         } else {
           // pingpong
           std::chrono::milliseconds timespan(1000); // This is because of a race condition...
@@ -222,7 +220,6 @@ int main(int argc, char* argv[]) {
             return 1;
           }
           
-          std::cout << "## Ping Pong latency" << std::endl;
         }
         measurements[i] = m;
         std::this_thread::sleep_for(timespan);
@@ -234,24 +231,38 @@ int main(int argc, char* argv[]) {
       workers[i].join();
     }
   }
+  std::vector<float> joined;
+  for (auto m : measurements){
+    if (m != nullptr) {
+      joined.reserve(m->size());
+      joined.insert(joined.end(), m->begin(), m->end());
+    }
+  }
   if (!filename.empty()){
     std::cout << "writing" << std::endl;
     std::ofstream file(filename);
-    for (float f : *measurements[0]){
+    for (float f : joined){
       file << f << "\n";
     }
     file.close();
   }
 
-  if (measurements[0] != nullptr) {
-    auto n = count;
-    std::vector<float> sorted = *measurements[0];
-    std::sort (sorted.begin(), sorted.end());
+  if (joined.size() > 0) {
+    if (lat) {
+      std::cout << "\tLatency";
+    } else if(pingpong)  {
+      std::cout << "\tPingPong Latency";
+    }
+    auto n = joined.size();
+    std::cout << std::endl;
+    std::cout << "N: " << n << std::endl;
+    
+    std::sort (joined.begin(), joined.end());
     int q025 = (int)(n*0.025);
     int q500 = (int)(n*0.5);
     int q975 = (int)(n*0.975);
     std::cout << "q025" << "\t" << "q50" << "\t" << "q975" << std::endl;
-    std::cout << sorted[q025] << "\t" << sorted[q500] << "\t" << sorted[q975] << std::endl;
+    std::cout << joined[q025] << "\t" << joined[q500] << "\t" << joined[q975] << std::endl;
   }
   
   return 0;
