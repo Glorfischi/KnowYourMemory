@@ -62,7 +62,21 @@ StatusOr<ReceiveQueue *> GetReceiveQueue(Endpoint *ep, size_t transfer_size, siz
 }
 
 
+SharedReceiveQueue::SharedReceiveQueue(struct ibv_srq *srq, ibv_mr* mr, size_t transfer_size, size_t max_unposted)
+  : srq_(srq), mr_(mr), transfer_size_(transfer_size), max_unposted_(max_unposted), unposted_(0){
+  this->sge_to_post_.reserve(max_unposted);
+  this->wr_to_post_.reserve(max_unposted);
+  for (int i=0; i<max_unposted; i++){
+    sge_to_post_[i].addr = 0;
+    sge_to_post_[i].length = this->transfer_size_;
+    sge_to_post_[i].lkey = this->mr_->lkey;
 
+    wr_to_post_[i].wr_id = 0;
+    wr_to_post_[i].next = (i == max_unposted-1) ? NULL : &wr_to_post_[i+1];
+    wr_to_post_[i].sg_list = &sge_to_post_[i];
+    wr_to_post_[i].num_sge = 1;
+  }
+}
 
 Status SharedReceiveQueue::Close(){
   int ret = ibv_dereg_mr(this->mr_);
@@ -85,29 +99,29 @@ struct mr SharedReceiveQueue::GetMR(uint32_t wr_id){
 Status SharedReceiveQueue::PostMR(uint32_t wr_id){
   uint64_t addr = ((uint64_t)this->mr_->addr) + wr_id*this->transfer_size_;
 
-  struct ibv_sge sge;
-  sge.addr = addr;
-  sge.length = this->transfer_size_;
-  sge.lkey = this->mr_->lkey;
-
-  struct ibv_recv_wr wr, *bad;
-  wr.wr_id = wr_id;
-  wr.next = NULL;
-  wr.sg_list = &sge;
-  wr.num_sge = 1;
- 
   this->lock_.lock();
-  int ret = ibv_post_srq_recv(this->srq_, &wr, &bad);
-  this->lock_.unlock();
+  this->wr_to_post_[this->unposted_].wr_id = wr_id;
+  this->sge_to_post_[this->unposted_].addr = addr;
+  this->unposted_++;
+  if (this->unposted_ < this->max_unposted_){
+    this->lock_.unlock();
+    return Status();
+  }
+
+  struct ibv_recv_wr *bad;
+  int ret = ibv_post_srq_recv(this->srq_, &this->wr_to_post_[0], &bad);
   if (ret) {
+    this->lock_.unlock();
     return Status(StatusCode::Internal, "error  " + std::to_string(ret) + " reposting buffer to SharedReceiveQueue");
   }
+  this->unposted_ = 0;
+  this->lock_.unlock();
   return Status();
 }
 struct ibv_srq *SharedReceiveQueue::GetSRQ(){
   return this->srq_;
 }
-StatusOr<SharedReceiveQueue *> GetSharedReceiveQueue(struct ibv_pd *pd, size_t transfer_size, size_t inflight){
+StatusOr<SharedReceiveQueue *> GetSharedReceiveQueue(struct ibv_pd *pd, size_t transfer_size, size_t inflight, size_t max_unposted){
   struct ibv_srq_init_attr srq_init_attr = {0};
   srq_init_attr.attr.max_sge = 1;
   srq_init_attr.attr.max_wr = inflight;
@@ -141,11 +155,13 @@ StatusOr<SharedReceiveQueue *> GetSharedReceiveQueue(struct ibv_pd *pd, size_t t
       return Status(StatusCode::Internal, "error  " + std::to_string(ret) + " registering buffer for SharedReceiveQueue");
     }
   }
-  return new SharedReceiveQueue(srq, mr, transfer_size);
+  return new SharedReceiveQueue(srq, mr, transfer_size, max_unposted);
 
 }
 
-
+StatusOr<SharedReceiveQueue *> GetSharedReceiveQueue(struct ibv_pd *pd, size_t transfer_size, size_t inflight) {
+  return GetSharedReceiveQueue(pd, transfer_size, inflight, inflight/4);
+}
 
 }
 }
