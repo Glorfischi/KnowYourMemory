@@ -3,7 +3,7 @@ PREFIX = ../..
 PLOTDIR = ./plots
 DATADIR = ./data
 
-PLOT = $(PLOTDIR)/send-pingpong.png $(PLOTDIR)/send-bw.png\
+PLOT = $(PLOTDIR)/send-pingpong.png $(PLOTDIR)/send-pingpong-multi.png	$(PLOTDIR)/send-bw.png\
 			 $(PLOTDIR)/write-crc-lat.png $(PLOTDIR)/write-imm-lat.png $(PLOTDIR)/write-off-lat.png \
 			 $(PLOTDIR)/write-ack-lat.png  $(PLOTDIR)/write-ack-ping.png
 
