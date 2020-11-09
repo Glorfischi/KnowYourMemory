@@ -454,12 +454,6 @@ StatusOr<Endpoint *> Listener::Accept(Options opts){
       return Status(StatusCode::Internal, "accept: error " + std::to_string(ret) + " getting creating qp");
     }
   }
-  if (opts.qp_attr.recv_cq){
-    conn_id->recv_cq = opts.qp_attr.recv_cq;
-  }
-  if (opts.qp_attr.send_cq){
-    conn_id->send_cq = opts.qp_attr.send_cq;
-  }
   ret = rdma_accept(conn_id, &conn_param);
   if (ret) {
     perror("ERROR");
@@ -500,6 +494,9 @@ Status Listener::Close(){
 }
 
 StatusOr<Endpoint *> Create(std::string ip, int port, Options opts){
+  
+  debug(stderr, "Creating Endpoint with [use_srq %d, srq %p, recv_cq %p]\n",
+      opts.use_srq, opts.qp_attr.srq, opts.qp_attr.recv_cq);
   if (ip.empty()){
     return Status(StatusCode::InvalidArgument, "IP cannot be empty");
   }
@@ -597,13 +594,6 @@ StatusOr<Endpoint *> Create(std::string ip, int port, Options opts){
       return Status(StatusCode::Internal, "dial: error creating qp");
     }
   }
-  if (opts.qp_attr.recv_cq){
-    id->recv_cq = opts.qp_attr.recv_cq;
-  }
-  if (opts.qp_attr.send_cq){
-    id->send_cq = opts.qp_attr.send_cq;
-  }
-
 
   // cleanup addrinfo, we don't need it anymore
   rdma_freeaddrinfo(addrinfo);

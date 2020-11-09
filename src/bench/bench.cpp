@@ -258,7 +258,7 @@ kym::StatusOr<uint64_t> test_bw_recv(kym::connection::Receiver *rcv, int count, 
   int i = 1;
   while(i<count){
     i++;
-    // std::cout << i << std::endl;
+    // debug(stderr, "BW RECEIVE: %d\t[rcv: %p]\n",i, rcv);
     auto buf_s = rcv->Receive();
     if (!buf_s.ok()){
       return buf_s.status().Wrap("error receiving buffer");

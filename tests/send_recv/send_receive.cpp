@@ -28,7 +28,7 @@ namespace kym {
 namespace connection {
 namespace {
 
-const uint64_t inflight = 200;
+const uint64_t inflight = 300;
 const uint64_t max_conn = 50;
 
 endpoint::Options defaultOptions = {
@@ -54,8 +54,8 @@ endpoint::Options defaultOptions = {
   .responder_resources = 0,
   .initiator_depth =  0,
   .flow_control = 0,
-  .retry_count = 10,  
-  .rnr_retry_count = 10, 
+  .retry_count = 0,  
+  .rnr_retry_count = 0, 
   .native_qp = false,
   .inline_recv = 0,
 };

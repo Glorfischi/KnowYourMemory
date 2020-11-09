@@ -83,13 +83,15 @@ int main(int argc, char* argv[]) {
   int batch = flags["batch"].as<int>();  
   int unack = flags["unack"].as<int>();  
 
+  int conn_count = flags["conn"].as<int>();  
 
   bool server = flags["server"].as<bool>();  
   bool client = flags["client"].as<bool>();  
 
-  std::vector<float> latency_m;
 
-  std::cout << "#### Testing WriteConnection ####" << std::endl;
+  std::vector<std::vector<float>*> measurements(conn_count);
+  std::thread ae_thread;
+
   kym::connection::WriteOpts opts;
   opts.raw = 0;
   if (sender.compare("writeImm") == 0){
@@ -110,14 +112,18 @@ int main(int argc, char* argv[]) {
 
 
 
-  std::vector<float> measurements;
   if (server){
+    std::vector<std::thread> workers;
+    kym::connection::WriteConnection *conns[conn_count];
+
     auto ln_s = kym::connection::ListenWrite(ip, 9999);
     if (!ln_s.ok()){
       std::cerr << "Error listening  " << ln_s.status() << std::endl;
       return 1;
     }
     kym::connection::WriteListener *ln = ln_s.value();
+
+    for (int i = 0; i<conn_count; i++){
     kym::connection::WriteConnection *conn;
     kym::connection::WriteReceiver *rcv = 0;
     kym::connection::WriteSender *snd = 0;
@@ -145,6 +151,7 @@ int main(int argc, char* argv[]) {
         return 1;
       }
       conn = conn_s.value();
+    }
     }
     kym::Status stat;
     if (lat) {

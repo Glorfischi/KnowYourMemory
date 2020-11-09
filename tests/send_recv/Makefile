@@ -21,7 +21,7 @@ PLOT = $(PLOTDIR)/latency.png
 all: CFLAGS += -O2
 all: $(OBJS)
 	mkdir -pm 755 $(BINDIR)
-	MLX5_SINGLE_THREADED=0 $(CC) $(CFLAGS) -o $(BIN) $(OBJS) $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $(BIN) $(OBJS) $(LDFLAGS)
 
 plot: $(PLOT)
 

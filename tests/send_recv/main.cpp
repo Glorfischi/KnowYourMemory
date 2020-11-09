@@ -178,8 +178,8 @@ int main(int argc, char* argv[]) {
       workers.push_back(std::thread([i, bw, lat, conn, count, batch, size, unack, &measurements](){
         std::chrono::milliseconds timespan(1000); // This is because of a race condition...
         std::vector<float> *m = new std::vector<float>();
+        std::this_thread::sleep_for(timespan);
         if (bw) {
-          std::this_thread::sleep_for(timespan);
           if (batch > 1){
             auto bw_s = test_bw_batch_send(conn, count, size, batch, unack);
             if (!bw_s.ok()){
