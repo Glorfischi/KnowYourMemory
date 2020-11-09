@@ -96,9 +96,7 @@ Status SharedReceiveQueue::PostMR(uint32_t wr_id){
   wr.sg_list = &sge;
   wr.num_sge = 1;
  
-  this->lock_.lock();
   int ret = ibv_post_srq_recv(this->srq_, &wr, &bad);
-  this->lock_.unlock();
   if (ret) {
     return Status(StatusCode::Internal, "error  " + std::to_string(ret) + " reposting buffer to SharedReceiveQueue");
   }

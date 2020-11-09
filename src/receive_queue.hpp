@@ -15,7 +15,6 @@
 #include <cstdint>
 #include <infiniband/verbs.h> 
 #include <vector>
-#include <mutex>
 
 #include "endpoint.hpp"
 #include "error.hpp"
@@ -72,9 +71,7 @@ StatusOr<ReceiveQueue *> GetReceiveQueue(Endpoint *ep, size_t transfer_size, siz
 class SharedReceiveQueue : public IReceiveQueue {
   public:
     SharedReceiveQueue(struct ibv_srq *srq, ibv_mr* mr, size_t transfer_size): 
-      srq_(srq), mr_(mr), transfer_size_(transfer_size), max_unposted_(30), unposted_(0){
-        this->to_post_.reserve(this->max_unposted_);
-      }; 
+      srq_(srq), mr_(mr), transfer_size_(transfer_size){}; 
     ~SharedReceiveQueue() = default;
 
     Status Close();
@@ -88,10 +85,6 @@ class SharedReceiveQueue : public IReceiveQueue {
     ibv_mr* mr_;
     size_t transfer_size_;
 
-    int max_unposted_;
-    int unposted_;
-    std::vector<uint64_t> to_post_;
-    std::mutex lock_;
 };
 StatusOr<SharedReceiveQueue *> GetSharedReceiveQueue(struct ibv_pd *pd, size_t transfer_size, size_t inflight);
 
