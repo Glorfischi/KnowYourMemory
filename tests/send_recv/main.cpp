@@ -124,15 +124,15 @@ int main(int argc, char* argv[]) {
         
         auto conn = conn_s.value();
         conns[i] = conn;
-        workers.push_back(std::thread([i, bw, lat, conn, count, size](){
+        workers.push_back(std::thread([i, bw, lat, conn, count, size, &measurements](){
+          std::vector<float> *m = new std::vector<float>();
           if (bw) {
             auto bw_s = test_bw_recv(conn, count, size);
             if (!bw_s.ok()){
               std::cerr << "Error running benchmark: " << bw_s.status() << std::endl;
               return 1;
             }
-            std::cerr << "## Bandwidth Receiver (MB/s)" << std::endl;
-            std::cout << (double)bw_s.value()/(1024*1024) << std::endl;
+            m->push_back(bw_s.value());
           } else if (lat) {
             auto stat = test_lat_recv(conn, count);
             if (!stat.ok()){
@@ -147,6 +147,7 @@ int main(int argc, char* argv[]) {
             }
           }
 
+          measurements[i] = m;
           conn->Close();
           return 0;
         }));
@@ -185,16 +186,14 @@ int main(int argc, char* argv[]) {
               std::cerr << "Error running benchmark: " << bw_s.status() << std::endl;
               return 1;
             }
-            std::cerr << "## Bandwidth Sender (MB/s)" << std::endl;
-            std::cout << (double)bw_s.value()/(1024*1024) << std::endl;
+            m->push_back(bw_s.value());
           } else {
             auto bw_s = test_bw_send(conn, count, size, unack);
             if (!bw_s.ok()){
               std::cerr << "Error running benchmark: " << bw_s.status() << std::endl;
               return 1;
             }
-            std::cerr << "## Bandwidth Sender (MB/s)" << std::endl;
-            std::cout << (double)bw_s.value()/(1024*1024) << std::endl;
+            m->push_back(bw_s.value());
           }
         } else if (lat) {
           std::chrono::milliseconds timespan(1000); // This is because of a race condition...
@@ -231,39 +230,58 @@ int main(int argc, char* argv[]) {
       workers[i].join();
     }
   }
-  std::vector<float> joined;
-  for (auto m : measurements){
-    if (m != nullptr) {
-      joined.reserve(m->size());
-      joined.insert(joined.end(), m->begin(), m->end());
+  if (lat || pingpong) {
+    // Handle Latency distribution
+    std::vector<float> joined;
+    for (auto m : measurements){
+      if (m != nullptr) {
+        joined.reserve(m->size());
+        joined.insert(joined.end(), m->begin(), m->end());
+      }
     }
-  }
-  if (!filename.empty()){
-    std::cout << "writing" << std::endl;
-    std::ofstream file(filename);
-    for (float f : joined){
-      file << f << "\n";
+    if (!filename.empty()){
+      std::ofstream file(filename);
+      for (float f : joined){
+        file << f << "\n";
+      }
+      file.close();
     }
-    file.close();
+
+    if (joined.size() > 0) {
+      if (lat) {
+        std::cout << "\tLatency";
+      } else if(pingpong)  {
+        std::cout << "\tPingPong Latency";
+      }
+      auto n = joined.size();
+      std::cout << std::endl;
+      std::cout << "N: " << n << std::endl;
+      
+      std::sort (joined.begin(), joined.end());
+      int q025 = (int)(n*0.025);
+      int q500 = (int)(n*0.5);
+      int q975 = (int)(n*0.975);
+      std::cout << "q025" << "\t" << "q50" << "\t" << "q975" << std::endl;
+      std::cout << joined[q025] << "\t" << joined[q500] << "\t" << joined[q975] << std::endl;
+    }
   }
 
-  if (joined.size() > 0) {
-    if (lat) {
-      std::cout << "\tLatency";
-    } else if(pingpong)  {
-      std::cout << "\tPingPong Latency";
+  if (bw) {
+    uint64_t bandwidth = 0;
+    for (auto m : measurements){
+      if (m != nullptr) {
+        bandwidth += m->at(0);
+      }
     }
-    auto n = joined.size();
-    std::cout << std::endl;
-    std::cout << "N: " << n << std::endl;
-    
-    std::sort (joined.begin(), joined.end());
-    int q025 = (int)(n*0.025);
-    int q500 = (int)(n*0.5);
-    int q975 = (int)(n*0.975);
-    std::cout << "q025" << "\t" << "q50" << "\t" << "q975" << std::endl;
-    std::cout << joined[q025] << "\t" << joined[q500] << "\t" << joined[q975] << std::endl;
+    std::cerr << "## Bandwidth (MB/s)" << std::endl;
+    std::cout << (double)bandwidth/(1024*1024) << std::endl;
+    if (!filename.empty()){
+      std::ofstream file(filename, std::ios_base::app);
+      file << conn_count <<  " " << size << " " << unack << " " << batch << " " <<  bandwidth << "\n";
+      file.close();
+    }
   }
+  
   
   return 0;
 }
