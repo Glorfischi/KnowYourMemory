@@ -265,9 +265,11 @@ Status Endpoint::PostFetchAndAdd(uint64_t ctx, uint64_t add, uint32_t lkey, uint
   return this->PostSendRaw(&wr, &bad);
 }
 
-StatusOr<struct ibv_wc> Endpoint::PollSendCq(){
+StatusOr<struct ibv_wc> Endpoint::PollSendCq(){ // Also it seems to make a copy on return. 
   struct ibv_wc wc;
-  while(ibv_poll_cq(this->id_->qp->send_cq, 1, &wc) == 0){}
+  while(ibv_poll_cq(this->id_->qp->send_cq, 1, &wc) == 0){ // Konstantin: it is a performance killer. You should poll many entries at a time.
+    // empty
+  }
   if (wc.status){
     // TODO(Fischi) Map error codes
     return Status(StatusCode::Internal, "error " + std::to_string(wc.status) +  " polling send cq for wr " 
@@ -307,7 +309,9 @@ Status Endpoint::PostRecv(uint64_t ctx, uint32_t lkey, void *addr, size_t size){
 StatusOr<ibv_wc> Endpoint::PollRecvCq(){
   struct ibv_wc wc;
 
-  while(ibv_poll_cq(this->id_->qp->recv_cq, 1, &wc) == 0){}
+  while(ibv_poll_cq(this->id_->qp->recv_cq, 1, &wc) == 0){ // Konstantin: it is a performance killer. You should poll many entries at a time.
+    // empty
+  }
   if (wc.status){
     // TODO(Fischi) Map error codes
     return Status(StatusCode::Internal, "error " + std::to_string(wc.status) +  " polling recv cq\n" + std::string(ibv_wc_status_str(wc.status)));
@@ -317,10 +321,10 @@ StatusOr<ibv_wc> Endpoint::PollRecvCq(){
 
 StatusOr<ibv_wc> Endpoint::PollRecvCqOnce(){
   struct ibv_wc wc;
-  int ret = ibv_poll_cq(this->id_->qp->recv_cq, 1, &wc);
+  int ret = ibv_poll_cq(this->id_->qp->recv_cq, 1, &wc); // Konstantin: it is a performance killer. You should poll many entries at a time.
   if (!ret){
     // TODO(Fischi) Map error codes
-    return Status(StatusCode::Internal, "nothing recieved in send cq");
+    return Status(StatusCode::Internal, "nothing received in send cq");
   }
   if (wc.status){
     // TODO(Fischi) Map error codes

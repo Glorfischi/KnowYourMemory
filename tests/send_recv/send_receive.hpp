@@ -50,9 +50,15 @@ class SendReceiveConnection : public Connection, public BatchSender {
     Status Free(ReceiveRegion);
 
     endpoint::Endpoint *GetEndpoint(){ return this->ep_; };
+
+    void PrintInfo(){
+        if(ep_){
+            ep_->PrintInfo();
+        }
+    }
   private:
-    memory::Allocator *allocator_;
-    endpoint::Endpoint *ep_;
+    memory::Allocator *allocator_; // Konstantin: could be defined as const pointer to avoid NULL check
+    endpoint::Endpoint *ep_;  // Konstantin: could be defined as const pointer to avoid NULL check
 
     uint64_t ackd_id_;
     uint64_t next_id_;

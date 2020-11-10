@@ -83,18 +83,36 @@ class Endpoint {
     Status PostRecv(uint64_t ctx, uint32_t lkey, void *addr, size_t size);
     StatusOr<struct ibv_wc> PollRecvCq();
     StatusOr<struct ibv_wc> PollRecvCqOnce();
+
+    void PrintInfo(){
+     printf("\tRDMACM-Endpoint[QPN:%u] %s SRQ[%p] \n", id_->qp ? id_->qp->qp_num : 0, id_->srq || srq_ ? "with" : "without",  id_->srq ? id_->srq : srq_ );
+     printf("\t\tSendCQ[%p] = %d; RecvCQ[%p] = %d; \n", id_->send_cq, id_->send_cq ? id_->send_cq->cqe : 0, id_->recv_cq, id_->recv_cq ? id_->recv_cq->cqe : 0);
+     if(id_->qp){
+      printf("\t\tThe QP was created using RDMA CM \n");
+     }
+     if(id_->send_cq){
+      printf("\t\tThe SendCq was created using RDMA CM \n");
+     }
+     if(id_->recv_cq){
+      printf("\t\tThe RecvCq was created using RDMA CM \n");
+     }
+     // I would suggest to use  srq_, pd_, and etc. instead of id->X as some objects can be created manually (i.e., without using RDMA CM).
+     printf("\t\tFields that are supposed to be used in the code (could not be null)\n" );
+     printf("\t\tQP[QPN:%u] %s SRQ[%p] \n",qp_ ? qp_->qp_num : 0, srq_ ? "with" : "without",  srq_);
+     printf("\t\tSendCQ[%p] = %d; RecvCQ[%p] = %d; \n", scq_, scq_ ? scq_->cqe : 0, rcq_, rcq_ ? rcq_->cqe : 0);
+    }
   private:
     rdma_cm_id * const id_;
     
     void *private_data_;
     size_t private_data_len_;
 
-    // for supporting IDs and native QPs
-    struct ibv_srq* srq_;
-    struct ibv_pd*  pd_;
-    struct ibv_cq*  scq_;
-    struct ibv_cq*  rcq_;
-    struct ibv_qp*  qp_;
+    // for supporting IDs and native QPs. I would also define them as const pointers
+    struct ibv_srq* srq_ = NULL;
+    struct ibv_pd*  pd_ = NULL;
+    struct ibv_cq*  scq_ = NULL;
+    struct ibv_cq*  rcq_ = NULL;
+    struct ibv_qp*  qp_ = NULL;
 };
 
 class Listener {

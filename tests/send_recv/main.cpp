@@ -123,6 +123,7 @@ int main(int argc, char* argv[]) {
         }
         
         auto conn = conn_s.value();
+        conn->PrintInfo();
         conns[i] = conn;
         workers.push_back(std::thread([i, bw, lat, conn, count, size, &measurements](){
           std::vector<float> *m = new std::vector<float>();
@@ -174,6 +175,7 @@ int main(int argc, char* argv[]) {
       if (i == 0) {
         ae_thread = DebugTrailAsyncEvents(conn->GetEndpoint()->GetContext());
       }
+      conn->PrintInfo();
       conns[i] = conn;
       workers.push_back(std::thread([i, bw, lat, conn, count, batch, size, unack, &measurements](){
         std::chrono::milliseconds timespan(1000); // This is because of a race condition...

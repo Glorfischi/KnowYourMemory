@@ -172,7 +172,7 @@ StatusOr<SendReceiveConnection *> SendReceiveListener::Accept(){
   kym::endpoint::Options opts = defaultOptions;
   if (this->srq_ != nullptr){
     // Create a bigger cq when using srq as spikes can overrun a cq
-    struct ibv_cq * cq = ibv_create_cq(this->listener_->GetContext(), max_conn*inflight, NULL, NULL, 0);
+    struct ibv_cq * cq = ibv_create_cq(this->listener_->GetContext(), max_conn*inflight, NULL, NULL, 0); // Konstantin: you just lost your CQ. YOu  created it outside RDMACM and did not save to Endpoint.
 
     opts.qp_attr.recv_cq = cq;
     opts.qp_attr.srq = this->srq_->GetSRQ();
@@ -194,7 +194,7 @@ StatusOr<SendReceiveConnection *> SendReceiveListener::Accept(){
     }
     rq = rq_stat.value();
   } else {
-        rq = this->srq_;
+    rq = this->srq_;
   }
 
   auto conn = new SendReceiveConnection(ep, rq, this->srq_ != nullptr, allocator);
