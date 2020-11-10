@@ -25,6 +25,8 @@
       - "{{ bench_batch_size }}"
       - "--conn"
       - "{{ bench_conn }}"
+      - "--unack"
+      - "{{ bench_unack }}"
   register: run_raw
 
 - debug:
@@ -36,7 +38,8 @@
     src: "{{ out.path }}"
     dest: "{{ project_dir }}/data/send-recv-{{ bench_srq | ternary('srq', '') }}-{{ bench_type }}-size{{ bench_msg_size }}-batch{{ bench_batch_size}}-{{ bench_server | ternary('server', 'client') }}-{{ ansible_hostname }}-{{ ansible_date_time.iso8601 }}.data"
     remote_src: yes
-  when: bench_archive
+  when: bench_archive 
+
 
 - name: Fetch output
   fetch:
@@ -44,3 +47,8 @@
     dest: "{{ bench_output }}-{{ bench_server | ternary('server', 'client') }}"
     flat: yes
   when: bench_output is defined
+
+
+
+
+

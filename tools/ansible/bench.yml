@@ -30,38 +30,13 @@
         groups: ault_client
     - name: Allocating resources..
       shell:
-        cmd: "salloc -w {{ intel_hosts[:2] | join(',') }} -t 15 --no-shell"
+        cmd: "salloc -w {{ intel_hosts[:2] | join(',') }} -t 90 --no-shell"
       register: job_raw
     - debug:
         var: job_raw
     - set_fact: 
         job_id: "{{ job_raw.stderr.split()[-1] }}"
 
-- hosts: ault_runner
-  gather_facts: yes
-  tags: run, send, bw
-  tasks:
-    - name: "Gather IP of server"
-      set_fact:
-        bench_server_ip: "{{ ansible_default_ipv4.address }}"
-      delegate_to: ault_server
-      run_once: true
-    - debug:
-        verbosity: 1
-        msg: "Server ip: {{ bench_server_ip}}"
-    - name: SendReceive - Bandwith
-      include_role:
-        name: bench/sendrcv
-      vars:
-        bench_type: "{{ item[0] }}"
-        bench_srq: "{{ item[1] }}"
-        bench_msg_size: "{{ item[2] }}"
-        bench_batch_size: "{{ item[3] }}"
-      with_nested:
-        - ["bw"]
-        - [false]
-        - [16, 32, 64, 1024, 4096, 8192]
-        - [1, 4, 8, 10, 20, 40, 80, 120]
 
 
 - hosts: ault_runner
@@ -93,6 +68,36 @@
         - ["send", "read"]
         #- [16, 32, 64, 1024, 4096, 8192]
         - [16] 
+
+
+- hosts: ault_runner
+  gather_facts: yes
+  tags: run, send, bw, send-bw
+  tasks:
+    - name: "Gather IP of server"
+      set_fact:
+        bench_server_ip: "{{ ansible_default_ipv4.address }}"
+      delegate_to: ault_server
+      run_once: true
+    - debug:
+        verbosity: 1
+        msg: "Server ip: {{ bench_server_ip}}"
+    - name: SendReceive - Bandwith
+      include_role:
+        name: bench/sendrcv
+      vars:
+        bench_type: "{{ item[0] }}"
+        bench_srq: "{{ item[1] }}"
+        bench_msg_size: "{{ item[2] }}"
+        bench_batch_size: 1
+        bench_unack: "{{ item[3] }}"
+        bench_output: "sendRcv-bw{{ item[1] | ternary('-srq', '') }}-{{ item[2] }}-{{ item[3] }}"
+        bench_count: 100000
+      with_nested:
+        - ["bw"]
+        - [false]
+        - [16, 32, 64, 128, 1024, 4096, 8192, 16384]
+        - [1, 4, 8, 16, 32, 64, 128]
  
 - hosts: ault_runner
   gather_facts: yes
@@ -122,6 +127,68 @@
         - [16] 
         - [1, 2, 4, 8, 16, 32, 64, 128]
  
+
+- hosts: ault_runner
+  gather_facts: yes
+  tags: run, send, bw, send-bw-thread
+  tasks:
+    - name: "Gather IP of server"
+      set_fact:
+        bench_server_ip: "{{ ansible_default_ipv4.address }}"
+      delegate_to: ault_server
+      run_once: true
+    - debug:
+        verbosity: 1
+        msg: "Server ip: {{ bench_server_ip}}"
+    - name: Write
+      include_role:
+        name: bench/sendrcv
+      vars:
+        bench_type: "{{ item[0] }}"
+        bench_srq: "{{ item[1] }}"
+        bench_msg_size: "{{ item[2] }}"
+        bench_conn: "{{ item[3] }}"
+        bench_output: "sendRcv-lat-conn-{{ item[3] }}{{ item[1] | ternary('-srq', '') }}"
+        bench_count: 10000
+      with_nested:
+        - ["bw"]
+        - [true, false] 
+        - [16] 
+        - [1, 2, 4, 8, 16, 32, 64, 128]
+ 
+
+
+- hosts: ault_runner
+  gather_facts: yes
+  tags: run, write, bw, write-bw
+  tasks:
+    - name: "Gather IP of server"
+      set_fact:
+        bench_server_ip: "{{ ansible_default_ipv4.address }}"
+      delegate_to: ault_server
+      run_once: true
+    - debug:
+        verbosity: 1
+        msg: "Server ip: {{ bench_server_ip}}"
+    - name: Write - Bandwith
+      include_role:
+        name: bench/write
+      vars:
+        bench_type: "{{ item[0] }}"
+        bench_sender: "{{ item[1] }}"
+        bench_ack: "{{ item[2] }}"
+        bench_batch_size: 1
+        bench_msg_size: "{{ item[3] }}"
+        bench_unack: "{{ item[4] }}"
+        bench_output: "write-bw-{{ item[1] }}-{{ item[2] }}-{{ item[3] }}-{{ item[4] }}.data"
+        bench_count: 100000
+      with_nested:
+        - ["bw"]
+        - ["writeImm", "writeOff", "writeRev"]
+        - ["send", "read"]
+        - [16, 32, 64, 128, 1024, 4096, 8192, 16384]
+        - [1, 4, 8, 16, 32, 64, 128]
+
 
 - hosts: ault.cscs.ch
   tags: always
