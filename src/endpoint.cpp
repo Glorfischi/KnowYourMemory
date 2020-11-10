@@ -24,6 +24,19 @@
 #include "error.hpp"
 
 namespace kym {
+
+struct Init
+{
+    Init()
+    {   
+        printf("RDMA preload info\n");
+        char *env = getenv("MLX5_SINGLE_THREADED");
+        printf("\tMLX5_SINGLE_THREADED is %s\n", env && strcmp(env, "1") == 0 ? "Enabled" : "Disabled");
+        env = getenv("MLX5_SCATTER_TO_CQE");
+        printf("\tMLX5_SCATTER_TO_CQE is %s\n", env && strcmp(env, "1") == 0 ? "Enabled" : "Disabled");
+    }
+} init_;
+
 namespace endpoint {
 
 int get_rdma_addr(const char *src, const char *dst, const char *port,
