@@ -10,6 +10,13 @@
 #include <vector>
 #include <chrono>
 
+int set_core_affinity(int id){
+  cpu_set_t set;
+  CPU_ZERO(&set);
+  CPU_SET(whole_cores[id%36], &set);
+  return pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &set);
+}
+
 kym::Status test_lat_ping(kym::connection::Sender *snd, kym::connection::Receiver *rcv, int count, int size, std::vector<float> *lat_us){
   lat_us->reserve(count);
 
@@ -258,7 +265,7 @@ kym::StatusOr<uint64_t> test_bw_recv(kym::connection::Receiver *rcv, int count, 
   int i = 1;
   while(i<count){
     i++;
-    // debug(stderr, "BW RECEIVE: %d\t[rcv: %p]\n",i, rcv);
+    if (i % 100 == 0) debug(stderr, "BW RECEIVE: %d\t[rcv: %p, core: %d]\n",i, rcv, sched_getcpu());
     auto buf_s = rcv->Receive();
     if (!buf_s.ok()){
       return buf_s.status().Wrap("error receiving buffer");
