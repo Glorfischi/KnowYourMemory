@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <iostream>
 #include <memory> // For smart pointers
@@ -23,8 +24,11 @@
 
 #include "error.hpp"
 
+
 namespace kym {
 namespace endpoint {
+
+int rcv_wc = 100;
 
 int get_rdma_addr(const char *src, const char *dst, const char *port,
 		  struct rdma_addrinfo *hints, struct rdma_addrinfo **rai){
@@ -54,24 +58,21 @@ int get_rdma_addr(const char *src, const char *dst, const char *port,
 }
 
 
-Endpoint::Endpoint(rdma_cm_id *id) : id_(id){
-  debug(stderr, "New Endpoint\t[id: %p, pd: %p, qp: %p, rcv_cq: %p, snd_cp: %p, srq: %p, rcv_cq %p, rcv_cqe %d]\n", 
-      id, id->pd, id->qp, id->recv_cq, id->send_cq, id->srq, this->id_->recv_cq, this->id_->recv_cq->cqe);
-  // std::cout << "dev " << id->verbs->device->name << std::endl;
-  // std::cout << "id " << id <<  " pd " << id->pd << " qp " << id->qp << " verbs " << id->verbs << std::endl; 
+Endpoint::Endpoint(rdma_cm_id *id) : Endpoint(id, nullptr, 0){
 }
 Endpoint::Endpoint(rdma_cm_id* id, void *private_data, size_t private_data_len) : id_(id), private_data_(private_data), private_data_len_(private_data_len){
+  this->max_rcv_wc_ = rcv_wc;
+  this->current_rcv_wc_ = 0;
+  this->recv_wcs_ = (struct ibv_wc *)calloc(this->max_rcv_wc_, sizeof(struct ibv_wc));
   debug(stderr, "New Endpoint\t[id: %p, pd: %p, qp: %p, rcv_cq: %p, snd_cp: %p, srq: %p, rcv_cq %p, rcv_cqe %d]\n", 
       id, id->pd, id->qp, id->recv_cq, id->send_cq, id->srq, this->id_->recv_cq, this->id_->recv_cq->cqe);
-
-  // std::cout << "dev " << id->verbs->device->name << std::endl;
-  // std::cout << "id " << id <<  " pd " << id->pd << " qp " << id->qp << " verbs " << id->verbs << std::endl; 
 }
 
 Endpoint::~Endpoint() {
   if (this->private_data_){
     free(this->private_data_);
   }
+  free(this->recv_wcs_);
   rdma_destroy_ep(this->id_);
 }
 
@@ -305,9 +306,15 @@ Status Endpoint::PostRecv(uint64_t ctx, uint32_t lkey, void *addr, size_t size){
 }
 
 StatusOr<ibv_wc> Endpoint::PollRecvCq(){
-  struct ibv_wc wc;
-
-  while(ibv_poll_cq(this->id_->qp->recv_cq, 1, &wc) == 0){}
+  while(this->current_rcv_wc_ == 0){
+    int ret = ibv_poll_cq(this->id_->qp->recv_cq, this->max_rcv_wc_, this->recv_wcs_);
+    if (ret < 0){
+      return Status(StatusCode::Internal, "error polling recv cq\n");
+    }
+    this->current_rcv_wc_ = ret;
+  }
+  debug(stderr, "current wc %d\n", this->current_rcv_wc_);
+  auto wc =  this->recv_wcs_[--this->current_rcv_wc_];
   if (wc.status){
     // TODO(Fischi) Map error codes
     return Status(StatusCode::Internal, "error " + std::to_string(wc.status) +  " polling recv cq\n" + std::string(ibv_wc_status_str(wc.status)));
@@ -316,15 +323,21 @@ StatusOr<ibv_wc> Endpoint::PollRecvCq(){
 }
 
 StatusOr<ibv_wc> Endpoint::PollRecvCqOnce(){
-  struct ibv_wc wc;
-  int ret = ibv_poll_cq(this->id_->qp->recv_cq, 1, &wc);
-  if (!ret){
-    // TODO(Fischi) Map error codes
-    return Status(StatusCode::Internal, "nothing recieved in send cq");
+  if(this->current_rcv_wc_ == 0){
+    int ret = ibv_poll_cq(this->id_->qp->recv_cq, this->max_rcv_wc_, this->recv_wcs_);
+    if (ret < 0){
+      return Status(StatusCode::Internal, "error polling recv cq\n");
+    }
+    if (!ret){
+      // TODO(Fischi) Map error codes
+      return Status(StatusCode::Internal, "nothing recieved in send cq");
+    }
+    this->current_rcv_wc_ = ret;
   }
+  auto wc =  this->recv_wcs_[--this->current_rcv_wc_];
   if (wc.status){
     // TODO(Fischi) Map error codes
-    return Status(StatusCode::Internal, "error polling recv cq\n" + std::string(ibv_wc_status_str(wc.status)));
+    return Status(StatusCode::Internal, "error " + std::to_string(wc.status) +  " polling recv cq\n" + std::string(ibv_wc_status_str(wc.status)));
   }
   return wc;
 }
@@ -624,7 +637,8 @@ Status Endpoint::Connect(Options opts){
   int ret = rdma_connect(this->id_, &conn_param);
   if (ret) {
     perror("ERROR");
-    return Status(StatusCode::Internal, "Error " + std::to_string(ret) + " connecting to remote");
+    info(stderr, "error in rdma_connect\n");
+    return Status(StatusCode::Internal, "Error " + std::to_string(ret) + " connecting to remote in rdma_connect");
   }
 
 #ifdef WITH_MANUAL_RDMACM
@@ -696,7 +710,7 @@ StatusOr<Endpoint *> Dial(std::string ip, int port, Options opts){
   auto ep = ep_stat.value();
   auto stat = ep->Connect(opts);
   if (!stat.ok()){
-    return stat;
+    return stat.Wrap("error connecting endpoint");
   }
   return ep;
 }
