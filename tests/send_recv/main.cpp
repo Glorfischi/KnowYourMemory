@@ -123,7 +123,7 @@ int main(int argc, char* argv[]) {
         
         auto conn = conn_s.value();
         conns[i] = conn;
-        workers.push_back(std::thread([i, bw, lat, conn, count, size, &measurements](){
+        auto y = [i, bw, lat, conn, count, size, &measurements](){
           set_core_affinity(i+1);
           std::vector<float> *m = new std::vector<float>();
           if (bw) {
@@ -150,7 +150,12 @@ int main(int argc, char* argv[]) {
           measurements[i] = m;
           conn->Close();
           return 0;
-        }));
+        };
+#ifdef SINGLE_THREADED_RCV
+        y();
+#else
+        workers.push_back(std::thread(y));
+#endif
       }
       for (int i = 0; i<workers.size(); i++){
         workers[i].join();
