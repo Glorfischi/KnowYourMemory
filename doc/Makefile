@@ -21,6 +21,11 @@ clean:
 %.png: %.p $(DATADIR)
 	gnuplot $<
 
+%.pdf: %.tex
+	$(VARS) latexmk -f -pdf -M -MP -MF $*.deps -cd $<
+
+thesis: thesis/thesis.pdf
+
 .DELETE_ON_ERROR:
 .PHONY: all clean plot
 

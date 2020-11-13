@@ -19,6 +19,8 @@ bin/
 *.pdf
 *.run.xml
 _minted-*
+*.toc
+*.gz
 
 
 # Perf stuff
