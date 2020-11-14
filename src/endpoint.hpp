@@ -83,6 +83,31 @@ class Endpoint {
     Status PostRecv(uint64_t ctx, uint32_t lkey, void *addr, size_t size);
     StatusOr<struct ibv_wc> PollRecvCq();
     StatusOr<struct ibv_wc> PollRecvCqOnce();
+
+    inline int FastPostRecvRaw(struct ibv_recv_wr *wr, struct ibv_recv_wr **bad_wr){
+      return ibv_post_recv(this->id_->qp, wr, bad_wr);
+    }
+
+
+    inline struct ibv_wc* FastPollRecvCq(){ 
+      while(this->current_rcv_wc_ == 0){
+        int ret = ibv_poll_cq(this->id_->qp->recv_cq, this->max_rcv_wc_, this->recv_wcs_);
+        if (ret < 0){
+          return NULL;
+        }
+        this->current_rcv_wc_ = ret;
+      }
+
+      // debug(stderr, "current wc %d\n", this->current_rcv_wc_);
+      struct ibv_wc* toreturn  = &this->recv_wcs_[--this->current_rcv_wc_]; 
+      if (toreturn->status){
+        // TODO(Fischi) Map error codes
+        return  NULL;// Status(StatusCode::Internal, "error " + std::to_string(wc.status) +  " polling recv cq\n" + std::string(ibv_wc_status_str(wc.status)));
+      }
+      return toreturn;
+    }
+
+
   private:
     rdma_cm_id * const id_;
     

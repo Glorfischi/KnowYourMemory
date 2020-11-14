@@ -2,7 +2,7 @@ PREFIX = ../..
 
 CC = g++
 LDFLAGS =  -libverbs -lpthread -lrdmacm -lmlx5
-CFLAGS += -Wall -I$(PREFIX)/include  -I$(PREFIX)/src -I$(PREFIX)/external -I$(PREFIX)/src/bench
+CFLAGS += -Wall -I. -I$(PREFIX)/include  -I$(PREFIX)/src -I$(PREFIX)/external -I$(PREFIX)/src/bench
 CXXFLAGS = $(CFLAGS)
 
 BINDIR = ./bin
@@ -26,6 +26,11 @@ all: $(OBJS)
 
 single: CFLAGS += -O2 -DSINGLE_THREADED_RCV
 single: $(OBJS)
+	mkdir -pm 755 $(BINDIR)
+	$(CC) $(CFLAGS) -o $(BIN) $(OBJS) $(LDFLAGS)
+
+fast: CFLAGS += -O2 -DFAST_RCV
+fast: $(OBJS)
 	mkdir -pm 755 $(BINDIR)
 	$(CC) $(CFLAGS) -o $(BIN) $(OBJS) $(LDFLAGS)
 

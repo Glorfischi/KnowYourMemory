@@ -38,14 +38,29 @@ Status ReceiveQueue::Close(){
 }
 
 struct mr ReceiveQueue::GetMR(uint32_t wr_id){
-  uint64_t addr = ((uint64_t)this->mr_->addr) + wr_id*this->transfer_size_;
+  uint64_t addr = ContextToAddr(wr_id);
   return mr{(void *)addr, this->transfer_size_};
 }
-Status ReceiveQueue::PostMR(uint32_t wr_id){
-  uint64_t addr = ((uint64_t)this->mr_->addr) + wr_id*this->transfer_size_;
-  return this->ep_->PostRecv(wr_id, this->mr_->lkey, (void *)addr, this->transfer_size_); 
 
+Status ReceiveQueue::PostMR(uint32_t wr_id){
+  uint64_t addr = ContextToAddr(wr_id);
+  return this->ep_->PostRecv(wr_id, this->mr_->lkey, (void *)addr, this->transfer_size_); 
 }
+
+int ReceiveQueue::FastPostMR(uint32_t *array, int size){
+  for(int i=0; i<size; i++){
+    recv_sges[i].addr = ContextToAddr(array[i]);
+    recv_wrs[i].wr_id = array[i];
+  }
+  recv_wrs[size-1].next = NULL; // end of the batch. so *size* can be smaller  than 128
+  
+  struct ibv_recv_wr* badwr;
+  int ret = this->ep_->FastPostRecvRaw(recv_wrs,&badwr); 
+  recv_wrs[size-1].next = &recv_wrs[size];
+  return ret;
+}
+ 
+
 StatusOr<ReceiveQueue *> GetReceiveQueue(Endpoint *ep, size_t transfer_size, size_t inflight){
   char* buf = (char*)calloc(inflight, transfer_size);
   struct ibv_mr * mr = ibv_reg_mr(ep->GetPd(), buf, transfer_size*inflight, IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);  
@@ -79,11 +94,12 @@ Status SharedReceiveQueue::Close(){
 }
 
 struct mr SharedReceiveQueue::GetMR(uint32_t wr_id){
-  uint64_t addr = ((uint64_t)this->mr_->addr) + wr_id*this->transfer_size_;
+  uint64_t addr = ContextToAddr(wr_id);
   return mr{(void *)addr, this->transfer_size_};
 }
+
 Status SharedReceiveQueue::PostMR(uint32_t wr_id){
-  uint64_t addr = ((uint64_t)this->mr_->addr) + wr_id*this->transfer_size_;
+  uint64_t addr = ContextToAddr(wr_id);
 
   struct ibv_sge sge;
   sge.addr = addr;
@@ -102,6 +118,20 @@ Status SharedReceiveQueue::PostMR(uint32_t wr_id){
   }
   return Status();
 }
+
+int SharedReceiveQueue::FastPostMR(uint32_t *array, int size){
+  for(int i=0; i<size; i++){
+    recv_sges[i].addr = ContextToAddr(array[i]);
+    recv_wrs[i].wr_id = array[i];
+  }
+  recv_wrs[size-1].next = NULL;
+
+  struct ibv_recv_wr* badwr;
+  int ret = ibv_post_srq_recv(this->srq_, recv_wrs, &badwr);
+  recv_wrs[size-1].next = &recv_wrs[size];
+  return ret;
+}
+
 struct ibv_srq *SharedReceiveQueue::GetSRQ(){
   return this->srq_;
 }

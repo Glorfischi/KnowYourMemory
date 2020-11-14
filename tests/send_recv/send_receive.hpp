@@ -47,7 +47,30 @@ class SendReceiveConnection : public Connection, public BatchSender {
     Status Wait(uint64_t id);
 
     StatusOr<ReceiveRegion> Receive();
+
     Status Free(ReceiveRegion);
+
+
+    ReceiveRegion FastReceive(){ // KOnstantin BUt to be honest, I think "int FastReceive(ReceiveRegion&)" is more general
+      struct ibv_wc *wc = this->ep_->FastPollRecvCq();
+      assert(wc!=NULL && "null completion");
+      uint64_t context = wc->wr_id; // copy as it can become invalid after next PollRecvCq
+      uint32_t size = wc->byte_len; // copy as it can become invalid after next PollRecvCq
+
+      ReceiveRegion reg = {context, this->rq_->GetMR(context).addr , size, 0};
+      return reg;
+    }
+
+    int FastFree(ReceiveRegion& region){
+        recv_contexts[recv_batch_counter++] = region.context; 
+
+        if(recv_batch_counter == batch_size){
+            recv_batch_counter = 0;
+            return this->rq_->FastPostMR(recv_contexts,batch_size);
+        }
+        return 0;
+    }
+
 
     endpoint::Endpoint *GetEndpoint(){ return this->ep_; };
   private:
@@ -59,6 +82,11 @@ class SendReceiveConnection : public Connection, public BatchSender {
 
     endpoint::IReceiveQueue *rq_;
     bool rq_shared_;
+
+
+    static const int batch_size = 32;
+    int recv_batch_counter = 0;
+    uint32_t recv_contexts[batch_size]; 
 
 };
 

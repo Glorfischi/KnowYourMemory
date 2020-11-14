@@ -278,7 +278,11 @@ StatusOr<struct ibv_wc> Endpoint::PollSendCq(){
 }
 
 Status Endpoint::PostRecvRaw(struct ibv_recv_wr *wr, struct ibv_recv_wr **bad_wr){
-  return Status(kym::StatusCode::NotImplemented);
+  int ret = ibv_post_recv(this->id_->qp, wr, bad_wr);
+  if (ret) {
+    return Status(StatusCode::Internal, "error posting receive buffer");
+  }
+  return Status(); 
 }
 
 Status Endpoint::PostRecv(uint64_t ctx, uint32_t lkey, void *addr, size_t size){

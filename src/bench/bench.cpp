@@ -4,11 +4,14 @@
 #include "../error.hpp"
 
 #include "debug.h"
+#include "send_receive.hpp"
+
 
 #include <iostream>
 #include <string>
 #include <vector>
 #include <chrono>
+#include <cassert>
 
 int set_core_affinity(int id){
   cpu_set_t set;
@@ -251,6 +254,8 @@ kym::StatusOr<uint64_t> test_bw_send(kym::connection::Sender *snd, int count, in
   }
   return (double)size*((double)count/(dur/1e9));
 }
+
+// should it return double? 
 kym::StatusOr<uint64_t> test_bw_recv(kym::connection::Receiver *rcv, int count, int size){
   auto buf_s = rcv->Receive();
   if (!buf_s.ok()){
@@ -263,19 +268,39 @@ kym::StatusOr<uint64_t> test_bw_recv(kym::connection::Receiver *rcv, int count, 
   }
   auto start = std::chrono::high_resolution_clock::now();
   int i = 1;
+#ifdef FAST_RCV
+  kym::connection::SendReceiveConnection* directrcv  = dynamic_cast<kym::connection::SendReceiveConnection*>(rcv);
+  assert(directrcv!= NULL && "dynamic_cast was not successful");
   while(i<count){
     i++;
-    if (i % 100 == 0) debug(stderr, "BW RECEIVE: %d\t[rcv: %p, core: %d]\n",i, rcv, sched_getcpu());
+    if (i % (16*1024) == 0) debug(stderr, "BW RECEIVE: %d\t[rcv: %p, core: %d]\n",i, rcv, sched_getcpu()); 
+    kym::connection::ReceiveRegion buf_s = directrcv->FastReceive();
+    if (!buf_s.addr){
+      debug(stderr, "error receiving buffer\n"); 
+      return 0;
+    }
+    //std::cout << "# GOT: " << *(int *)buf_s.value().addr << std::endl;
+    int ret = directrcv->FastFree(buf_s); 
+    if (ret){
+      debug(stderr, "error freeing buffer\n"); 
+      return 0 ; 
+    }
+  }
+#else
+  while(i<count){
+    i++;
+    if (i % 100 == 0) debug(stderr, "BW RECEIVE: %d\t[rcv: %p, core: %d]\n",i, rcv, sched_getcpu()); // using "% 128" is better as compiler can change it to "& 0x80"
     auto buf_s = rcv->Receive();
     if (!buf_s.ok()){
       return buf_s.status().Wrap("error receiving buffer");
     }
     //std::cout << "# GOT: " << *(int *)buf_s.value().addr << std::endl;
-    auto free_s = rcv->Free(buf_s.value());
+    auto free_s = rcv->Free(buf_s.value()); // this method does not batch anything 
     if (!free_s.ok()){
       return free_s.Wrap("error receiving buffer");
     }
   }
+#endif
   auto end = std::chrono::high_resolution_clock::now();
   double dur = std::chrono::duration_cast<std::chrono::nanoseconds>(end-start).count();
   return (double)size*(double)(count-1)/(dur/1e9);
