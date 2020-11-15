@@ -5,7 +5,7 @@
 
 #include "debug.h"
 #include "send_receive.hpp"
-
+#include <thread>
 
 #include <iostream>
 #include <string>
@@ -143,9 +143,11 @@ kym::StatusOr<uint64_t> test_bw_batch_send(kym::connection::BatchSender *snd, in
   }
   int unack_batch = unack/batch;
   int count_batch = count/batch;
-  std::vector<kym::connection::SendRegion> batches[unack_batch];
+
+  std::vector<kym::connection::SendRegion> batches[unack_batch]; // looks weird. it can be vector of vector
+
   for(int j = 0; j<unack_batch; j++){
-    batches[j] = std::vector<kym::connection::SendRegion>();
+    batches[j] = std::vector<kym::connection::SendRegion>(); // looks weird. it should be already initialized.  
     for(int i = 0; i<batch; i++){
       auto buf_s = snd->GetMemoryRegion(size);
       if (!buf_s.ok()){
@@ -156,7 +158,6 @@ kym::StatusOr<uint64_t> test_bw_batch_send(kym::connection::BatchSender *snd, in
       batches[j].push_back(buf);
     }
   }
-
   int sent = 0;
   auto start = std::chrono::high_resolution_clock::now();
   uint64_t ids[unack_batch];
@@ -186,6 +187,7 @@ kym::StatusOr<uint64_t> test_bw_batch_send(kym::connection::BatchSender *snd, in
       return stat.Wrap("error waiting for buffer to be sent");
     }
     auto send_s = snd->SendAsync(batches[i%unack_batch]);
+    sent += batch;
     if (!send_s.ok()){
       for(auto ba : batches){
         for(auto b : ba){
@@ -265,7 +267,7 @@ kym::StatusOr<uint64_t> test_bw_recv(kym::connection::Receiver *rcv, int count, 
   auto free_s = rcv->Free(buf_s.value());
   if (!free_s.ok()){
     return free_s.Wrap("error receiving buffer");
-  }
+  } 
   auto start = std::chrono::high_resolution_clock::now();
   int i = 1;
 #ifdef FAST_RCV
@@ -273,7 +275,7 @@ kym::StatusOr<uint64_t> test_bw_recv(kym::connection::Receiver *rcv, int count, 
   assert(directrcv!= NULL && "dynamic_cast was not successful");
   while(i<count){
     i++;
-    if (i % (16*1024) == 0) debug(stderr, "BW RECEIVE: %d\t[rcv: %p, core: %d]\n",i, rcv, sched_getcpu()); 
+    if (i % (16*1024) == 0) info(stdout, "BW RECEIVE: %d\t[rcv: %p, core: %d]\n",i, rcv, sched_getcpu()); 
     kym::connection::ReceiveRegion buf_s = directrcv->FastReceive();
     if (!buf_s.addr){
       debug(stderr, "error receiving buffer\n"); 
@@ -289,7 +291,7 @@ kym::StatusOr<uint64_t> test_bw_recv(kym::connection::Receiver *rcv, int count, 
 #else
   while(i<count){
     i++;
-    if (i % 100 == 0) debug(stderr, "BW RECEIVE: %d\t[rcv: %p, core: %d]\n",i, rcv, sched_getcpu()); // using "% 128" is better as compiler can change it to "& 0x80"
+    if (i % 100 == 0) info(stderr, "BW RECEIVE: %d\t[rcv: %p, core: %d]\n",i, rcv, sched_getcpu()); // using "% 128" is better as compiler can change it to "& 0x80"
     auto buf_s = rcv->Receive();
     if (!buf_s.ok()){
       return buf_s.status().Wrap("error receiving buffer");

@@ -62,6 +62,9 @@ int ReceiveQueue::FastPostMR(uint32_t *array, int size){
  
 
 StatusOr<ReceiveQueue *> GetReceiveQueue(Endpoint *ep, size_t transfer_size, size_t inflight){
+  inflight=inflight*5;
+  printf("Create Get Receive with inflight %lu (Note I increased it!)\n",inflight );
+
   char* buf = (char*)calloc(inflight, transfer_size);
   struct ibv_mr * mr = ibv_reg_mr(ep->GetPd(), buf, transfer_size*inflight, IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);  
   for (size_t i = 0; i < inflight; i++){
@@ -145,7 +148,7 @@ StatusOr<SharedReceiveQueue *> GetSharedReceiveQueue(struct ibv_pd *pd, size_t t
   }
   
   debug(stderr, "Created SRQ [ctx: %p, srq_ctx: %p]\n", srq->context, srq->srq_context);
-
+  printf("Create Get Receive with inflight %lu \n",inflight );
   char* buf = (char*)calloc(inflight, transfer_size);
   struct ibv_mr * mr = ibv_reg_mr(pd, buf, transfer_size*inflight, IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);  
 
