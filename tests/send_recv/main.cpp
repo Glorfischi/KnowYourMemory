@@ -124,7 +124,7 @@ int main(int argc, char* argv[]) {
         auto conn = conn_s.value();
         conns[i] = conn;
         auto y = [i, bw, lat, conn, count, size, &measurements](){
-          set_core_affinity(2*(i+1));
+          //set_core_affinity(i+1);
           std::vector<float> *m = new std::vector<float>();
           if (bw) {
             auto bw_s = test_bw_recv(conn, count, size);
@@ -181,7 +181,7 @@ int main(int argc, char* argv[]) {
       }
       conns[i] = conn;
       workers.push_back(std::thread([i, bw, lat, conn, count, batch, size, unack, &measurements](){
-        set_core_affinity(i+1);
+        //set_core_affinity(i+1);
         
         std::chrono::milliseconds timespan(1000); // This is because of a race condition...
         std::vector<float> *m = new std::vector<float>();

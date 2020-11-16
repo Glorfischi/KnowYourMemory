@@ -141,6 +141,28 @@ kym::StatusOr<uint64_t> test_bw_batch_send(kym::connection::BatchSender *snd, in
   if (count % batch){
     std::cerr << "[INFO] falling back to count: " << count - (count % batch) << std::endl;
   }
+
+  printf("start warmup\n");
+  {
+    auto buf_s = snd->GetMemoryRegion(size);
+    if (!buf_s.ok()){
+      return buf_s.status().Wrap("error allocating send region");
+    }
+    auto buf = buf_s.value();
+    std::vector<kym::connection::SendRegion> bufs;
+    bufs.push_back(buf);
+    for(int i = 0; i<10000; i++){
+      *(int *)bufs[0].addr = i;
+      auto send_s = snd->Send(bufs);
+      if (!send_s.ok()){
+        snd->Free(buf);
+        return send_s.Wrap("error sending buffer");
+      }
+    }
+    snd->Free(buf);
+  }
+  printf("warmup is done\n");
+
   int unack_batch = unack/batch;
   int count_batch = count/batch;
 
@@ -259,6 +281,19 @@ kym::StatusOr<uint64_t> test_bw_send(kym::connection::Sender *snd, int count, in
 
 // should it return double? 
 kym::StatusOr<uint64_t> test_bw_recv(kym::connection::Receiver *rcv, int count, int size){
+
+  for(int i = 0; i < 10000; i++){ // warmup
+    auto buf_s = rcv->Receive();
+    if (!buf_s.ok()){
+      return buf_s.status().Wrap("error receiving buffer");
+    }
+    // std::cout << "# GOT: " << *(int *)buf_s.value().addr << std::endl;
+    auto free_s = rcv->Free(buf_s.value());
+    if (!free_s.ok()){
+      return free_s.Wrap("error receiving buffer");
+    } 
+  }
+
   auto buf_s = rcv->Receive();
   if (!buf_s.ok()){
     return buf_s.status().Wrap("error receiving buffer");
@@ -268,6 +303,7 @@ kym::StatusOr<uint64_t> test_bw_recv(kym::connection::Receiver *rcv, int count, 
   if (!free_s.ok()){
     return free_s.Wrap("error receiving buffer");
   } 
+
   auto start = std::chrono::high_resolution_clock::now();
   int i = 1;
 #ifdef FAST_RCV
