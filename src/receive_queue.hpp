@@ -49,7 +49,10 @@ class IReceiveQueue {
  */
 class ReceiveQueue : public IReceiveQueue {
   public:
-    ReceiveQueue(Endpoint *ep, ibv_mr* mr, size_t transfer_size): ep_(ep), mr_(mr), transfer_size_(transfer_size){}; 
+    ReceiveQueue(Endpoint *ep, ibv_mr* mr, size_t transfer_size, 
+        int max_rcv_mr, struct ibv_recv_wr *mr_wr, struct ibv_sge *mr_sge)
+      : ep_(ep), mr_(mr), transfer_size_(transfer_size),
+      current_rcv_mr_(max_rcv_mr), max_rcv_mr_(max_rcv_mr),recv_mr_wrs_(mr_wr), recv_mr_sge_(mr_sge){}; 
     ~ReceiveQueue() = default;
 
     Status Close();
@@ -60,6 +63,15 @@ class ReceiveQueue : public IReceiveQueue {
     Endpoint *ep_;
     ibv_mr* mr_;
     size_t transfer_size_;
+
+    inline uint64_t ContextToAddr(uint32_t wr_id){
+      return ((uint64_t)this->mr_->addr) + wr_id*this->transfer_size_;
+    }
+
+    int current_rcv_mr_;
+    int max_rcv_mr_;
+    struct ibv_recv_wr *recv_mr_wrs_;
+    struct ibv_sge *recv_mr_sge_;
 };
 StatusOr<ReceiveQueue *> GetReceiveQueue(Endpoint *ep, size_t transfer_size, size_t inflight);
 

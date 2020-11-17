@@ -23,6 +23,12 @@ all: $(OBJS)
 	mkdir -pm 755 $(BINDIR)
 	$(CC) $(CFLAGS) -o $(BIN) $(OBJS) $(LDFLAGS)
 
+batch: CFLAGS += -O2 -DBATCH_POST_RCV
+batch: $(OBJS)
+	mkdir -pm 755 $(BINDIR)
+	$(CC) $(CFLAGS) -o $(BIN) $(OBJS) $(LDFLAGS)
+
+
 
 single: CFLAGS += -O2 -DSINGLE_THREADED_RCV
 single: $(OBJS)

@@ -10,6 +10,7 @@
 # include "receive_queue.hpp"
 
 #include <cstdint>
+#include <cstdlib>
 #include <memory>
 #include <ostream>
 #include <stddef.h>
@@ -43,8 +44,17 @@ struct mr ReceiveQueue::GetMR(uint32_t wr_id){
 }
 Status ReceiveQueue::PostMR(uint32_t wr_id){
   uint64_t addr = ((uint64_t)this->mr_->addr) + wr_id*this->transfer_size_;
+#ifdef BATCH_POST_RECV
+  int i = this->current_rcv_mr_--;
+  this->recv_mr_sge_[i].addr = addr;
+  this->recv_mr_wrs_[i].wr_id = wr_id;
+  if (this->current_rcv_mr_ == 0) {
+    struct ibv_recv_wr *bad;
+    return this->ep_->PostRecvRaw(this->recv_mr_wrs_, &bad);
+  }
+#else
   return this->ep_->PostRecv(wr_id, this->mr_->lkey, (void *)addr, this->transfer_size_); 
-
+#endif
 }
 StatusOr<ReceiveQueue *> GetReceiveQueue(Endpoint *ep, size_t transfer_size, size_t inflight){
   char* buf = (char*)calloc(inflight, transfer_size);
@@ -58,7 +68,19 @@ StatusOr<ReceiveQueue *> GetReceiveQueue(Endpoint *ep, size_t transfer_size, siz
       return regStatus.Wrap("error setting up receive queue");
     }
   }
-  return new ReceiveQueue(ep, mr, transfer_size);
+  struct ibv_recv_wr *wrs = (struct ibv_recv_wr *)calloc(inflight/4, sizeof(struct ibv_recv_wr));
+  struct ibv_sge *sges = (struct ibv_sge *)calloc(inflight/4, sizeof(struct ibv_sge));
+  for (int i = 0; i < inflight/4; i++){
+    wrs[i].wr_id = i;
+    wrs[i].next = i==inflight/4 ? NULL : &wrs[i+1];
+    wrs[i].sg_list = &sges[i];
+    wrs[i].num_sge = 1;
+    sges[i].addr = 0;
+    sges[i].length = transfer_size;
+    sges[i].lkey = mr->lkey;
+  }
+
+  return new ReceiveQueue(ep, mr, transfer_size, inflight/4, wrs, sges);
 }
 
 
