@@ -174,7 +174,7 @@ Status Endpoint::PostRead(uint64_t ctx, uint32_t lkey, void *addr, size_t size, 
   sge.lkey =  lkey;
   struct ibv_send_wr wr, *bad;
 
-  wr.wr_id = 0;
+  wr.wr_id = ctx;
   wr.next = NULL;
   wr.sg_list = &sge;
   wr.num_sge = 1;
