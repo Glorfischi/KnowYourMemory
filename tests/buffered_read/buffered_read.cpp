@@ -96,7 +96,7 @@ StatusOr<ReceiveRegion> BufferedReadConnection::Receive(){
 
   debug(stderr, "Got new data [tail: %d, read_ptr %d]\n", *this->remote_tail_, this->read_ptr_);
 
-  uint32_t offset = this->read_ptr_;// % this->remote_buf_len_;
+  uint32_t offset = this->read_ptr_ % this->remote_buf_len_;
   uint64_t addr = (uint64_t)this->remote_buffer_->addr + offset;
   uint32_t len = *(uint32_t *)addr; // segfault after free?
   debug(stderr, "New buffer [addr %p, offset %d, len: %d]\n", (void *)addr, offset, len);
@@ -133,20 +133,24 @@ Status BufferedReadConnection::Free(ReceiveRegion reg){
 
 
 Status BufferedReadConnection::Send(void *buf, uint32_t len){
-  uint32_t head = *this->head_ % this->length_;
   uint32_t tail = *this->tail_ % this->length_;
-  if ( head == tail && len > this->length_){
-    // We are empty, but the message is larger then our complete buffer.
-    return Status(StatusCode::Unknown, "message larger then buffer");
-  } else if (head < tail 
-      && (this->length_ - tail) + head <= len){
-    // The free region does "wrap around" the end of the buffer.
-    return Status(StatusCode::Unknown, "not enough free space for message");
-  } else if (head > tail && head - tail <= len){
-    // The free region is continuous. The message needs to be at most as big. 
-    return Status(StatusCode::Unknown, "not enough free space for message");
+  bool free_space = false;
+
+  while (!free_space) {
+    uint32_t head = *this->head_ % this->length_;
+    if ( head == tail && len > this->length_){
+      // We are empty, but the message is larger then our complete buffer.
+      return Status(StatusCode::Unknown, "message larger then buffer");
+    } else if (head < tail 
+        && (this->length_ - tail) + head <= len){
+      // The free region does "wrap around" the end of the buffer.
+      continue;
+    } else if (head > tail && head - tail <= len){
+      // The free region is continuous. The message needs to be at most as big. 
+      continue;
+    }
+    free_space = true;
   }
-  // TODO(Fischi) Block instead of error
   
   size_t addr = (size_t)this->buffer_->addr + tail;
   debug(stderr, "Sending [addr %p, len %d]\n", (void *)addr, len);
