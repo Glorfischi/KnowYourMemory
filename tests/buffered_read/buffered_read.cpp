@@ -119,14 +119,17 @@ Status BufferedReadConnection::Free(ReceiveRegion reg){
   // TODO(Fischi) Only update occasionally - Maybe we could actually add this to receive?
   /*debug(stderr, "writing to remote head [head: %p, remote head addr %p]\n", 
       (void *)this->remote_head_, (void *)this->remote_head_addr_);*/
-  auto stat = this->ep_->PostWrite(16, this->remote_meta_data_->lkey, (void *)this->remote_head_, 
-          sizeof(uint64_t), this->remote_head_addr_, this->remote_meta_rkey_);
-  if (!stat.ok()){
-    return stat.Wrap("error updating head at remote");
-  }
-  auto wc_s = this->ep_->PollSendCq();
-  if (!wc_s.ok()){
-    return wc_s.status().Wrap("error polling send cq to update heaupdate headd");
+  if (*this->remote_head_ - this->acked_head_ > this->remote_buf_len_/3) {
+    auto stat = this->ep_->PostWrite(16, this->remote_meta_data_->lkey, (void *)this->remote_head_, 
+            sizeof(uint64_t), this->remote_head_addr_, this->remote_meta_rkey_);
+    if (!stat.ok()){
+      return stat.Wrap("error updating head at remote");
+    }
+    auto wc_s = this->ep_->PollSendCq();
+    if (!wc_s.ok()){
+      return wc_s.status().Wrap("error polling send cq to update heaupdate headd");
+    }
+    this->acked_head_ = *this->remote_head_;
   }
   return Status();
 }

@@ -45,6 +45,7 @@ class BufferedReadConnection {
     {
       *this->head_ = 0;
       *this->tail_ = 0;
+      this->acked_head_ =0;
       debug(stderr, "New connection [head: %p, tail: %p]\n", this->head_, this->tail_);
     };
     ~BufferedReadConnection();
@@ -71,6 +72,7 @@ class BufferedReadConnection {
     uint32_t remote_meta_rkey_;
     uint64_t *remote_head_; // (Fischi) volatile too?
     uint64_t read_ptr_;
+    uint64_t acked_head_;
     uint64_t remote_head_addr_;
     volatile uint64_t *remote_tail_;
     uint64_t remote_tail_addr_;
