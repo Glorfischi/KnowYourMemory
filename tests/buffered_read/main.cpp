@@ -61,6 +61,57 @@ cxxopts::ParseResult parse(int argc, char* argv[]) {
 }
 
 
+kym::Status test_lat_ping(kym::connection::BufferedReadConnection *conn, int count, int size, std::vector<float> *lat_us){
+  lat_us->reserve(count);
+  void *buf = malloc(size);
+  for(int i = 0; i<count; i++){
+    auto start = std::chrono::high_resolution_clock::now();
+    auto send_s = conn->Send(buf, size);
+    if (!send_s.ok()){
+      free(buf);
+      return send_s.Wrap("error sending buffer");
+    }
+    auto rcv_s = conn->Receive();
+    auto finish = std::chrono::high_resolution_clock::now();
+    if (!rcv_s.ok()){
+      free(buf);
+      return rcv_s.status().Wrap("error receiving buffer");
+    }
+    auto free_s = conn->Free(rcv_s.value());
+    if (!free_s.ok()){
+      return free_s.Wrap("error freeing receive buffer");
+    }
+    lat_us->push_back(std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count()/1000.0);
+  }
+  free(buf);
+  return kym::Status();
+
+}
+kym::Status test_lat_pong(kym::connection::BufferedReadConnection *conn, int count, int size){
+  void *buf = malloc(size);
+  // TODO(fischi) Warmup
+  for(int i = 0; i<count; i++){
+    auto rcv_s = conn->Receive();
+    auto send_s = conn->Send(buf, size);
+    if (!rcv_s.ok()){
+      free(buf);
+      return rcv_s.status().Wrap("error receiving buffer");
+    }
+    if (!send_s.ok()){
+      free(buf);
+      return send_s.Wrap("error sending buffer");
+    }
+    auto free_s = conn->Free(rcv_s.value());
+    if (!free_s.ok()){
+      return free_s.Wrap("error freeing receive buffer");
+    }
+  }
+  free(buf);
+  return kym::Status();
+
+}
+
+
 
 
 int main(int argc, char* argv[]) {
@@ -99,23 +150,12 @@ int main(int argc, char* argv[]) {
       return 1;
     }
     kym::connection::BufferedReadConnection *conn = conn_s.value();
-
-    kym::Status stat;
-    char text[10] = "foobar";
-
-    stat = conn->Send(text, 10);
+    auto stat = test_lat_pong(conn, count, size);
     if (!stat.ok()){
       std::cerr << "Error running benchmark: " << stat << std::endl;
       return 1;
     }
-    auto buf = conn->Receive();
-    if (!buf.ok()){
-      std::cerr << "Error running benchmark: " << buf.status() << std::endl;
-      return 1;
-    } 
-    std::cout << "GOT " << (char *)buf.value().addr << std::endl;
-    conn->Free(buf.value());
-
+    
     conn->Close();
     delete conn;
     ln->Close();
@@ -132,29 +172,44 @@ int main(int argc, char* argv[]) {
       return 1;
     }
     kym::connection::BufferedReadConnection *conn = conn_s.value();
-
-    std::this_thread::sleep_for(timespan);
-    auto buf = conn->Receive();
-    if (!buf.ok()){
-      std::cerr << "Error running benchmark: " << buf.status() << std::endl;
-      return 1;
-    } 
-    std::cout << "GOT " << (char *)buf.value().addr << std::endl;
-    conn->Free(buf.value());
-    kym::Status stat;
-    char text[10] = "1337";
-
-    stat = conn->Send(text, 10);
+    auto stat = test_lat_ping(conn, count, size, &measurements);
     if (!stat.ok()){
       std::cerr << "Error running benchmark: " << stat << std::endl;
       return 1;
     }
-    std::this_thread::sleep_for(timespan);
-    std::this_thread::sleep_for(timespan);
-
+    
         
     conn->Close();
     delete conn;
+  }
+
+  if (lat || pingpong) {
+    // Handle Latency distribution
+    if (!filename.empty()){
+      std::ofstream file(filename);
+      for (float f : measurements){
+        file << f << "\n";
+      }
+      file.close();
+    }
+
+    if (measurements.size() > 0) {
+      if (lat) {
+        std::cout << "\tLatency";
+      } else if(pingpong)  {
+        std::cout << "\tPingPong Latency";
+      }
+      auto n = measurements.size();
+      std::cout << std::endl;
+      std::cout << "N: " << n << std::endl;
+      
+      std::sort (measurements.begin(), measurements.end());
+      int q025 = (int)(n*0.025);
+      int q500 = (int)(n*0.5);
+      int q975 = (int)(n*0.975);
+      std::cout << "q025" << "\t" << "q50" << "\t" << "q975" << std::endl;
+      std::cout << measurements[q025] << "\t" << measurements[q500] << "\t" << measurements[q975] << std::endl;
+    }
   }
   return 0;
 }

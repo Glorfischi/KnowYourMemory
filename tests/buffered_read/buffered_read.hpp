@@ -12,7 +12,7 @@
 #include <string>
 #include <vector>
 #include <memory>
-
+#include <list>
 
 #include <rdma/rdma_cma.h>
 #include <rdma/rdma_verbs.h>
@@ -22,8 +22,8 @@
 #include "mm.hpp"
 #include "endpoint.hpp"
 #include "receive_queue.hpp"
-#include "ring_buffer/ring_buffer.hpp"
-#include "ring_buffer/send_buffer.hpp"
+
+#include "debug.h"
 
 namespace kym {
 namespace connection {
@@ -42,7 +42,11 @@ class BufferedReadConnection {
             remote_tail_((volatile uint64_t *) remote_meta_data->addr + 1), remote_tail_addr_(remote_tail_addr),
             remote_buffer_(remote_buffer), remote_buf_len_(remote_buffer_len), 
             remote_buf_rkey_(remote_buffer_rkey) ,remote_buf_addr_(remote_buffer_addr)
-    {};
+    {
+      *this->head_ = 0;
+      *this->tail_ = 0;
+      debug(stderr, "New connection [head: %p, tail: %p]\n", this->head_, this->tail_);
+    };
     ~BufferedReadConnection();
 
     Status Close();
@@ -58,7 +62,7 @@ class BufferedReadConnection {
     // Sender
     struct ibv_mr *meta_data_;
     volatile uint64_t *head_;
-    uint64_t *tail_; // (Fischi) volatile too?
+    volatile uint64_t *tail_; // (Fischi) volatile too?
     struct ibv_mr *buffer_;
     uint32_t length_;
 

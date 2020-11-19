@@ -50,8 +50,8 @@ namespace {
       },
       .qp_type = IBV_QPT_RC,
     },
-    .responder_resources = 8,
-    .initiator_depth =  8,
+    .responder_resources = 16,
+    .initiator_depth =  16,
     .retry_count = 1,  
     .rnr_retry_count = 0, 
   };
@@ -73,7 +73,6 @@ StatusOr<ReceiveRegion> BufferedReadConnection::Receive(){
   if (*this->remote_tail_ == this->read_ptr_){
     // We don't have messages buffered
     while (*this->remote_tail_ == this->read_ptr_) {
-      debug(stderr, "Read tail [addr %p, key %d, local addr %p, local lkey %d]\n", (void *)this->remote_tail_addr_, this->remote_meta_rkey_, (void *)this->remote_tail_, this->remote_meta_data_->lkey);
       auto stat = this->ep_->PostRead(8, this->remote_meta_data_->lkey, (void *)this->remote_tail_, 
           sizeof(uint64_t), this->remote_tail_addr_, this->remote_meta_rkey_);
       if (!stat.ok()){
@@ -86,7 +85,7 @@ StatusOr<ReceiveRegion> BufferedReadConnection::Receive(){
     }
     uint64_t len = *this->remote_tail_ - this->read_ptr_;
     uint32_t offset = this->read_ptr_ % this->remote_buf_len_;
-    debug(stderr, "Reading from addr %p, offset %d\n", (void *)((uint64_t)this->remote_buffer_->addr + offset), offset);
+    debug(stderr, "Reading from addr %p to %p, offset %d\n", (void *)(this->remote_buf_addr_ + offset), (void *)((uint64_t)this->remote_buffer_->addr + offset), offset);
     auto stat = this->ep_->PostRead(8, this->remote_buffer_->lkey, (void *)((uint64_t)this->remote_buffer_->addr + offset), 
         len,  this->remote_buf_addr_ + offset, this->remote_buf_rkey_);
     auto wc_s = this->ep_->PollSendCq();
@@ -95,8 +94,12 @@ StatusOr<ReceiveRegion> BufferedReadConnection::Receive(){
     }
   }
 
-  uint64_t addr = (uint64_t)this->remote_buffer_->addr + this->read_ptr_;
-  uint32_t len = *(uint32_t *)addr;
+  debug(stderr, "Got new data [tail: %d, read_ptr %d]\n", *this->remote_tail_, this->read_ptr_);
+
+  uint32_t offset = this->read_ptr_;// % this->remote_buf_len_;
+  uint64_t addr = (uint64_t)this->remote_buffer_->addr + offset;
+  uint32_t len = *(uint32_t *)addr; // segfault after free?
+  debug(stderr, "New buffer [addr %p, offset %d, len: %d]\n", (void *)addr, offset, len);
   this->read_ptr_ += len + sizeof(uint32_t);
   
   this->outstanding_.push_back(addr);
@@ -113,7 +116,18 @@ Status BufferedReadConnection::Free(ReceiveRegion reg){
   }
   this->outstanding_.remove(reg_start); 
 
-  // TODO(Fischi) Update head - Maybe we could actually add this to receive?
+  // TODO(Fischi) Only update occasionally - Maybe we could actually add this to receive?
+  /*debug(stderr, "writing to remote head [head: %p, remote head addr %p]\n", 
+      (void *)this->remote_head_, (void *)this->remote_head_addr_);*/
+  auto stat = this->ep_->PostWrite(16, this->remote_meta_data_->lkey, (void *)this->remote_head_, 
+          sizeof(uint64_t), this->remote_head_addr_, this->remote_meta_rkey_);
+  if (!stat.ok()){
+    return stat.Wrap("error updating head at remote");
+  }
+  auto wc_s = this->ep_->PollSendCq();
+  if (!wc_s.ok()){
+    return wc_s.status().Wrap("error polling send cq to update heaupdate headd");
+  }
   return Status();
 }
 
@@ -135,10 +149,10 @@ Status BufferedReadConnection::Send(void *buf, uint32_t len){
   // TODO(Fischi) Block instead of error
   
   size_t addr = (size_t)this->buffer_->addr + tail;
-  debug(stderr, "writing to addr %p\n", (void *)addr);
+  debug(stderr, "Sending [addr %p, len %d]\n", (void *)addr, len);
   *(uint32_t *)addr = len;
   memcpy((void *)(addr + sizeof(uint32_t)), buf, len);
-
+  // TODO(fischi) Memory barrier?
   *this->tail_ += len + sizeof(uint32_t);
   return Status();
 }
