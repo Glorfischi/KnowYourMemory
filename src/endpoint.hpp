@@ -89,6 +89,11 @@ class Endpoint {
     void *private_data_;
     size_t private_data_len_;
 
+    int current_rcv_wc_;
+    int max_rcv_wc_;
+    struct ibv_wc *recv_wcs_;
+    
+
     // for supporting IDs and native QPs
     struct ibv_srq* srq_;
     struct ibv_pd*  pd_;

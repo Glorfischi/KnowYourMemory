@@ -1,11 +1,10 @@
 ---
 bench_type: pingpong
 bench_count: 1000000
-bench_sender: write
-bench_ack: read
+
+bench_fence: false
 
 bench_msg_size: 16
-bench_batch_size: 1
 bench_unack: 25
 
 bench_conn: 1

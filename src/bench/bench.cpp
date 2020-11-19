@@ -3,10 +3,56 @@
 #include "../conn.hpp"
 #include "../error.hpp"
 
+#include "debug.h"
+
 #include <iostream>
 #include <string>
 #include <vector>
 #include <chrono>
+
+int set_core_affinity(int id){
+  cpu_set_t set;
+  CPU_ZERO(&set);
+  CPU_SET(whole_cores[id%36], &set);
+  return pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &set);
+}
+
+// Warmup sender. This sends slowly so not to overwhelm a cold receiver
+kym::Status test_warmup_send(kym::connection::Sender *snd, int count, kym::connection::SendRegion buf){
+  for (int i = 0; i<count; i++){
+    auto send_s = snd->Send(buf);
+    if (!send_s.ok()){
+      return send_s.Wrap("error sending buffer");
+    }
+  }
+  return kym::Status();
+}
+// Warmup Batch sender. This sends slowly so not to overwhelm a cold receiver
+kym::Status test_warmup_send(kym::connection::BatchSender *snd, int count, std::vector<kym::connection::SendRegion> bufs){
+  for (int i = 0; i<count; i++){
+    std::vector<kym::connection::SendRegion> buf{bufs[i%bufs.size()]};
+    auto send_s = snd->Send(buf);
+    if (!send_s.ok()){
+      return send_s.Wrap("error sending buffer");
+    }
+  }
+  return kym::Status();
+}
+
+// Warmup Receiver
+kym::Status test_warmup_receive(kym::connection::Receiver *rcv, int count){
+  for (int i = 0; i<count; i++){
+    auto buf_s = rcv->Receive();
+    if (!buf_s.ok()){
+      return buf_s.status().Wrap("error receiving buffer");
+    }
+    auto free_s = rcv->Free(buf_s.value());
+    if (!free_s.ok()){
+      return free_s.Wrap("error receiving buffer");
+    }
+  }
+  return kym::Status();
+}
 
 kym::Status test_lat_ping(kym::connection::Sender *snd, kym::connection::Receiver *rcv, int count, int size, std::vector<float> *lat_us){
   lat_us->reserve(count);
@@ -15,8 +61,16 @@ kym::Status test_lat_ping(kym::connection::Sender *snd, kym::connection::Receive
   if (!buf_s.ok()){
     return buf_s.status().Wrap("error allocating send region");
   }
-  // TODO(fischi) Warmup
+
   auto buf = buf_s.value();
+  auto stat = test_warmup_send(snd, count/4, buf);
+  if (!stat.ok()) {
+    return stat.Wrap("error during send warmup");
+  }
+  stat = test_warmup_receive(rcv, count/4);
+  if (!stat.ok()) {
+    return stat.Wrap("error during receive warmup");
+  }
   for(int i = 0; i<count; i++){
     //std::cout << i << std::endl;
     *(int *)buf.addr = i;
@@ -46,8 +100,15 @@ kym::Status test_lat_pong(kym::connection::Sender *snd, kym::connection::Receive
   if (!buf_s.ok()){
     return buf_s.status().Wrap("error allocating send region");
   }
-  // TODO(fischi) Warmup
   auto buf = buf_s.value();
+  auto stat = test_warmup_receive(rcv, count/4);
+  if (!stat.ok()) {
+    return stat.Wrap("error during receive warmup");
+  }
+  stat = test_warmup_send(snd, count/4, buf);
+  if (!stat.ok()) {
+    return stat.Wrap("error during send warmup");
+  }
   for(int i = 0; i<count; i++){
     *(int *)buf.addr = i;
     auto rcv_s = rcv->Receive();
@@ -79,7 +140,12 @@ kym::Status test_lat_send(kym::connection::Sender *snd, int count, int size, std
     return buf_s.status().Wrap("error allocating send region");
   }
   auto buf = buf_s.value();
+  auto stat = test_warmup_send(snd, count/4, buf);
+  if (!stat.ok()) {
+    return stat.Wrap("error during send warmup");
+  }
   for(int i = 0; i<count; i++){
+    //debug(stderr, "LAT SEND: %d\n",i);
     //std::cout << i << std::endl;
     *(int *)buf.addr = i;
     auto start = std::chrono::high_resolution_clock::now();
@@ -93,12 +159,16 @@ kym::Status test_lat_send(kym::connection::Sender *snd, int count, int size, std
   }
   return snd->Free(buf);
 }
-kym::Status test_lat_recv(kym::connection::Receiver *rcv, int count, std::vector<float> *lat_us){
-  lat_us->reserve(count);
-
+kym::Status test_lat_recv(kym::connection::Receiver *rcv, int count){
+  auto stat = test_warmup_receive(rcv, count/4);
+  if (!stat.ok()) {
+    return stat.Wrap("error during receive warmup");
+  }
   for(int i = 0; i<count; i++){
+    if (i%500 == 0) {
+      //debug(stderr, "LAT RECEIVE: %d\t[rcv: %p]\n",i, rcv);
+    };
     // std::cout << i << std::endl;
-    auto start = std::chrono::high_resolution_clock::now();
     auto buf_s = rcv->Receive();
     if (!buf_s.ok()){
       return buf_s.status().Wrap("error receiving buffer");
@@ -111,8 +181,6 @@ kym::Status test_lat_recv(kym::connection::Receiver *rcv, int count, std::vector
     if (!free_s.ok()){
       return free_s.Wrap("error receiving buffer");
     }
-    auto finish = std::chrono::high_resolution_clock::now();
-    lat_us->push_back(std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count()/1000.0);
   }
   return kym::Status();
 }
@@ -145,7 +213,10 @@ kym::StatusOr<uint64_t> test_bw_batch_send(kym::connection::BatchSender *snd, in
       batches[j].push_back(buf);
     }
   }
-
+  auto stat = test_warmup_send(snd, count/4, batches[0]); // We don't touch the other batches. This might be a problem
+  if (!stat.ok()) {
+    return stat.Wrap("error during send warmup");
+  }
   int sent = 0;
   auto start = std::chrono::high_resolution_clock::now();
   uint64_t ids[unack_batch];
@@ -203,6 +274,10 @@ kym::StatusOr<uint64_t> test_bw_send(kym::connection::Sender *snd, int count, in
     *(int *)buf.addr = i;
     bufs.push_back(buf);
   }
+  auto stat = test_warmup_send(snd, count/4, bufs[0]); // We don't touch the other bufs. That might be a problem..
+  if (!stat.ok()) {
+    return stat.Wrap("error during send warmup");
+  }
   auto start = std::chrono::high_resolution_clock::now();
   uint64_t ids[unack];
   for(int i = 0; i<unack; i++){
@@ -244,20 +319,15 @@ kym::StatusOr<uint64_t> test_bw_send(kym::connection::Sender *snd, int count, in
   return (double)size*((double)count/(dur/1e9));
 }
 kym::StatusOr<uint64_t> test_bw_recv(kym::connection::Receiver *rcv, int count, int size){
-  auto buf_s = rcv->Receive();
-  if (!buf_s.ok()){
-    return buf_s.status().Wrap("error receiving buffer");
-  }
-  // std::cout << "# GOT: " << *(int *)buf_s.value().addr << std::endl;
-  auto free_s = rcv->Free(buf_s.value());
-  if (!free_s.ok()){
-    return free_s.Wrap("error receiving buffer");
+  auto stat = test_warmup_receive(rcv, count/4);
+  if (!stat.ok()) {
+    return stat.Wrap("error during receive warmup");
   }
   auto start = std::chrono::high_resolution_clock::now();
-  int i = 1;
+  int i = 0;
   while(i<count){
     i++;
-    // std::cout << i << std::endl;
+    if (i % 100 == 0) debug(stderr, "BW RECEIVE: %d\t[rcv: %p, core: %d]\n",i, rcv, sched_getcpu());
     auto buf_s = rcv->Receive();
     if (!buf_s.ok()){
       return buf_s.status().Wrap("error receiving buffer");

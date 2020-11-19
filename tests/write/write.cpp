@@ -15,8 +15,10 @@
 #include "mm/dumb_allocator.hpp"
 #include "receive_queue.hpp"
 #include "ring_buffer/ring_buffer.hpp"
+#include "ring_buffer/reverse_buffer.hpp"
 
 #include "acknowledge.hpp"
+#include "reverse.hpp"
 
 
 
@@ -24,7 +26,7 @@ namespace kym {
 namespace connection {
 
 namespace {
-  uint32_t write_buf_size = 128*1024*1024;
+  uint32_t write_buf_size = 4*1024*1024;
   uint32_t inflight = 300;
   struct conn_details {
     WriteOpts opts; // 2 Bytes
@@ -763,6 +765,15 @@ Status initReceiver(struct ibv_pd *pd, WriteOpts opts, ringbuffer::Buffer **rbuf
         *rbuf = rbuf_s.value();
         break;
       }
+    case kBufferReverse:
+      {
+        auto rbuf_s = ringbuffer::NewReverseRingBuffer(pd, write_buf_size); 
+        if (!rbuf_s.ok()){
+          return rbuf_s.status().Wrap("error setting up reverse receive buffer");
+        }
+        *rbuf = rbuf_s.value();
+        break;
+      }
     default:
       return Status(StatusCode::InvalidArgument, "unkown buffer option");
   }
@@ -841,6 +852,11 @@ Status connectSender(endpoint::Endpoint * ep, conn_details det, ringbuffer::Remo
     case kBufferMagic:
       {
         *rbuf = new ringbuffer::MagicRemoteBuffer(det.buffer_ctx);
+        break;
+      }
+    case kBufferReverse:
+      {
+        *rbuf = new ringbuffer::ReverseRemoteBuffer(det.buffer_ctx);
         break;
       }
     default:
@@ -923,6 +939,8 @@ StatusOr<WriteSender *> WriteListener::AcceptSender(WriteOpts opts){
       return new WriteSender(ep, alloc, rbuf, ack);
     case kSenderWriteImm:
       return new WriteImmSender(ep, alloc, rbuf, ack);
+    case kSenderWriteReverse:
+      return new WriteReverseSender(ep, alloc, rbuf, ack);
     case kSenderWriteOffset:
       return new WriteOffsetSender(ep, alloc, rbuf, ack, *(uint64_t *)remote_conn_details->snd_ctx, remote_conn_details->snd_ctx[2]);
     default:
@@ -983,6 +1001,8 @@ StatusOr<WriteReceiver *> WriteListener::AcceptReceiver(WriteOpts opts){
   switch (opts.sender) {
     case kSenderWrite:
       return new WriteReceiver(ep, rbuf, ack);
+    case kSenderWriteReverse:
+      return new WriteReverseReceiver(ep, rbuf, ack);
     case kSenderWriteImm:
       {
         auto rq_s = endpoint::GetReceiveQueue(ep, 8, inflight); 
@@ -1063,6 +1083,12 @@ StatusOr<WriteConnection *> WriteListener::AcceptConnection(WriteOpts opts){
         rcvr = new WriteReceiver(ep, false, rbuf, ack);
         break;
       }
+    case kSenderWriteReverse:
+      {
+        rcvr = new WriteReverseReceiver(ep, false, rbuf, ack);
+        break;
+      }
+
     case kSenderWriteImm:
       {
         auto rq_s = endpoint::GetReceiveQueue(ep, 8, inflight); 
@@ -1096,6 +1122,11 @@ StatusOr<WriteConnection *> WriteListener::AcceptConnection(WriteOpts opts){
     case kSenderWrite:
       {
         sndr = new WriteSender(ep, false, alloc, remote_rbuf, ackRcv);
+        break;
+      }
+    case kSenderWriteReverse:
+      {
+        sndr = new WriteReverseSender(ep, false, alloc, remote_rbuf, ackRcv);
         break;
       }
     case kSenderWriteImm:
@@ -1174,6 +1205,8 @@ StatusOr<WriteSender*> DialWriteSender(std::string ip, int port, WriteOpts opts)
   switch (opts.sender) {
     case kSenderWrite:
       return new WriteSender(ep, alloc, rbuf, ack);
+    case kSenderWriteReverse:
+      return new WriteReverseSender(ep, alloc, rbuf, ack);
     case kSenderWriteImm:
       return new WriteImmSender(ep, alloc, rbuf, ack);
     case kSenderWriteOffset:
@@ -1238,6 +1271,8 @@ StatusOr<WriteReceiver*> DialWriteReceiver(std::string ip, int port, WriteOpts o
   switch (opts.sender) {
     case kSenderWrite:
       return new WriteReceiver(ep, rbuf, ack);
+    case kSenderWriteReverse:
+      return new WriteReverseReceiver(ep, rbuf, ack);
     case kSenderWriteOffset:
       return new WriteOffsetReceiver(ep, rbuf, ack, metadata);
     case kSenderWriteImm:
@@ -1322,6 +1357,11 @@ StatusOr<WriteConnection*> DialWriteConnection(std::string ip, int port, WriteOp
         rcvr = new WriteReceiver(ep, false, rbuf, ack);
         break;
       }
+    case kSenderWriteReverse:
+      {
+        rcvr = new WriteReverseReceiver(ep, false, rbuf, ack);
+        break;
+      }
     case kSenderWriteImm:
       {
         auto rq_s = endpoint::GetReceiveQueue(ep, 8, inflight); 
@@ -1354,6 +1394,9 @@ StatusOr<WriteConnection*> DialWriteConnection(std::string ip, int port, WriteOp
   switch (opts.sender) {
     case kSenderWrite:
       sndr = new WriteSender(ep, false, alloc, remote_rbuf, ackRcv);
+      break;
+    case kSenderWriteReverse:
+      sndr = new WriteReverseSender(ep, false, alloc, remote_rbuf, ackRcv);
       break;
     case kSenderWriteImm:
       sndr = new WriteImmSender(ep, false, alloc, remote_rbuf, ackRcv);

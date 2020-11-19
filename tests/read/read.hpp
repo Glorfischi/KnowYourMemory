@@ -35,8 +35,9 @@ struct ReadRequest {
 
 class ReadConnection : public Connection {
   public:
+    ReadConnection(endpoint::Endpoint *ep, memory::Allocator *allocator, endpoint::IReceiveQueue *rq, bool fence);
     ReadConnection(endpoint::Endpoint *ep, memory::Allocator *allocator, endpoint::IReceiveQueue *rq)
-      : ep_(ep), allocator_(allocator), rq_(rq), ackd_rcv_id_(0), next_rcv_id_(1){};
+      : ReadConnection(ep, allocator, rq, false){};
     ~ReadConnection();
 
     Status Close();
@@ -71,6 +72,9 @@ class ReadConnection : public Connection {
     memory::Allocator *allocator_;
     endpoint::IReceiveQueue *rq_;
 
+    std::vector<struct ibv_send_wr> outstanding_read_wr_;
+    std::vector<struct ibv_sge> outstanding_read_sge_;
+    bool fence_;
     uint64_t ackd_rcv_id_;
     uint64_t next_rcv_id_;
 
@@ -78,6 +82,7 @@ class ReadConnection : public Connection {
     StatusOr<uint64_t> ReadInto(void *addr, uint32_t key, ReadRequest req);
 };
 
+StatusOr<ReadConnection *> DialRead(std::string ip, int port, bool fence);
 StatusOr<ReadConnection *> DialRead(std::string ip, int port);
 
 class ReadListener {
@@ -87,6 +92,7 @@ class ReadListener {
 
     Status Close();
 
+    StatusOr<ReadConnection*> Accept(bool fence);
     StatusOr<ReadConnection*> Accept();
   private:
     endpoint::Listener *listener_;

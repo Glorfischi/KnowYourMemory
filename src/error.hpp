@@ -9,15 +9,15 @@ namespace kym {
 enum class StatusCode {
   /// Not an error; returned on success.
   Ok = 0,
-
   Unknown = 1,
-  NotImplemented = 2,
-
-  // User error
-  InvalidArgument = 10,
 
   // System error
-  Internal = 100,
+  Internal = 500,
+  NotImplemented = 501,
+
+  // User error
+  InvalidArgument = 400,
+  RateLimit = 420,
 
 };
 

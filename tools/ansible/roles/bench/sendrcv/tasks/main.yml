@@ -1,4 +1,11 @@
 ---
+- name: Create tmp file for output
+  tempfile:
+    state: file
+    prefix: "kym-bench-"
+  register: out
+  when: bench_archive or bench_output is defined
+
 - name: "SendReceive {{ bench_srq | ternary('SRQ', '') }} : {{ bench_type }}"
   command: 
     argv:
@@ -10,14 +17,38 @@
       - "-n"
       - "{{ bench_count }}"
       - "--out"
-      - "{{ project_dir }}/data/send-recv-{{ bench_srq | ternary('srq', '') }}-{{ bench_type }}-size{{ bench_msg_size }}-batch{{ bench_batch_size}}-{{ bench_server | ternary('server', 'client') }}-{{ ansible_hostname }}-{{ ansible_date_time.iso8601 }}.data"
+      - "{{ out.path }}"
       - "{{ bench_srq | ternary('--srq', omit) }}"
       - "--size"
       - "{{ bench_msg_size }}"
       - "--batch"
       - "{{ bench_batch_size }}"
+      - "--conn"
+      - "{{ bench_conn }}"
+      - "--unack"
+      - "{{ bench_unack }}"
   register: run_raw
+
 - debug:
     verbosity: 1
     var: run_raw
  
+- name: Archive output
+  copy:
+    src: "{{ out.path }}"
+    dest: "{{ project_dir }}/data/send-recv-{{ bench_srq | ternary('srq', '') }}-{{ bench_type }}-size{{ bench_msg_size }}-batch{{ bench_batch_size}}-{{ bench_server | ternary('server', 'client') }}-{{ ansible_hostname }}-{{ ansible_date_time.iso8601 }}.data"
+    remote_src: yes
+  when: bench_archive 
+
+
+- name: Fetch output
+  fetch:
+    src: "{{ out.path }}"
+    dest: "{{ bench_output }}-{{ bench_server | ternary('server', 'client') }}"
+    flat: yes
+  when: bench_output is defined
+
+
+
+
+

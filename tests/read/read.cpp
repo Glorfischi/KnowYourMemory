@@ -32,7 +32,7 @@
 namespace kym {
 namespace connection {
 
-uint32_t inflight = 100;
+uint32_t inflight = 200;
 endpoint::Options read_connection_default_opts = {
   .qp_attr = {
     .cap = {
@@ -51,11 +51,16 @@ endpoint::Options read_connection_default_opts = {
 };
 
 
+const char one = 1;
+
 /*
  * Client Dial
  */
 
 StatusOr<ReadConnection*> DialRead(std::string ip, int port){
+  return DialRead(ip, port, false);
+}
+StatusOr<ReadConnection*> DialRead(std::string ip, int port, bool fence){
   // Default to port 18515
   if (port == 0) {
     port = 18515;
@@ -73,7 +78,7 @@ StatusOr<ReadConnection*> DialRead(std::string ip, int port){
   if (!rq_status.ok()){
     return rq_status.status();
   }
-  return new ReadConnection(ep, allocator, rq_status.value());
+  return new ReadConnection(ep, allocator, rq_status.value(), fence);
 }
 
 /* 
@@ -94,6 +99,9 @@ StatusOr<ReadListener*> ListenRead(std::string ip, int port){
 }
 
 StatusOr<ReadConnection*> ReadListener::Accept(){
+  return this->Accept(false);
+}
+StatusOr<ReadConnection*> ReadListener::Accept(bool fence){
   auto epStatus = this->listener_->Accept(read_connection_default_opts);
   if (!epStatus.ok()){
     return epStatus.status();
@@ -104,7 +112,7 @@ StatusOr<ReadConnection*> ReadListener::Accept(){
   if (!rq_status.ok()){
     return rq_status.status();
   }
-  return new ReadConnection(ep, allocator, rq_status.value());
+  return new ReadConnection(ep, allocator, rq_status.value(), fence);
 
 }
 
@@ -121,7 +129,11 @@ ReadListener::~ReadListener() {
  * ReadConnection
  */
 
-
+ReadConnection::ReadConnection(endpoint::Endpoint *ep, memory::Allocator *allocator, endpoint::IReceiveQueue *rq, bool fence)
+  : ep_(ep), allocator_(allocator), rq_(rq), fence_(fence), ackd_rcv_id_(0), next_rcv_id_(1){
+  this->outstanding_read_sge_.reserve(inflight);
+  this->outstanding_read_wr_.reserve(inflight);
+}
 Status ReadConnection::Close(){
   auto stat = this->rq_->Close();
   if (!stat.ok()){
@@ -241,17 +253,28 @@ Status ReadConnection::WaitReceive(uint64_t id){
     ibv_wc wc = wcStatus.value();
     this->ackd_rcv_id_ = wc.wr_id;
   }
+  if (!this->fence_) {
+    struct ibv_send_wr  *bad;
+    auto stat = this->ep_->PostSendRaw(&this->outstanding_read_wr_[id%inflight], &bad);
+    if (!stat.ok()){
+      std::cerr << "bad_id " << bad->wr_id << std::endl;
+      return stat;
+    }
+  }
   return Status();
 }
 
 StatusOr<uint64_t> ReadConnection::ReadInto(void *addr, uint32_t key, ReadRequest req){
-  char one = 1;
-  uint64_t id = this->next_rcv_id_++;
+  if (this->next_rcv_id_ > this->ackd_rcv_id_ + inflight){
+    return Status(StatusCode::RateLimit, "Too many outstanding requests");
+  }
+
   struct ibv_sge sge_ack;
+  struct ibv_send_wr wr_ack;
+  uint64_t id = this->next_rcv_id_++;
   sge_ack.addr = (uintptr_t)&one;
   sge_ack.length = sizeof(char);
 
-  struct ibv_send_wr wr_ack, *bad;
   wr_ack.wr_id = id;
   wr_ack.next = NULL;
   wr_ack.sg_list = &sge_ack;
@@ -259,23 +282,29 @@ StatusOr<uint64_t> ReadConnection::ReadInto(void *addr, uint32_t key, ReadReques
   wr_ack.opcode = IBV_WR_RDMA_WRITE;
   wr_ack.wr.rdma.remote_addr = req.addr-1;
   wr_ack.wr.rdma.rkey = req.key;
-  wr_ack.send_flags = IBV_SEND_SIGNALED | IBV_SEND_INLINE | IBV_SEND_FENCE;  
+  wr_ack.send_flags = this->fence_ ? IBV_SEND_SIGNALED | IBV_SEND_INLINE | IBV_SEND_FENCE : IBV_SEND_INLINE;  
 
-
+  if (!this->fence_){
+    this->outstanding_read_sge_[id%inflight] = sge_ack;
+    wr_ack.sg_list = &this->outstanding_read_sge_[id%inflight];
+    this->outstanding_read_wr_[id%inflight] = wr_ack;
+  }
+  
   struct ibv_sge sge_data;
   sge_data.addr = (size_t)addr;
   sge_data.length = req.length;
   sge_data.lkey = key;
 
+  struct ibv_send_wr  *bad;
   struct ibv_send_wr wr_data;
-  wr_data.wr_id = 100000+id;
-  wr_data.next = &wr_ack;
+  wr_data.wr_id = id;
+  wr_data.next = this->fence_? &wr_ack : NULL;
   wr_data.sg_list = &sge_data;
   wr_data.num_sge = 1;
   wr_data.opcode = IBV_WR_RDMA_READ;
   wr_data.wr.rdma.remote_addr = req.addr;
   wr_data.wr.rdma.rkey = req.key;
-  wr_data.send_flags = 0;  
+  wr_data.send_flags = this->fence_ ? 0 : IBV_SEND_SIGNALED;  
 
   auto stat = this->ep_->PostSendRaw(&wr_data, &bad);
   if (!stat.ok()){

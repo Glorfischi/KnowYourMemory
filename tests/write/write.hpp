@@ -35,9 +35,11 @@ const uint8_t kSenderWriteCRC = 0;
 const uint8_t kSenderWriteOffset = 2;
 const uint8_t kSenderWriteImm = 1;
 const uint8_t kSenderWriteAtomic = 3;
+const uint8_t kSenderWriteReverse = 4;
 
 const uint8_t kBufferBasic = 0;
 const uint8_t kBufferMagic = 1;
+const uint8_t kBufferReverse = 2;
 
 typedef union {
         struct {

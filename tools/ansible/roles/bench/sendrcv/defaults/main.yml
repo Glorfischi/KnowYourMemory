@@ -4,4 +4,9 @@ bench_count: 1000000
 bench_srq: false
 
 bench_msg_size: 16
-bench_batch_size: 20
+bench_batch_size: 1
+bench_unack: 25
+
+bench_conn: 1
+
+bench_archive: false

@@ -1,0 +1,42 @@
+---
+- name: Create tmp file for output
+  tempfile:
+    state: file
+    prefix: "kym-bench-"
+  register: out
+  when: bench_archive or bench_output is defined
+
+- name: "Read {{ bench_fence | ternary('fence', '') }} : {{ bench_type }}"
+  command: 
+    argv:
+      - "{{ project_dir }}/tests/read/bin/read"
+      - "{{ bench_server | ternary('--server', '--client') }}"
+      - "-i"
+      - "{{ bench_server_ip }}"
+      - "--{{ bench_type }}"
+      - "-n"
+      - "{{ bench_count }}"
+      - "--out"
+      - "{{ out.path }}"
+      - "{{ bench_fence | ternary('--fence', omit) }}"
+      - "--size"
+      - "{{ bench_msg_size }}"
+      - "--unack"
+      - "{{ bench_unack }}"
+  register: run_raw
+
+- debug:
+    verbosity: 1
+    var: run_raw
+
+- name: Fetch output
+  fetch:
+    src: "{{ out.path }}"
+    dest: "{{ bench_output }}-{{ bench_server | ternary('server', 'client') }}.data"
+    flat: yes
+  when: bench_output is defined
+
+
+
+
+
