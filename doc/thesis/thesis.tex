@@ -43,9 +43,100 @@
 
 \tableofcontents
 \pagebreak
+\section{Introduction}
+\todo{What are we doing. Why are we doing this}
+
+\pagebreak
+\section{Background}
+\todo{Fairly detailed section on rdma / ibverbs. Explain all verbs.}
+
+
+\pagebreak
+\section{Related Work}
+
+\todo{Overview of related papers. Include different benchmark papers}
+
+\todo{Maybe also include systems using rdma protocols. Compare to our findings. Should they have used other connection? 
+Maybe add this after the protocols section?}
 
 \pagebreak
 \input{model.tex}
+
+\pagebreak
+\section{Protocols}
+\todo{Look at all implemented protocols. Detailed description of the protocols. Add performance model for each of them and provide benchmarks.}
+
+\pagebreak
+\subsection{Send Receive}
+\subsubsection{Design}
+\todo{Description of the connection and base performance model for latency and bandwidth}
+\subsubsection{Inline Sending}
+\todo{Describe inline sending. How does our performance model change?}
+\todo{What about inline receiving?}
+\subsubsection{Shared Receive Queues}
+\todo{Look at srq. Talk about congestion when reposting buffers?}
+\subsubsection{CQE routing}
+\todo{Mabye? Not sure if this is reasonable, but we could compare the effect of using a single completion queue for multiple QP or one per QP}
+\subsubsection{Evaluation}
+\todo{A lot of plots? Should this be a separate subsection or should we just scatter evaluation throughout the section?}
+
+\pagebreak
+\subsection{Buffered Write}
+\subsubsection{Design}
+\todo{Description of the connection and base performance model for latency and bandwidth}
+\subsubsection{"Magic" Buffer}
+\todo{Talk about the double mapped memory buffer. Include microbench}
+\subsubsection{Transfer Notifications}
+\todo{WriteImm with completion event, WriteOffset with meta data, WriteRev with "watermarks"}
+\subsubsection{Acknowledgements}
+\todo{Push or pull to notify sender that there is free space}
+\subsubsection{Evaluation}
+
+
+\pagebreak
+\subsection{Shared Write}
+\todo{Write Atomic}
+\subsubsection{Design}
+\todo{Description of the connection and base performance model for latency and bandwidth}
+\subsubsection{Device Memory}
+\todo{Introduce device memory, show microbench and update performance model}
+\subsubsection{Evaluation}
+
+\pagebreak
+\subsection{Direct Write}
+\todo{Write Write}
+\subsubsection{Design}
+\todo{Description of the connection and base performance model for latency and bandwidth}
+\subsubsection{Send Comparison}
+\todo{How does this differ from send receive. No completion queue event}
+\subsubsection{Evaluation}
+\todo{Maybe already compare to send receive performance}
+
+\pagebreak
+\subsection{Buffered Read}
+\subsubsection{Design}
+\subsubsection{Evaluation}
+
+\pagebreak
+\subsection{Direct Read}
+\subsubsection{Design}
+\subsubsection{Evaluation}
+
+
+\pagebreak
+\section{Comparison}
+\todo{Comparison between connection types. Show which protocols perform better in which sitations.}
+
+\subsection{Point to Point - N:N}
+
+\subsection{Server Model - N:1}
+
+\subsection{Fan Out / Broadcast - 1:N}
+
+\pagebreak
+\section{Conclusion}
+
+
 
 \pagebreak
 
