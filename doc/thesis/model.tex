@@ -41,6 +41,49 @@ used to build more specific connection protocols, while not only micro-benchmark
 
 \todo{1:N - atomic read?}
 
+\pagebreak
+\subsection{Features}
+
+There is more to data exchange protocol than raw throughput or latency. Oftentimes it is more important for an application
+that the connection is \emph{fair} or that the memory requirements do not grow too large, even if that protocol wastes
+a few microseconds.
+
+To be able to better compare our presented protocols we define a few traits that are often required by systems and will 
+analyse which protocols provide these traits
+
+\paragraph{True Zero-Copy} Whether the protocol can be employed to receive directly to the destination buffer. While RDMA 
+claims to be zero-copy, most protocols are not truly zero-copy. Protocols using ringbuffers~\cite{} or mailboxes~\cite{} are
+strictly speaking not zero copy, as the receiver will always have to copy the data from this buffer to its actual destination.
+This is can be especially important when transferring a large amount of data that does not have to be further processed.
+
+\paragraph{Passive Sender/Receiver} Whether the sender or receiver is \emph{passive}. We define \emph{passivity} as not 
+requiring any CPU involvement in the actual data transfer. That means a \emph{passive receiver} can receive messages by
+simply reading from a memory location, without having to acknowledge anything or posting receive buffers. \emph{Passivity} 
+reduces the necessary CPU usage to a minimum and can be useful for applications with uneven CPU requirements.
+\draft{
+\paragraph{Passive Notification} Whether there is some kind of notification system, that allows the receiver to be notified 
+of an incoming message without having to constantly poll for it. While polling gives us better performance in almost all cases
+constantly polling wastes a lot of CPU cycles when we do not receive a lot of messages.
+}
+
+\todo{This just randomly came to my mind. We don't actually us this. Should we keep this? Is this doable when using writes?}
+
+\paragraph{Resource Sharing} If multiple connections can share resources, especially memory. We are using \emph{reliable connections}
+so will inherently need to use one \emph{QP} per sender and receiver pair, but we can reduce memory usage by sharing receive 
+buffers between multiple connections. Without any memory sharing utilization grows linearly with the number of QPs, which 
+can quickly lead to unacceptable memory requirements, especially for $N$ to $N$ communication patterns.
+
+\paragraph{Fairness} By fairness, we mean that a single QP cannot block other QPs. This becomes relevant, as soon as we start
+sharing resources between QPs. It is oftentimes important that a single slow running task cannot completely block all 
+connections.
+
+\todo{
+  Maybe we need something less stong? With this definition neither atomic write nor SRQ are fair. But with the atomic write
+  a single unfreed message is able to block the complete ringbuffer, while a single not reposed receive buffer is not as
+  tragic
+}
+
+\pagebreak
 \subsection{Design Space}
 
 The design space of all imaginable RDMA based data exchange protocols is huge and it is out of scope of this work to 
