@@ -56,6 +56,10 @@ claims to be zero-copy, most protocols are not truly zero-copy. Protocols using 
 strictly speaking not zero copy, as the receiver will always have to copy the data from this buffer to its actual destination.
 This is can be especially important when transferring a large amount of data that does not have to be further processed.
 
+\paragraph{Variable Message Size} That the protocol allows us to send messages with different sizes, without using the 
+complete buffer at the receiver. Ring buffers for example can be designed to only use the necessary space per message
+while send receive will always use the complete receive buffer, no matter how small the message actually is.
+
 \paragraph{Passive Sender/Receiver} Whether the sender or receiver is \emph{passive}. We define \emph{passivity} as not 
 requiring any CPU involvement in the actual data transfer. That means a \emph{passive receiver} can receive messages by
 simply reading from a memory location, without having to acknowledge anything or posting receive buffers. \emph{Passivity} 
