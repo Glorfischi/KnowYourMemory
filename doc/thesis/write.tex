@@ -1,0 +1,113 @@
+
+\subsection{Buffered Write}
+\todo{Description of the connection}
+
+\subsubsection{Write Immidate}
+\todo{Description of writeImm}
+
+\todo{Basically the same as send receive + minor overhead for offset computation}
+
+\subsubsection{Write Reverse}
+\todo{Description of writeRev}
+
+\paragraph{Latency Analysis}
+
+We estimate the latency $t_{bwr}$ of transfering a single message $m$ of size $k$ from the sender to the receiver. 
+A detailed sequence diagram of what exactly is happening is in figure \ref{fig:seq-bwriterev}. 
+
+\begin{enumerate}
+  \item We start a transfer by copying a \emph{Work Request} to the \emph{NIC} using Memory Mapped IO (MMIO). This again gives
+    us constant overhead $o_{snd}$ independent of the size of the message.
+  \item The payload is then transmitted to the receiver in the same way as in in the send receive connection in section 
+    \ref{sendrcv-design}. Through DMA to the NIC and on to the receiver.
+  \item The receiver however differs significantly from the send receive connection. Instead of having to consume a receive buffer,
+    the write will issue a single DMA for the payload, without generating a WQE. This leads to an overhead $o_{wrt}$ which we
+    expect to be significantly smaller than $o_{rcv}$.
+  \item At last the receiving CPU will have to poll directly at the head of the ring buffer giving us an other overhead of $o_{poll}$.
+\end{enumerate}
+
+
+
+\begin{figure}[!ht]
+\begin{center}
+\begin{tikzpicture}[node distance=2cm,auto,>=stealth']
+  \seqnode{B_cpu}{RAM};
+  \seqnode[left of=B_cpu]{B_nic}{NIC};
+  \hseqnode[right of=B_cpu, node distance=1.5cm]{B_acpu}{};
+  \seqnode[left of=B_cpu, node distance=7cm]{A_cpu}{CPU / RAM};
+  \seqnode[right of=A_cpu]{A_nic}{NIC};
+  %
+  \msg{A_cpu}{A_nic}{.25}{WR MMIO}
+  \msg[below]{A_cpu}{A_nic}{.3}{payload DMA}
+  \msg{A_nic}{B_nic}{.45}{network transfer}
+  \msg{B_nic}{B_cpu}{.6}{payload DMA}
+  \fetch{B_acpu}{B_cpu}{.75}{poll watermark}
+  \end{tikzpicture}
+\end{center}
+\caption{Write Reverse sequence}
+\label{fig:seq-bwriterev}
+\end{figure}
+
+
+$$
+t_{bwr} \geq o_{snd} + (k-1)G + L + o_{wrt} + o_{poll}
+$$
+
+\subsubsection{Write Offset}
+\todo{Description of writeOff}
+
+\paragraph{Latency Analysis}
+\todo{This will have to be rewritten to not be so repetitive}
+We estimate the latency $t_{bwo}$ of transfering a single message $m$ of size $k$ from the sender to the receiver. 
+A detailed sequence diagram of what exactly is happening is in figure \ref{fig:seq-bwriteoff}. 
+
+\begin{enumerate}
+  \item To update the tail metadata at the receiver will need to issue an additional constant size write. We can reduce the 
+    introduced overhead by posting both write requests at the same time using a \emph{doorbell}~\cite{}. We will combine the
+    cont of issuing two WRs and the overhead of transmitting the metadata to constant $o_{meta}$ which we expect to be 
+    significantly larger than $o_{snd}$
+  \item The payload and metadata is then transmitted to the receiver. Through DMA to the NIC and on to the receiver.
+  \item The receiver will then have to issue two distinct DMAs. One for the payload and one for the metadata, giving us another
+    overhead of $2o_{wrt}$
+  \item At last the receiving CPU will have to poll the local metadata giving us an other overhead of $o_{poll}$.
+\end{enumerate}
+
+
+$$
+t_{bwo} \geq o_{meta} + (k-1)G + L + 2o_{wrt} + o_{poll}
+$$
+
+\begin{figure}[!ht]
+\begin{center}
+\begin{tikzpicture}[node distance=2cm,auto,>=stealth']
+  \seqnode{B_cpu}{RAM};
+  \seqnode[left of=B_cpu]{B_nic}{NIC};
+  \hseqnode[right of=B_cpu, node distance=1.5cm]{B_acpu}{};
+  \seqnode[left of=B_cpu, node distance=7cm]{A_cpu}{CPU / RAM};
+  \seqnode[right of=A_cpu]{A_nic}{NIC};
+  %
+  \msg{A_cpu}{A_nic}{.2}{DBell MMIO}
+  \msg{A_cpu}{A_nic}{.3}{WQE DMA}
+  \msg[below]{A_cpu}{A_nic}{.35}{payload DMA}
+  \msg{A_nic}{B_nic}{.53}{network transfer data}
+  \msg[below]{A_nic}{B_nic}{.60}{network transfer meta}
+  \msg{B_nic}{B_cpu}{.75}{data DMA}
+  \msg{B_nic}{B_cpu}{.85}{meta DMA}
+  \fetch{B_acpu}{B_cpu}{.93}{poll tail}
+\end{tikzpicture}
+\end{center}
+\caption{Write Offset sequence}
+\label{fig:seq-bwriteoff}
+\end{figure}
+
+\subsubsection{"Magic" Buffer}
+\todo{Talk about the double mapped memory buffer. Include microbench}
+\subsubsection{Acknowledgements}
+\todo{Push or pull to notify sender that there is free space}
+\subsubsection{Evaluation}
+
+
+
+
+
+

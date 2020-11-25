@@ -1,23 +1,22 @@
 \documentclass{article}
 
-
 \usepackage{pdfpages}
-
-
 \usepackage[nottoc]{tocbibind}
 \usepackage{color}
 \usepackage{wrapfig}
 \usepackage{graphicx}
 \usepackage{subcaption}
 \graphicspath{ {../plots/} }
-
+\usepackage{tikz}
+\usetikzlibrary{calc,positioning,arrows}
 \usepackage{amsmath,amsthm}
+
 
 \iffalse
 \newcommand{\comment}[1]{\textit{\textcolor{blue}{/* #1 */} }}
 \fi
 \newcommand{\todo}[1]{\textit{\textcolor{red}{// TODO: #1} }}
-\newcommand{\draft}[1]{\textit{\textcolor{green}{#1} }}
+\newcommand{\draft}[1]{\textit{\textcolor{olive}{#1} }}
 \newcommand{\code}[1]{\texttt{#1}}
 
 
@@ -67,31 +66,10 @@ Maybe add this after the protocols section?}
 \todo{Look at all implemented protocols. Detailed description of the protocols. Add performance model for each of them and provide benchmarks.}
 
 \pagebreak
-\subsection{Send Receive}
-\subsubsection{Design}
-\todo{Description of the connection and base performance model for latency and bandwidth}
-\subsubsection{Inline Sending}
-\todo{Describe inline sending. How does our performance model change?}
-\todo{What about inline receiving?}
-\subsubsection{Shared Receive Queues}
-\todo{Look at srq. Talk about congestion when reposting buffers?}
-\subsubsection{CQE routing}
-\todo{Mabye? Not sure if this is reasonable, but we could compare the effect of using a single completion queue for multiple QP or one per QP}
-\subsubsection{Evaluation}
-\todo{A lot of plots? Should this be a separate subsection or should we just scatter evaluation throughout the section?}
+\input{sendrcv.tex}
 
 \pagebreak
-\subsection{Buffered Write}
-\subsubsection{Design}
-\todo{Description of the connection and base performance model for latency and bandwidth}
-\subsubsection{"Magic" Buffer}
-\todo{Talk about the double mapped memory buffer. Include microbench}
-\subsubsection{Transfer Notifications}
-\todo{WriteImm with completion event, WriteOffset with meta data, WriteRev with "watermarks"}
-\subsubsection{Acknowledgements}
-\todo{Push or pull to notify sender that there is free space}
-\subsubsection{Evaluation}
-
+\input{write.tex}
 
 \pagebreak
 \subsection{Shared Write}
@@ -118,9 +96,7 @@ Maybe add this after the protocols section?}
 \subsubsection{Evaluation}
 
 \pagebreak
-\subsection{Direct Read}
-\subsubsection{Design}
-\subsubsection{Evaluation}
+\input{direct_read.tex}
 
 
 \pagebreak

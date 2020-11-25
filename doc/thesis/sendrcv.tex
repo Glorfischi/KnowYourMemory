@@ -1,0 +1,81 @@
+\subsection{Send Receive}\label{sendrcv}
+\subsubsection{Design} \label{sendrcv-design}
+\todo{Description of the connection}
+
+\newcommand{\seqnode}[3][]{ 
+  \node[#1] (#2) {#3};
+  \node[below of=#2, node distance=5cm] (#2_g) {};
+  \draw (#2) -- (#2_g);
+}
+\newcommand{\hseqnode}[3][]{ 
+  \node[#1] (#2) {#3};
+  \node[below of=#2, node distance=5cm] (#2_g) {};
+}
+\newcommand{\msg}[5][above]{
+  \draw[->] ($(#2)!#4!(#2_g)$) -- node[#1,scale=0.75,midway]{#5} ($(#3)!#4+0.04!(#3_g)$);
+}
+\newcommand{\fetch}[4]{
+  \draw[-] ($(#1)!#3-0.04!(#1_g)$) -- node[above,scale=0.75,midway]{#4} ($(#2)!#3!(#2_g)$);
+  \draw[->] ($(#2)!#3!(#2_g)$) -- node[above,scale=0.75,midway]{} ($(#1)!#3+0.04!(#1_g)$);
+}
+
+
+\paragraph{Latency Analysis}
+
+We estimate the latency $t_{sr}$ of transfering a single message $m$ of size $k$ from the sender to the receiver. 
+A detailed sequence diagram of what exactly is happening is in figure \ref{fig:seq-sndrcv}. 
+
+\begin{enumerate}
+  \item We start a transfer by copying a \emph{Work Request} to the \emph{NIC} using Memory Mapped IO (MMIO). This gives
+    us constant overhead $o_{snd}$ independent of the size of the message.
+  \item Given the information in the \emph{Work Request} the \emph{NIC} then accesses the messages payload using DMA. This 
+    might generate more than one PCIe transaction \cite{atc16-kalia}. The payload is then sent over the network.
+  \item As soon as the receiver receives the first segment it will consume posted receive buffer, write incoming payload 
+    to the receive buffer and generate a \emph{Work Completion Event (WQE)}. We will call the combined overhead of consuming a receive
+    buffer and generating a WQE $o_{rcv}$, which is also independent from $k$.
+  \item At last the receiving CPU will have to poll the \emph{Completion Queue (CQ)}. This will again give us a constant 
+    overhead of $o_{cq}$.
+\end{enumerate}
+
+
+\begin{figure}[!ht]
+\begin{center}
+\begin{tikzpicture}[node distance=2cm,auto,>=stealth']
+  \seqnode{B_cpu}{RAM};
+  \seqnode[left of=B_cpu]{B_nic}{NIC};
+  \hseqnode[right of=B_cpu, node distance=1.5cm]{B_acpu}{};
+  \seqnode[left of=B_cpu, node distance=7cm]{A_cpu}{CPU / RAM};
+  \seqnode[right of=A_cpu]{A_nic}{NIC};
+  %
+  \msg{A_cpu}{A_nic}{.25}{WR MMIO}
+  \msg[below]{A_cpu}{A_nic}{.3}{payload DMA}
+  \msg{A_nic}{B_nic}{.5}{network transfer}
+  \msg{B_nic}{B_cpu}{.65}{payload DMA}
+  \msg[below]{B_nic}{B_cpu}{.7}{WQE DMA}
+  \fetch{B_acpu}{B_cpu}{.8}{poll CQ}
+\end{tikzpicture}
+\end{center}
+\caption{Send Receive sequence}
+\label{fig:seq-sndrcv}
+\end{figure}
+
+
+With this we can model the latency performance of the \emph{send receive} protocol using a modified \emph{LogGP model}~\cite{}, using
+our understanding to provide insight into the opaque overhead variables of the LogGP model.
+
+
+$$
+t_{sr} \geq o_{snd} + (k-1)G + L + o_{rcv} + o_{cq}
+$$
+
+\paragraph{Bandwidth Analysis}
+
+\subsubsection{Inline Sending}
+\todo{Describe inline sending. How does our performance model change?}
+\todo{What about inline receiving?}
+\subsubsection{Shared Receive Queues}
+\todo{Look at srq. Talk about congestion when reposting buffers?}
+\subsubsection{Evaluation}
+\todo{A lot of plots? Should this be a separate subsection or should we just scatter evaluation throughout the section?}
+
+
