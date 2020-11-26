@@ -143,12 +143,12 @@ StatusOr<ReceiveRegion> DirectWriteConnection::Receive(){
 }
 Status DirectWriteConnection::Free(ReceiveRegion region){
   // Write to tail of remote rcv buf
-  DirectWriteReceiveBuffer buf = { true, (uint64_t)region.addr, region.lkey };
+  DirectWriteReceiveBuffer buf = { (uint64_t)region.addr, region.lkey, true };
 
   volatile uint32_t *msg_len = getLengthAddr(region.addr, this->buf_size_);
   *msg_len = 0;
 
-  auto sendStatus = this->ep_->PostWriteInline(region.context, &buf, sizeof(buf), this->r_rcv_buf_addr+this->r_rcv_tail_, this->r_rcv_buf_key);
+  auto sendStatus = this->ep_->PostWriteInline(region.context, &buf, sizeof(buf), this->r_rcv_buf_addr_+this->r_rcv_tail_, this->r_rcv_buf_key_);
   if (!sendStatus.ok()){
     return sendStatus;
   }
@@ -160,8 +160,57 @@ Status DirectWriteConnection::Free(ReceiveRegion region){
   return Status();
 }
 
+Status DirectWriteConnection::Close(){
 
+  int ret = ibv_dereg_mr(this->target_buf_mr_);
+  if (ret){
+    return Status(StatusCode::Internal, "error deregistering target mr");
+  }
+  free(this->target_buf_);
 
+  for (auto mr : this->rcv_buffer_mrs_){
+    void *addr = mr->addr;
+    int ret = ibv_dereg_mr(this->target_buf_mr_);
+    if (ret){
+      return Status(StatusCode::Internal, "error deregistering rcv mr");
+    }
+    free(addr);
+  }
+  
+  return this->ep_->Close();
+}
+DirectWriteConnection::~DirectWriteConnection(){
+  delete this->ep_;
+  delete this->allocator_;
+}
+
+StatusOr<DirectWriteConnection *> DialDirectWrite(std::string ip, int port, int32_t buf_size){
+  return Status(StatusCode::NotImplemented);
+}
+StatusOr<DirectWriteConnection *> DirectWriteListener::Accept(int32_t buf_size){
+  return Status(StatusCode::NotImplemented);
+}
+
+DirectWriteListener::~DirectWriteListener(){
+  delete this->listener_;
+}
+Status DirectWriteListener::Close(){
+  return this->listener_->Close();
+}
+
+StatusOr<DirectWriteListener *> ListenDirectWrite(std::string ip, int port){
+  // Default to port 18515
+  if (port == 0) {
+    port = 18515;
+  }
+  
+  auto lnStatus = endpoint::Listen(ip, port);
+  if (!lnStatus.ok()){
+    return lnStatus.status();
+  }
+  endpoint::Listener *ln = lnStatus.value();
+  return new DirectWriteListener(ln);
+}
 
 
 }
