@@ -85,6 +85,8 @@ int main(int argc, char* argv[]) {
   bool server = flags["server"].as<bool>();  
   bool client = flags["client"].as<bool>();  
 
+  std::vector<float> measurements;
+
   if (server){
     auto ln_s = kym::connection::ListenDirectWrite(ip, 9994);
     if (!ln_s.ok()){
@@ -99,29 +101,14 @@ int main(int argc, char* argv[]) {
       return 1;
     }
     auto conn = conn_s.value();
-    
-    auto buf_s = conn->GetMemoryRegion(size);
-    if (!buf_s.ok()){
-      std::cerr << "Error reg buffer " << buf_s.status().message() << std::endl;
-      return 1;
+
+    if (pingpong){
+      auto stat = test_lat_pong(conn, conn, count, size);
+      if (!stat.ok()){
+        std::cerr << "Error running benchmark: " << stat << std::endl;
+        return 1;
+      }
     }
-    auto buf = buf_s.value();
-    char msg[15] = "server msg";
-    memcpy(buf.addr, msg, 15);
-    
-    auto reg_s = conn->Receive();
-    if (!reg_s.ok()){
-      std::cerr << "Error receiving " << reg_s.status().message() << std::endl;
-      return 1;
-    }
-    std::cout << "Got " << (char *)reg_s.value().addr << std::endl;
-    debug(stderr, "Main: Received\n");
-    auto stat = conn->Send(buf);
-    if (!stat.ok()){
-      std::cerr << "Error sending " << stat.message() << std::endl;
-      return 1;
-    }
-    debug(stderr, "Main: Sent\n");
 
     std::chrono::milliseconds timespan(1000);
     std::this_thread::sleep_for(timespan);
@@ -138,31 +125,37 @@ int main(int argc, char* argv[]) {
     }
     auto conn = conn_s.value();
 
-    auto buf_s = conn->GetMemoryRegion(size);
-    if (!buf_s.ok()){
-      std::cerr << "Error reg buffer " << buf_s.status().message() << std::endl;
-      return 1;
+    if (pingpong){
+      auto stat = test_lat_ping(conn, conn, count, size, &measurements);
+      if (!stat.ok()){
+        std::cerr << "Error running benchmark: " << stat << std::endl;
+        return 1;
+      }
     }
-    auto buf = buf_s.value();
-    char msg[15] = "client msg";
-    memcpy(buf.addr, msg, 15);
-    
-    auto stat = conn->Send(buf);
-    if (!stat.ok()){
-      std::cerr << "Error sending " << stat.message() << std::endl;
-      return 1;
-    }
-    debug(stderr, "Main: Sent\n");
-    auto reg_s = conn->Receive();
-    if (!reg_s.ok()){
-      std::cerr << "Error receiving " << reg_s.status().message() << std::endl;
-      return 1;
-    }
-    std::cout << "Got " << (char *)reg_s.value().addr << std::endl;
-    debug(stderr, "Main: Received\n");
     std::chrono::milliseconds timespan(1000);
     std::this_thread::sleep_for(timespan);
     conn->Close();
+  }
+  if (lat || pingpong) {
+    if (measurements.size() == 0){
+      return 0;
+    }
+    if (!filename.empty()){
+      std::ofstream file(filename);
+      for (float f : measurements){
+        file << f << "\n";
+      }
+      file.close();
+    }
+    auto n = measurements.size();
+    std::sort (measurements.begin(), measurements.end());
+    int q025 = (int)(n*0.025);
+    int q500 = (int)(n*0.5);
+    int q975 = (int)(n*0.975);
+    std::cout << "q025" << "\t" << "q50" << "\t" << "q975" << std::endl;
+    std::cout << measurements[q025] << "\t" << measurements[q500] << "\t" << measurements[q975] << std::endl;
+    return 0;
+
   }
   return 0;
 }

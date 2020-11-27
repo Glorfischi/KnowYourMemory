@@ -152,6 +152,7 @@ StatusOr<ReceiveRegion> DirectWriteConnection::Receive(){
   ReceiveRegion reg = {0};
   reg.addr = addr;
   reg.length = *msg_len;
+  reg.lkey = this->rcv_buffers_[this->rcv_head_].rkey;
 
   this->rcv_buffers_[this->rcv_head_].valid = false; // invalidate and advance
   this->rcv_head_ = (this->rcv_head_ + 1) % this->nr_buffers_;
