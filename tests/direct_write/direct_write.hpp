@@ -52,8 +52,8 @@ class DirectWriteConnection : public Connection {
       this->target_buf_ = (DirectWriteReceiveBuffer *)target_buf_mr->addr;
 
       this->rcv_buffers_.reserve(this->nr_buffers_);
-      this->rcv_head_ = 0;
-      this->rcv_tail_ = 0;
+      this->rcv_head_ = 1;
+      this->rcv_tail_ = 1;
 
     };
     ~DirectWriteConnection();

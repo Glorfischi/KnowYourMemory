@@ -67,16 +67,13 @@ cxxopts::ParseResult parse(int argc, char* argv[]) {
 int main(int argc, char* argv[]) {
   auto flags = parse(argc,argv);
   std::string ip = flags["address"].as<std::string>();  
-  std::string src = flags["source"].as<std::string>();  
 
   std::string filename = flags["out"].as<std::string>();  
-
 
   bool bw = flags["bw"].as<bool>();  
   bool lat = flags["lat"].as<bool>();  
   bool pingpong = flags["pingpong"].as<bool>();  
 
-  bool srq = flags["srq"].as<bool>();  
 
   int count = flags["iters"].as<int>();  
   int size = flags["size"].as<int>();  
@@ -115,11 +112,13 @@ int main(int argc, char* argv[]) {
       std::cerr << "Error receiving " << reg_s.status().message() << std::endl;
       return 1;
     }
+    debug(stderr, "Main: Received\n");
     auto stat = conn->Send(buf);
     if (!stat.ok()){
       std::cerr << "Error sending " << stat.message() << std::endl;
       return 1;
     }
+    debug(stderr, "Main: Sent\n");
 
     conn->Close();
     ln->Close();
@@ -145,11 +144,13 @@ int main(int argc, char* argv[]) {
       std::cerr << "Error sending " << stat.message() << std::endl;
       return 1;
     }
+    debug(stderr, "Main: Sent\n");
     auto reg_s = conn->Receive();
     if (!reg_s.ok()){
       std::cerr << "Error receiving " << reg_s.status().message() << std::endl;
       return 1;
     }
+    debug(stderr, "Main: Received\n");
     
     conn->Close();
   }
