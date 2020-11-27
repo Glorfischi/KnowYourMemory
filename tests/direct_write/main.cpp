@@ -106,12 +106,15 @@ int main(int argc, char* argv[]) {
       return 1;
     }
     auto buf = buf_s.value();
+    char msg[15] = "server msg";
+    memcpy(buf.addr, msg, 15);
     
     auto reg_s = conn->Receive();
     if (!reg_s.ok()){
       std::cerr << "Error receiving " << reg_s.status().message() << std::endl;
       return 1;
     }
+    std::cout << "Got " << (char *)reg_s.value().addr << std::endl;
     debug(stderr, "Main: Received\n");
     auto stat = conn->Send(buf);
     if (!stat.ok()){
@@ -119,6 +122,9 @@ int main(int argc, char* argv[]) {
       return 1;
     }
     debug(stderr, "Main: Sent\n");
+
+    std::chrono::milliseconds timespan(1000);
+    std::this_thread::sleep_for(timespan);
 
     conn->Close();
     ln->Close();
@@ -138,6 +144,8 @@ int main(int argc, char* argv[]) {
       return 1;
     }
     auto buf = buf_s.value();
+    char msg[15] = "client msg";
+    memcpy(buf.addr, msg, 15);
     
     auto stat = conn->Send(buf);
     if (!stat.ok()){
@@ -150,8 +158,10 @@ int main(int argc, char* argv[]) {
       std::cerr << "Error receiving " << reg_s.status().message() << std::endl;
       return 1;
     }
+    std::cout << "Got " << (char *)reg_s.value().addr << std::endl;
     debug(stderr, "Main: Received\n");
-    
+    std::chrono::milliseconds timespan(1000);
+    std::this_thread::sleep_for(timespan);
     conn->Close();
   }
   return 0;

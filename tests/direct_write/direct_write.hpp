@@ -44,7 +44,7 @@ class DirectWriteConnection : public Connection {
         uint64_t r_rcv_buf_addr,  uint32_t r_rcv_buf_key
         ) : ep_(ep), allocator_(alloc), nr_buffers_(nr_buffers), buf_size_(buf_size),
             target_buf_mr_(target_buf_mr), rcv_buffer_mrs_(rcv_mrs),
-            r_rcv_buf_addr_(r_rcv_buf_addr), r_rcv_buf_key_(r_rcv_buf_key), r_rcv_tail_(0)
+            r_rcv_buf_addr_(r_rcv_buf_addr), r_rcv_buf_key_(r_rcv_buf_key), r_rcv_tail_(1)
     {
       this->ackd_id_ = 0;
       this->next_id_ = 1;

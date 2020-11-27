@@ -146,7 +146,7 @@ StatusOr<ReceiveRegion> DirectWriteConnection::Receive(){
   volatile uint32_t *msg_len = getLengthAddr(addr, this->buf_size_);
 
   // FIXME(Fischi) The indexing of the target buffer and receive buffer is somehow out of sync
-  debug(stderr, "Receive: Polling [msg_len_ptr: %p, head: %d ]\n", msg_len, this->rcv_head_);
+  debug(stderr, "Receive: Polling [msg_len_ptr: %p, addr: %p,  head: %d ]\n", msg_len, addr, this->rcv_head_);
   while(*msg_len == 0){
   }
   ReceiveRegion reg = {0};
@@ -176,14 +176,15 @@ Status DirectWriteConnection::Free(ReceiveRegion region){
     return wcStatus.status();
   }
   
-  this->r_rcv_tail_++;
-  this->rcv_buffers_[this->rcv_tail_++] = buf;
+  debug(stderr, "Appending free buffer [index %d]\n", this->rcv_tail_);
+  this->rcv_buffers_[this->rcv_tail_] = buf;
+  this->rcv_tail_ = (this->rcv_tail_ + 1) % this->nr_buffers_;
+  this->r_rcv_tail_ = (this->r_rcv_tail_ + 1) % this->nr_buffers_;
 
   return Status();
 }
 
 Status DirectWriteConnection::Close(){
-
   int ret = ibv_dereg_mr(this->target_buf_mr_);
   if (ret){
     return Status(StatusCode::Internal, "error deregistering target mr");
@@ -192,7 +193,7 @@ Status DirectWriteConnection::Close(){
 
   for (auto mr : this->rcv_buffer_mrs_){
     void *addr = mr->addr;
-    int ret = ibv_dereg_mr(this->target_buf_mr_);
+    int ret = ibv_dereg_mr(mr);
     if (ret){
       return Status(StatusCode::Internal, "error deregistering rcv mr");
     }
@@ -261,7 +262,7 @@ StatusOr<DirectWriteConnection *> DialDirectWrite(std::string ip, int port, int3
       tar_buf_mr,
       remote_conn_details->buf_addr, remote_conn_details->buf_key);
 
-  std::chrono::milliseconds timespan(4000); // FIXME uggy hack as synchronization is not quite right
+  std::chrono::milliseconds timespan(400); // FIXME uggy hack as synchronization is not quite right
   std::this_thread::sleep_for(timespan);
 
   for (auto mr : rcv_buf_mrs){
@@ -328,7 +329,7 @@ StatusOr<DirectWriteConnection *> DirectWriteListener::Accept(int32_t buf_size){
       tar_buf_mr,
       remote_conn_details->buf_addr, remote_conn_details->buf_key);
 
-  std::chrono::milliseconds timespan(4000); // FIXME uggy hack as synchronization is not quite right
+  std::chrono::milliseconds timespan(400); // FIXME uggy hack as synchronization is not quite right
   std::this_thread::sleep_for(timespan);
 
   for (auto mr : rcv_buf_mrs){
