@@ -276,6 +276,19 @@ StatusOr<struct ibv_wc> Endpoint::PollSendCq(){
   }
   return wc;
 }
+StatusOr<struct ibv_wc> Endpoint::PollSendCqOnce(){
+  struct ibv_wc wc;
+  int ret = ibv_poll_cq(this->id_->qp->send_cq, 1, &wc);
+  if (ret < 0){
+    // TODO(Fischi) Map error codes
+    return Status(StatusCode::Internal, "error " + std::to_string(wc.status) +  " polling send cq for wr " 
+        + std::to_string(wc.wr_id ) +" \n" + std::string(ibv_wc_status_str(wc.status)));
+  }
+  if (ret == 0){
+    return Status(StatusCode::NotFound, "nothing recieved in send cq");
+  }
+  return wc;
+}
 
 Status Endpoint::PostRecvRaw(struct ibv_recv_wr *wr, struct ibv_recv_wr **bad_wr){
   return Status(kym::StatusCode::NotImplemented);
@@ -330,7 +343,7 @@ StatusOr<ibv_wc> Endpoint::PollRecvCqOnce(){
     }
     if (!ret){
       // TODO(Fischi) Map error codes
-      return Status(StatusCode::Internal, "nothing recieved in send cq");
+      return Status(StatusCode::Internal, "nothing recieved in recv cq");
     }
     this->current_rcv_wc_ = ret;
   }

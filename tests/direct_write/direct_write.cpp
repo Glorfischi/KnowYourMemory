@@ -33,7 +33,7 @@ namespace kym {
 namespace connection {
 namespace {
 
-const uint64_t inflight = 30;
+const uint64_t inflight = 60;
 
 endpoint::Options default_opts = {
   .pd = NULL,
@@ -166,21 +166,24 @@ Status DirectWriteConnection::Free(ReceiveRegion region){
   volatile uint32_t *msg_len = getLengthAddr(region.addr, this->buf_size_);
   *msg_len = 0;
 
+  StatusOr<struct ibv_wc> wc_s;
+  do {
+    wc_s = this->ep_->PollSendCqOnce();
+    if (!wc_s.ok() && wc_s.status().code() != StatusCode::NotFound){
+      return wc_s.status();
+    }
+  } while (wc_s.ok());
+
   debug(stderr, "Freeing buffer [tail: %d, addr: %p, baddr: %p ]\n", this->r_rcv_tail_, (void*) this->r_rcv_buf_addr_ + this->r_rcv_tail_*sizeof(buf), (void *)buf.addr);
-  auto sendStatus = this->ep_->PostWriteInline(region.context, &buf, sizeof(buf), this->r_rcv_buf_addr_+this->r_rcv_tail_*sizeof(buf), this->r_rcv_buf_key_);
+  auto sendStatus = this->ep_->PostWriteInline(region.context, &buf, sizeof(buf), this->r_rcv_buf_addr_+this->rcv_tail_*sizeof(buf), this->r_rcv_buf_key_);
   if (!sendStatus.ok()){
     return sendStatus;
   }
-  // FIXME(fischi) Don't block for that long
-  auto wcStatus = this->ep_->PollSendCq();
-  if (!wcStatus.ok()){
-    return wcStatus.status();
-  }
+
   
   debug(stderr, "Appending free buffer [index %d]\n", this->rcv_tail_);
   this->rcv_buffers_[this->rcv_tail_] = buf;
   this->rcv_tail_ = (this->rcv_tail_ + 1) % this->nr_buffers_;
-  this->r_rcv_tail_ = (this->r_rcv_tail_ + 1) % this->nr_buffers_;
 
   return Status();
 }

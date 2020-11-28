@@ -17,6 +17,7 @@ enum class StatusCode {
 
   // User error
   InvalidArgument = 400,
+  NotFound = 404,
   RateLimit = 420,
 
 };

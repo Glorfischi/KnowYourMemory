@@ -44,7 +44,7 @@ class DirectWriteConnection : public Connection {
         uint64_t r_rcv_buf_addr,  uint32_t r_rcv_buf_key
         ) : ep_(ep), allocator_(alloc), nr_buffers_(nr_buffers), buf_size_(buf_size),
             target_buf_mr_(target_buf_mr), rcv_buffer_mrs_(rcv_mrs),
-            r_rcv_buf_addr_(r_rcv_buf_addr), r_rcv_buf_key_(r_rcv_buf_key), r_rcv_tail_(1)
+            r_rcv_buf_addr_(r_rcv_buf_addr), r_rcv_buf_key_(r_rcv_buf_key)
     {
       this->ackd_id_ = 0;
       this->next_id_ = 1;
@@ -94,7 +94,6 @@ class DirectWriteConnection : public Connection {
     // Remote target information
     uint64_t r_rcv_buf_addr_;
     uint32_t r_rcv_buf_key_;
-    uint32_t r_rcv_tail_;
 };
 
 StatusOr<DirectWriteConnection *> DialDirectWrite(std::string ip, int port, int32_t buf_size);

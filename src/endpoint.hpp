@@ -78,6 +78,7 @@ class Endpoint {
     Status PostImmidate(uint64_t ctx, uint32_t imm);
     Status PostFetchAndAdd(uint64_t ctx, uint64_t add, uint32_t lkey, uint64_t *addr, uint64_t remote_addr, uint32_t rkey);
     StatusOr<struct ibv_wc> PollSendCq();
+    StatusOr<struct ibv_wc> PollSendCqOnce();
 
     Status PostRecvRaw(struct ibv_recv_wr *wr, struct ibv_recv_wr **bad_wr);
     Status PostRecv(uint64_t ctx, uint32_t lkey, void *addr, size_t size);

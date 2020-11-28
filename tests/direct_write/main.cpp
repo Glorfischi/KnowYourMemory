@@ -109,6 +109,16 @@ int main(int argc, char* argv[]) {
         return 1;
       }
     }
+    if (bw) {
+      auto bw_s = test_bw_recv(conn, count, size);
+      if (!bw_s.ok()){
+        std::cerr << "Error running benchmark: " << bw_s.status() << std::endl;
+        return 1;
+      }
+      auto bandwidth = bw_s.value();
+      std::cerr << "## Bandwidth (MB/s)" << std::endl;
+      std::cout << (double)bandwidth/(1024*1024) << std::endl;
+    }
 
     std::chrono::milliseconds timespan(1000);
     std::this_thread::sleep_for(timespan);
@@ -131,6 +141,18 @@ int main(int argc, char* argv[]) {
         std::cerr << "Error running benchmark: " << stat << std::endl;
         return 1;
       }
+    }
+
+    if (bw) {
+      auto bw_s = test_bw_send(conn, count, size, unack);
+      if (!bw_s.ok()){
+        std::cerr << "Error running benchmark: " << bw_s.status() << std::endl;
+        return 1;
+      }
+      auto bandwidth = bw_s.value();
+      std::cerr << "## Bandwidth (MB/s)" << std::endl;
+      std::cout << (double)bandwidth/(1024*1024) << std::endl;
+
     }
     std::chrono::milliseconds timespan(1000);
     std::this_thread::sleep_for(timespan);
