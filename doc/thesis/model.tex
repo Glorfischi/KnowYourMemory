@@ -244,3 +244,136 @@ For the \emph{Transfer Notification} we need to inform the sender that a specifi
 \end{itemize}
 
 For a more detailed analysis of \emph{Unbuffered Read Protocols} and our implementation of one, see section \ref{sec:conn:direct_read}
+
+\pagebreak
+\subsection{Model}
+We looked at what is involved in an RDMA transmission in Figure \ref{fig:seq-sndrcv}.\todo{Figure in RDMA background}
+Trying to closely model this however gives us a far too complex model, with a lot of parameters that are hard to assess,
+especially if we start to look at more complex protocols. 
+
+We simplify our model by using a modified \emph{LogGP model}~\cite{}. The LogGP model was designed to model point to point
+communication with variable message sizes. \todo{Intro to LogGP}
+
+
+The LogGP model was designed for classical IP based messaging and did not take into account any offloading to the NIC. We 
+can however integrate the heavy offloading happening in RDMA by splitting the offset $o$ into multiple offsets for each
+of the components. This leaves us with the following parameters.
+
+
+\begin{itemize}
+  \item $L$: an upper bound on the Latency, incurred in sending a message from the senders NIC to the receivers NIC
+  \item $G$: the Gap per byte for long messages. For our purposes this is the time of sending a single byte given the 
+    maximum bandwidth of our link.
+  \item $g$: he gap, defined as the minimum time interval between consecutive message transmissions.
+  \item $P$: the number of processes (or servers).
+  \item $o_{snd}$: the \emph{send overhead}, defined as the length of time that a processor is engaged in sending each message.
+  \item $o_{nsnd}$: the \emph{send NIC overhead}, defined as the length of time that a NIC is engaged in sending each message.
+  \item $o_{rcv}$: the \emph{receive overhead}, defined as the length of time that a processor is engaged in receiving each message.
+  \item $o_{nrcv}$: the \emph{receive NIC overhead}, defined as the length of time that a NIC is engaged in receiving each message.
+  \item $g_{rcv}$: the \emph{send gap}, defined as the time interval between the receiving processor having received a message 
+    and it being ready to process the next message. One example of this gap would be preparing a new receive buffer.
+\end{itemize}
+
+\begin{figure}[!ht]
+\begin{center}
+\begin{tikzpicture}[node distance=1cm,auto,>=stealth']
+  \node[] (p0) {P0};
+  \node[right of=p0, node distance=10cm] (p0_g) {};
+  \draw[dotted] (p0) -- (p0_g);
+
+  \node[below of=p0, node distance=0.5cm] (p0_nic) {P0 NIC};
+  \node[right of=p0_nic, node distance=10cm] (p0_nic_g) {};
+  \draw[dotted] (p0_nic) -- (p0_nic_g);
+
+  \node[below of=p0_nic, node distance=1.5cm] (p1_nic) {P1 NIC};
+  \node[right of=p1_nic, node distance=10cm] (p1_nic_g) {};
+  \draw[dotted] (p1_nic) -- (p1_nic_g);
+
+  \node[below of=p1_nic, node distance=0.5cm] (p1) {P1};
+  \node[right of=p1, node distance=10cm] (p1_g) {};
+  \draw[dotted] (p1) -- (p1_g);
+  
+
+  %%%%
+
+  \draw[very thick] (p0) --node[above,scale=0.75,midway]{$o_{snd}$} ($(p0)!0.15!(p0_g)$);
+  \draw[very thick] ($(p0_nic)!0.15!(p0_nic_g)$) --node[above,scale=0.75,midway]{$o_{nsnd}$} ($(p0_nic)!0.225!(p0_nic_g)$);
+
+
+  \path[] ($(p0_nic)!0.225!(p0_nic_g)$) --node[above,scale=0.75,midway]{$G$} ($(p0_nic)!0.26!(p0_nic_g)$);
+  \draw[dotted, ->] ($(p0_nic)!0.225!(p0_nic_g)$) -- ($(p1_nic)!0.395!(p1_nic_g)$);
+
+  \path[] ($(p0_nic)!0.26!(p0_nic_g)$) --node[above,scale=0.75,midway]{$G$} ($(p0_nic)!0.295!(p0_nic_g)$);
+  \draw[dotted, ->] ($(p0_nic)!0.26!(p0_nic_g)$) -- ($(p1_nic)!0.43!(p1_nic_g)$);
+
+  \path[] ($(p0_nic)!0.295!(p0_nic_g)$) --node[above,scale=0.75,midway]{$G$} ($(p0_nic)!0.33!(p0_nic_g)$);
+  \draw[dotted, ->] ($(p0_nic)!0.295!(p0_nic_g)$) -- ($(p1_nic)!0.465!(p1_nic_g)$);
+
+  \draw[dotted, ->] ($(p0_nic)!0.33!(p0_nic_g)$) -- ($(p1_nic)!0.5!(p1_nic_g)$);
+
+
+  \draw[very thick] ($(p1_nic)!0.5!(p1_nic_g)$) --node[above,scale=0.75,midway]{$o_{nrcv}$} ($(p1_nic)!0.55!(p1_nic_g)$);
+  \draw[very thick] ($(p1)!0.55!(p1_g)$) --node[above,scale=0.75,midway]{$o_{rcv}$} ($(p1)!0.6!(p1_g)$);
+    
+  %%%%
+
+  \draw[dotted] ($(p0_nic)!0.225!(p0_nic_g)$) -- ($(p0_nic)!0.225!(p0_nic_g)+(0,-3)$);
+  \draw[dotted] ($(p0_nic)!0.330!(p0_nic_g)$) -- ($(p0_nic)!0.330!(p0_nic_g)+(0,-3)$);
+  \draw[<->] ($(p0_nic)!0.225!(p0_nic_g)+(0,-2.8)$) --node[above,scale=0.75,midway]{$(k-1)G$} ($(p0_nic)!0.330!(p0_nic_g)+(0,-2.8)$);
+
+  \draw[dotted] ($(p1_nic)!0.5!(p1_nic_g)$) -- ($(p1_nic)!0.5!(p1_nic_g)+(0,-1.5)$);
+  \draw[<->] ($(p0_nic)!0.330!(p0_nic_g)+(0,-2.8)$) --node[above,scale=0.75,midway]{$L$} ($(p1_nic)!0.5!(p1_nic_g)+(0,-1.3)$);
+
+  \draw[dotted] ($(p1)!0.6!(p1_g)$) -- ($(p1)!0.6!(p1_g)+(0,-1)$);
+  \draw[dotted] ($(p1)!0.65!(p1_g)$) -- ($(p1)!0.65!(p1_g)+(0,-1)$);
+  \draw[<->] ($(p1)!0.6!(p1_g)+(0,-.8)$) --node[above,scale=0.75,midway]{$g_{rcv}$} ($(p1)!0.65!(p1_g)+(0,-.8)$);
+
+  \draw[dotted] ($(p0)!0.15!(p0_g)$) -- ($(p0)!0.15!(p0_g)+(0,.8)$);
+  \draw[dotted] ($(p0)!0.35!(p0_g)$) -- ($(p0)!0.35!(p0_g)+(0,.8)$);
+  \draw[<->] ($(p0)!0.15!(p0_g)+(0,.6)$) --node[above,scale=0.75,midway]{$g$} ($(p0)!0.35!(p0_g)+(0,.6)$);
+
+  %%%%
+
+  \draw[very thick, lightgray] ($(p0)!0.2!(p0_g)$) --node[above,scale=0.75,midway]{$o_{snd}$} ($(p0)!0.35!(p0_g)$);
+  \draw[very thick, lightgray] ($(p0_nic)!0.35!(p0_nic_g)$) --node[above,scale=0.75,midway]{$o_{nsnd}$} ($(p0_nic)!0.425!(p0_nic_g)$);
+
+  \path[lightgray] ($(p0_nic)!0.425!(p0_nic_g)$) --node[above,scale=0.75,midway]{$G$} ($(p0_nic)!0.45!(p0_nic_g)$);
+  \draw[dotted, ->, lightgray] ($(p0_nic)!0.425!(p0_nic_g)$) -- ($(p1_nic)!0.625!(p1_nic_g)$);
+
+  \path[lightgray] ($(p0_nic)!0.45!(p0_nic_g)$) --node[above,scale=0.75,midway]{$G$} ($(p0_nic)!0.475!(p0_nic_g)$);
+  \draw[dotted, ->, lightgray] ($(p0_nic)!0.45!(p0_nic_g)$) -- ($(p1_nic)!0.65!(p1_nic_g)$);
+
+  \path[lightgray] ($(p0_nic)!0.475!(p0_nic_g)$) --node[above,scale=0.75,midway]{$G$} ($(p0_nic)!0.5!(p0_nic_g)$);
+  \draw[dotted, ->, lightgray] ($(p0_nic)!0.475!(p0_nic_g)$) -- ($(p1_nic)!0.675!(p1_nic_g)$);
+
+  \draw[dotted, ->, lightgray] ($(p0_nic)!0.5!(p0_nic_g)$) -- ($(p1_nic)!0.7!(p1_nic_g)$);
+
+
+  \draw[very thick, lightgray] ($(p1_nic)!0.7!(p1_nic_g)$) --node[above,scale=0.75,midway]{$o_{nrcv}$} ($(p1_nic)!0.75!(p1_nic_g)$);
+  \draw[very thick, lightgray] ($(p1)!0.75!(p1_g)$) --node[above,scale=0.75,midway]{$o_{rcv}$} ($(p1)!0.8!(p1_g)$);
+
+
+
+\end{tikzpicture}
+\end{center}
+\caption{Sending an receiving messages under our model}
+\label{fig:model-base}
+\end{figure}
+
+
+\paragraph{Latency Estimate}
+
+Using this model we can estimate the latency $t$ of transferring a single message $m$ of size $k$ with:
+
+$$
+t \geq o_{snd} + o_{nsnd}  + (k-1)G + L + o_{nrcv} + o_{rcv}
+$$
+
+
+\paragraph{Throughput Estimate}
+
+Message transfer is highly pipelined. So to estimate bandwidth $bw$ our model basically reduces to finding the bottleneck.
+
+$$
+bw \leq \max (\frac{1}{g}, \frac{1}{o_{snd}}k, \frac{1}{o_{nsnd}}k + G, \frac{1}{o_{nrcv}}k + G, \frac{1}{o_{rcv} + g_{rcv}}k)
+$$
