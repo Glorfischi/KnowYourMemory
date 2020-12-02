@@ -28,7 +28,7 @@ namespace kym {
 namespace connection {
 namespace {
 
-const uint64_t inflight = 300;
+const uint64_t inflight = 512;
 const uint64_t max_conn = 50;
 
 endpoint::Options defaultOptions = {
@@ -39,8 +39,8 @@ endpoint::Options defaultOptions = {
     .recv_cq = NULL,
     .srq = NULL,
     .cap = {
-      .max_send_wr = 5*inflight,
-      .max_recv_wr = 5*inflight,
+      .max_send_wr = 2*inflight,
+      .max_recv_wr = 2*inflight,
       .max_send_sge = 1,
       .max_recv_sge = 1,
       .max_inline_data = 0,

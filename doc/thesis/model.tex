@@ -246,7 +246,7 @@ For the \emph{Transfer Notification} we need to inform the sender that a specifi
 For a more detailed analysis of \emph{Unbuffered Read Protocols} and our implementation of one, see section \ref{sec:conn:direct_read}
 
 \pagebreak
-\subsection{Model}
+\subsection{Performance Model}\label{sec:perf-model}
 We looked at what is involved in an RDMA transmission in Figure \ref{fig:seq-sndrcv}.\todo{Figure in RDMA background}
 Trying to closely model this however gives us a far too complex model, with a lot of parameters that are hard to assess,
 especially if we start to look at more complex protocols. 
@@ -270,7 +270,7 @@ of the components. This leaves us with the following parameters.
   \item $o_{nsnd}$: the \emph{send NIC overhead}, defined as the length of time that a NIC is engaged in sending each message.
   \item $o_{rcv}$: the \emph{receive overhead}, defined as the length of time that a processor is engaged in receiving each message.
   \item $o_{nrcv}$: the \emph{receive NIC overhead}, defined as the length of time that a NIC is engaged in receiving each message.
-  \item $g_{rcv}$: the \emph{send gap}, defined as the time interval between the receiving processor having received a message 
+  \item $g_{rcv}$: the \emph{receive gap}, defined as the time interval between the receiving processor having received a message 
     and it being ready to process the next message. One example of this gap would be preparing a new receive buffer.
 \end{itemize}
 
@@ -375,5 +375,5 @@ $$
 Message transfer is highly pipelined. So to estimate bandwidth $bw$ our model basically reduces to finding the bottleneck.
 
 $$
-bw \leq \max (\frac{1}{g}, \frac{1}{o_{snd}}k, \frac{1}{o_{nsnd}}k + G, \frac{1}{o_{nrcv}}k + G, \frac{1}{o_{rcv} + g_{rcv}}k)
+bw \leq \max ( \frac{k}{o_{snd} + g_{snd}}, \frac{k}{o_{nsnd} + (k-1)G}, \frac{k}{o_{nrcv} + (k-1)G}, \frac{k}{o_{rcv} + g_{rcv}})
 $$
