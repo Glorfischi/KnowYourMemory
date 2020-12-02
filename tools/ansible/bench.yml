@@ -30,7 +30,7 @@
         groups: ault_client
     - name: Allocating resources..
       shell:
-        cmd: "salloc -w {{ intel_hosts[:2] | join(',') }} -t 20 --no-shell"
+        cmd: "salloc -w {{ intel_hosts[:2] | join(',') }} -t 15 --no-shell"
       register: job_raw
     - debug:
         var: job_raw
@@ -150,12 +150,41 @@
         bench_msg_size: "{{ item[1] }}"
         bench_batch_size: 8
         bench_unack: "{{ item[2] }}"
-        bench_output: "sendRcv-bw-batch-size-{{ item[1] }}-unack-{{ item[2] }}-batch-1"
+        bench_output: "sendRcv-bw-batch-size-{{ item[1] }}-unack-{{ item[2] }}-batch-8"
         bench_count: 1048576
       with_nested:
         - ["bw"]
         - [16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384] 
         - [256]
+
+- hosts: ault_runner
+  gather_facts: yes
+  tags: run, send, bw, send-bw-seq
+  tasks:
+    - name: "Gather IP of server"
+      set_fact:
+        bench_server_ip: "{{ ansible_default_ipv4.address }}"
+      delegate_to: ault_server
+      run_once: true
+    - debug:
+        verbosity: 1
+        msg: "Server ip: {{ bench_server_ip}}"
+    - name: SendReceive - Bandwith
+      include_role:
+        name: bench/sendrcv
+      vars:
+        bench_type: "{{ item[0] }}"
+        bench_srq: false
+        bench_msg_size: "{{ item[1] }}"
+        bench_batch_size: 1
+        bench_unack: "{{ item[2] }}"
+        bench_output: "sendRcv-bw-batch-size-{{ item[1] }}-unack-{{ item[2] }}-batch-1"
+        bench_count: 1048576
+      with_nested:
+        - ["bw"]
+        - [16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384] 
+        - [1]
+
 
 - hosts: ault_runner
   gather_facts: yes

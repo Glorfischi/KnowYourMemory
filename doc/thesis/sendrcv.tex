@@ -47,10 +47,9 @@
 \todo{Look at srq. Talk about congestion when reposting buffers?}
 
 \subsubsection{Evaluation}
-\todo{A lot of plots? Should this be a separate subsection or should we just scatter evaluation throughout the section?}
 
 \paragraph{Model Parameters} We are using the model presented in Section \ref{sec:perf-model}, with the specific protocol 
-we can look at what each of these parameters represents and allows us to at least give a qualitative understanding....
+we can look at what each of these parameters represents and allows us to at least give a qualitative understanding.
 
 
 \begin{itemize}
@@ -79,25 +78,25 @@ In practice it is fairly hard to asses some of these parameters. \todo{some sent
 \end{figure}
 
 \paragraph{Latency} \todo{filler}. For point to point latency, our model basically reduces to the $\alpha$-$\beta$ model. We
-have the bandwidth $B$ and a bunch of overheads that are unrelated to the size of the message $k$.
+have the bandwidth $G$ and a bunch of overheads that are unrelated to the size of the message $k$.
 
 $$
 t \geq o_{snd} + o_{nsnd}  + (k-1)G + L + o_{nrcv} + o_{rcv}
 $$
 
 Figure \ref{fig:plot-sndrcv-lat} shows the latency the latency of sending a message of varying sizes using our send receive 
-implementation, both with and without using a Shared Receive Queue. In our benchmark a single client and server 
+implementation. In our benchmark a single client and server 
 perform a \emph{ping-pong}. With that we mean that the client initiates the communication and measures the RTT and the server
 mirrors all received packages. We then take half of this RTT as our measurement of latency.
 
-We can see that at least for one to one communication, there does not seem to be any impact of using a SRQ. \todo{filler}
+\todo{SRQ?}
 
 Figure \ref{fig:plot-sndrcv-lat} also evaluates or model. Given that there is quite a lot of noise, our simplified model fits
 the observed data well. \todo{Except it doesn't really.. DARE uses a different B for messages over MTU. Why? Would this 
 fix the model?}. 
 
 \paragraph{Bandwidth}
-\todo{filler}
+\todo{filler, what do these terms actually mean?}
 
 
 $$
@@ -142,10 +141,16 @@ is not practical}
 
 Figure \ref{fig:plot-sndrcv-bw-batch} shows the throughout given a fixed message size of 16 bytes with varying batch sizes for
 multiple numbers of unacknowledged messages. We can see that that throughout increases more or less linearly but we do not seem
-to gain any throughput with a batch size larger than 8. That we are quickly bottleneck again by the amount of unacknowledged 
-messages. When increasing both batch size and the number of unacknowledged messages we seem to hit another bottleneck.
+to gain any throughput with a batch size larger than 8. We also notice that we are quickly bottleneck again by the amount of 
+unacknowledged messages. When increasing both batch size and the number of unacknowledged messages we seem to hit
+another bottleneck.
 
 With adjusted batch size of 8 and a maximum number of unacknowledged messages of 256 we now seem to bottlenecked by the 
 device itself. In Figure \ref{fig:plot-sndrcv-bw} we can that the measurements for the batched connections align fairly 
-well with what our model predicts when we are bottlenecked by the sending device.
+well with what our model predicts when we are bottlenecked by the sending device. \todo{Except it doesn't. What am I doing wrong?}
 
+\begin{figure}[h]
+\includegraphics[width=1\textwidth]{send-bw-msgsize.png}
+\caption{Evaluation of the Send Receive bandwidth between two nodes and our performance model}
+\label{fig:plot-sndrcv-bw}
+\end{figure}
