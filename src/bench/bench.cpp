@@ -5,6 +5,7 @@
 
 #include "debug.h"
 
+#include <algorithm>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -319,14 +320,21 @@ kym::StatusOr<uint64_t> test_bw_send(kym::connection::Sender *snd, int count, in
   return (double)size*((double)count/(dur/1e9));
 }
 kym::StatusOr<uint64_t> test_bw_recv(kym::connection::Receiver *rcv, int count, int size){
+  int interval = std::min(count, 1000);
+  std::vector<long> measurements;
+  measurements.reserve(count/interval);
+
   auto stat = test_warmup_receive(rcv, count/4);
   if (!stat.ok()) {
     return stat.Wrap("error during receive warmup");
   }
+
   auto start = std::chrono::high_resolution_clock::now();
   int i = 0;
+  int j = 0;
   while(i<count){
     i++;
+    j++;
     if (i % 100 == 0) debug(stderr, "BW RECEIVE: %d\t[rcv: %p, core: %d]\n",i, rcv, sched_getcpu());
     auto buf_s = rcv->Receive();
     if (!buf_s.ok()){
@@ -337,8 +345,18 @@ kym::StatusOr<uint64_t> test_bw_recv(kym::connection::Receiver *rcv, int count, 
     if (!free_s.ok()){
       return free_s.Wrap("error receiving buffer");
     }
+    if (j == interval) {
+      auto now = std::chrono::high_resolution_clock::now(); 
+      j = 0;
+      auto dur = std::chrono::duration_cast<std::chrono::nanoseconds>(now - start).count();
+      measurements.push_back(interval*(double)size/(dur/1e9));
+      start = now;
+    }
   }
-  auto end = std::chrono::high_resolution_clock::now();
-  double dur = std::chrono::duration_cast<std::chrono::nanoseconds>(end-start).count();
-  return (double)size*(double)(count-1)/(dur/1e9);
+
+  std::sort (measurements.begin(), measurements.end());
+  int median = (int)(measurements.size()*0.5);
+
+  //return (double)size*(double)(count-1)/(measurements[median]/1e9);
+  return measurements[median];
 }

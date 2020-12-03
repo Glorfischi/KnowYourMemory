@@ -1,5 +1,5 @@
 set print $data
-conns = "1 2 4 8 16 32"
+conns = "1 2 4 8 16"
 do for [c in conns] {
   bw = sprintf("data/sendrcv-bw-param/sendRcv-bw-batch-size-16-unack-256-batch-8-conn-%s-server", c )
   stats bw using 5 noout
@@ -27,7 +27,7 @@ set title "Send Receive Bandwidth"
 set xlabel "Batch size" 
 set ylabel "Bandwith (Gbit/s)" enhanced
 set yrange [0:100]
-set xrange [1:35]
+set xrange [1:20]
 
 set key left top
 

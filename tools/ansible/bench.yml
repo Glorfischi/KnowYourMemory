@@ -30,7 +30,7 @@
         groups: ault_client
     - name: Allocating resources..
       shell:
-        cmd: "salloc -w {{ intel_hosts[:2] | join(',') }} -t 15 --no-shell"
+        cmd: "salloc -w {{ intel_hosts[:2] | join(',') }} -t 10 --no-shell"
       register: job_raw
     - debug:
         var: job_raw

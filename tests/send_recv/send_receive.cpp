@@ -55,7 +55,7 @@ endpoint::Options defaultOptions = {
   .initiator_depth =  0,
   .flow_control = 0,
   .retry_count = 0,  
-  .rnr_retry_count = 10, 
+  .rnr_retry_count = 15, 
   .native_qp = false,
   .inline_recv = 0,
 };
