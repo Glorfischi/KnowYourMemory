@@ -56,6 +56,32 @@ Status ReceiveQueue::PostMR(uint32_t wr_id){
   return this->ep_->PostRecv(wr_id, this->mr_->lkey, (void *)addr, this->transfer_size_); 
 #endif
 }
+
+Status ReceiveQueue::PostMR(std::vector<uint32_t> wr_ids){
+  int n = wr_ids.size();
+  std::vector<struct ibv_sge> sges;
+  std::vector<struct ibv_recv_wr> wrs;
+  sges.reserve(n);
+  wrs.reserve(n);
+
+  for (int i = 0; i<n; i++) {
+    uint32_t wr_id = wr_ids[i];
+    uint64_t addr = ((uint64_t)this->mr_->addr) + wr_id*this->transfer_size_;
+
+    sges[i].addr = addr;
+    sges[i].length = this->transfer_size_;
+    sges[i].lkey = this->mr_->lkey;
+
+    wrs[i].wr_id = wr_id;
+    wrs[i].next = (i + 1 == n)? NULL : &wrs[i+1];
+    wrs[i].sg_list = &sges[i];
+    wrs[i].num_sge = 1;
+  }
+ 
+  struct ibv_recv_wr *bad;
+  return this->ep_->PostRecvRaw(&wrs[0], &bad);
+}
+
 StatusOr<ReceiveQueue *> GetReceiveQueue(Endpoint *ep, size_t transfer_size, size_t inflight){
   char* buf = (char*)calloc(inflight, transfer_size);
   struct ibv_mr * mr = ibv_reg_mr(ep->GetPd(), buf, transfer_size*inflight, IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);  
@@ -124,6 +150,36 @@ Status SharedReceiveQueue::PostMR(uint32_t wr_id){
   }
   return Status();
 }
+
+Status SharedReceiveQueue::PostMR(std::vector<uint32_t> wr_ids){
+  int n = wr_ids.size();
+  std::vector<struct ibv_sge> sges;
+  std::vector<struct ibv_recv_wr> wrs;
+  sges.reserve(n);
+  wrs.reserve(n);
+
+  for (int i = 0; i<n; i++) {
+    uint32_t wr_id = wr_ids[i];
+    uint64_t addr = ((uint64_t)this->mr_->addr) + wr_id*this->transfer_size_;
+
+    sges[i].addr = addr;
+    sges[i].length = this->transfer_size_;
+    sges[i].lkey = this->mr_->lkey;
+
+    wrs[i].wr_id = wr_id;
+    wrs[i].next = (i + 1 == n)? NULL : &wrs[i+1];
+    wrs[i].sg_list = &sges[i];
+    wrs[i].num_sge = 1;
+  }
+ 
+  struct ibv_recv_wr *bad;
+  int ret = ibv_post_srq_recv(this->srq_, &wrs[0], &bad);
+  if (ret) {
+    return Status(StatusCode::Internal, "error  " + std::to_string(ret) + " reposting buffers to SharedReceiveQueue");
+  }
+  return Status();
+}
+
 struct ibv_srq *SharedReceiveQueue::GetSRQ(){
   return this->srq_;
 }

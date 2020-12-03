@@ -60,6 +60,9 @@ class SendReceiveConnection : public Connection, public BatchSender {
     endpoint::IReceiveQueue *rq_;
     bool rq_shared_;
 
+    uint32_t next_post_id_;
+    std::vector<uint32_t> to_post_;
+    uint32_t max_to_post_;
 };
 
 StatusOr<SendReceiveConnection *> DialSendReceive(std::string ip, int port);

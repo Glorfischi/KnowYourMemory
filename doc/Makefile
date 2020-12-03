@@ -8,7 +8,8 @@ OLD_PLOT = $(PLOTDIR)/send-pingpong.png $(PLOTDIR)/send-pingpong-multi.png	$(PLO
 			 $(PLOTDIR)/write-ack-lat.png  $(PLOTDIR)/write-ack-ping.png $(PLOTDIR)/write-bw-msg-size.png\
 			 $(PLOTDIR)/write-bw-ack.png $(PLOTDIR)/read-pingpong.png $(PLOTDIR)/read-bw.png 
 
-PLOT = $(PLOTDIR)/send-bw-batch.png $(PLOTDIR)/send-bw-unack.png $(PLOTDIR)/send-bw-msgsize.png $(PLOTDIR)/send-lat-msgsize.png
+PLOT = $(PLOTDIR)/send-bw-batch.png $(PLOTDIR)/send-bw-unack.png $(PLOTDIR)/send-bw-msgsize.png $(PLOTDIR)/send-lat-msgsize.png \
+			 $(PLOTDIR)/send-bw-threads.png
 
 
 plot: $(PLOT)

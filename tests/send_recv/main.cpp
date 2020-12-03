@@ -181,7 +181,7 @@ int main(int argc, char* argv[]) {
       }
       conns[i] = conn;
       workers.push_back(std::thread([i, bw, lat, conn, count, batch, size, unack, &measurements](){
-        set_core_affinity(i+1);
+        set_core_affinity(i+2);
         
         std::chrono::milliseconds timespan(1000); // This is because of a race condition...
         std::vector<float> *m = new std::vector<float>();

@@ -201,7 +201,7 @@ Status Endpoint::PostWrite(uint64_t ctx, uint32_t lkey, void *addr, size_t size,
   wr.wr.rdma.remote_addr = remote_addr;
   wr.wr.rdma.rkey = rkey;
 
-  debug(stderr, "PostWrite to remote\t[remote_addr: %p, rkey: %d, length %ld]\n", (void *)remote_addr, rkey, size);  
+  //debug(stderr, "PostWrite to remote\t[remote_addr: %p, rkey: %d, length %ld]\n", (void *)remote_addr, rkey, size);  
   return this->PostSendRaw(&wr, &bad);
 }
 
@@ -223,7 +223,7 @@ Status Endpoint::PostWriteWithImmidate(uint64_t ctx, uint32_t lkey, void *addr, 
   wr.wr.rdma.rkey = rkey;
   wr.imm_data = imm;
 
-  debug(stderr, "PostWriteImm to remote\t[remote_addr: %p, rkey: %d, length %ld]\n", (void *)remote_addr, rkey, size);  
+  //debug(stderr, "PostWriteImm to remote\t[remote_addr: %p, rkey: %d, length %ld]\n", (void *)remote_addr, rkey, size);  
   return this->PostSendRaw(&wr, &bad);
 }
 
@@ -326,7 +326,7 @@ StatusOr<ibv_wc> Endpoint::PollRecvCq(){
     }
     this->current_rcv_wc_ = ret;
   }
-  debug(stderr, "current wc %d\n", this->current_rcv_wc_);
+  //debug(stderr, "current wc %d\n", this->current_rcv_wc_);
   auto wc =  this->recv_wcs_[--this->current_rcv_wc_];
   if (wc.status){
     // TODO(Fischi) Map error codes

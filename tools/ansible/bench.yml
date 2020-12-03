@@ -155,7 +155,7 @@
       with_nested:
         - ["bw"]
         - [16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384] 
-        - [256]
+        - 256]
 
 - hosts: ault_runner
   gather_facts: yes
@@ -214,7 +214,35 @@
         - [16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384] 
         - [64]
 
-
+- hosts: ault_runner
+  gather_facts: yes
+  tags: run, send, bw, send-bw-thread
+  tasks:
+    - name: "Gather IP of server"
+      set_fact:
+        bench_server_ip: "{{ ansible_default_ipv4.address }}"
+      delegate_to: ault_server
+      run_once: true
+    - debug:
+        verbosity: 1
+        msg: "Server ip: {{ bench_server_ip}}"
+    - name: Write
+      include_role:
+        name: bench/sendrcv
+      vars:
+        bench_type: "{{ item[0] }}"
+        bench_srq: false
+        bench_batch_size: 8
+        bench_msg_size: "{{ item[1] }}"
+        bench_unack: "{{ item[2] }}"
+        bench_conn: "{{ item[3] }}"
+        bench_output: "sendRcv-bw-batch-size-{{ item[1] }}-unack-{{ item[2] }}-batch-8-conn-{{ item[3] }}"
+        bench_count: 1048576
+      with_nested:
+        - ["bw"]
+        - [8192, 512, 16] 
+        - [256]
+        - [1, 2, 4, 8, 16, 32]
 
 - hosts: ault_runner
   gather_facts: yes
@@ -272,34 +300,7 @@
         - [1, 2, 4, 8, 16, 32, 64, 128]
  
 
-- hosts: ault_runner
-  gather_facts: yes
-  tags: run, send, bw, send-bw-thread
-  tasks:
-    - name: "Gather IP of server"
-      set_fact:
-        bench_server_ip: "{{ ansible_default_ipv4.address }}"
-      delegate_to: ault_server
-      run_once: true
-    - debug:
-        verbosity: 1
-        msg: "Server ip: {{ bench_server_ip}}"
-    - name: Write
-      include_role:
-        name: bench/sendrcv
-      vars:
-        bench_type: "{{ item[0] }}"
-        bench_srq: "{{ item[1] }}"
-        bench_msg_size: "{{ item[2] }}"
-        bench_conn: "{{ item[3] }}"
-        bench_output: "sendRcv-lat-conn-{{ item[3] }}{{ item[1] | ternary('-srq', '') }}"
-        bench_count: 10000
-      with_nested:
-        - ["bw"]
-        - [true, false] 
-        - [16] 
-        - [1, 2, 4, 8, 16, 32, 64, 128]
- 
+
 
 
 - hosts: ault_runner

@@ -29,7 +29,7 @@ namespace connection {
 namespace {
 
 const uint64_t inflight = 512;
-const uint64_t max_conn = 50;
+const uint64_t max_conn = 32;
 
 endpoint::Options defaultOptions = {
   .pd = NULL,
@@ -55,7 +55,7 @@ endpoint::Options defaultOptions = {
   .initiator_depth =  0,
   .flow_control = 0,
   .retry_count = 0,  
-  .rnr_retry_count = 0, 
+  .rnr_retry_count = 10, 
   .native_qp = false,
   .inline_recv = 0,
 };
@@ -172,9 +172,9 @@ StatusOr<SendReceiveConnection *> SendReceiveListener::Accept(){
   kym::endpoint::Options opts = defaultOptions;
   if (this->srq_ != nullptr){
     // Create a bigger cq when using srq as spikes can overrun a cq
-    struct ibv_cq * cq = ibv_create_cq(this->listener_->GetContext(), max_conn*inflight, NULL, NULL, 0);
+    //struct ibv_cq * cq = ibv_create_cq(this->listener_->GetContext(), inflight, NULL, NULL, 0);
 
-    opts.qp_attr.recv_cq = cq;
+    //opts.qp_attr.recv_cq = cq;
     opts.qp_attr.srq = this->srq_->GetSRQ();
   }
 
@@ -228,6 +228,10 @@ SendReceiveConnection::SendReceiveConnection(endpoint::Endpoint *ep,
   this->rq_shared_ = rq_shared;
   this->ackd_id_ = 0;
   this->next_id_ = 1;
+
+  this->next_post_id_ = 0;
+  this->max_to_post_ = inflight/4;
+  this->to_post_.reserve(inflight/4);
 }
 
 SendReceiveConnection::~SendReceiveConnection(){
@@ -352,7 +356,15 @@ StatusOr<ReceiveRegion> SendReceiveConnection::Receive(){
 }
 
 Status SendReceiveConnection::Free(ReceiveRegion region){
+#ifdef BATCH_POST_RECV
+  if (this->next_post_id_ == this->max_to_post_){
+    this->rq_->PostMR(this->to_post_);
+    this->next_post_id_ = 0;
+  }
+  this->to_post_[this->next_post_id_++] = region.context;
+#else 
   return this->rq_->PostMR(region.context);
+#endif
 }
 }
 }

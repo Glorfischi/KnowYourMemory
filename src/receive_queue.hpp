@@ -41,6 +41,7 @@ class IReceiveQueue {
     virtual struct mr GetMR(uint32_t wr_id) = 0;
     // Reposts the MR corresponding to the work request id of a receive completion event.
     virtual Status PostMR(uint32_t wr_id) = 0;
+    virtual Status PostMR(std::vector<uint32_t> wr_id) = 0;
 };
 
 /*
@@ -59,6 +60,7 @@ class ReceiveQueue : public IReceiveQueue {
 
     struct mr GetMR(uint32_t wr_id);
     Status PostMR(uint32_t wr_id);
+    Status PostMR(std::vector<uint32_t> wr_id);
   private:
     Endpoint *ep_;
     ibv_mr* mr_;
@@ -83,20 +85,21 @@ StatusOr<ReceiveQueue *> GetReceiveQueue(Endpoint *ep, size_t transfer_size, siz
 class SharedReceiveQueue : public IReceiveQueue {
   public:
     SharedReceiveQueue(struct ibv_srq *srq, ibv_mr* mr, size_t transfer_size): 
-      srq_(srq), mr_(mr), transfer_size_(transfer_size){}; 
+      srq_(srq), mr_(mr), transfer_size_(transfer_size){
+      }; 
     ~SharedReceiveQueue() = default;
 
     Status Close();
 
     struct mr GetMR(uint32_t wr_id);
     Status PostMR(uint32_t wr_id);
+    Status PostMR(std::vector<uint32_t> wr_ids);
 
     struct ibv_srq *GetSRQ();
   private:
     struct ibv_srq *srq_;
     ibv_mr* mr_;
     size_t transfer_size_;
-
 };
 StatusOr<SharedReceiveQueue *> GetSharedReceiveQueue(struct ibv_pd *pd, size_t transfer_size, size_t inflight);
 
