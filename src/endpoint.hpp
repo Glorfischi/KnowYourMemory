@@ -59,6 +59,8 @@ class Endpoint {
     struct ibv_cq *GetSendCQ();
     struct ibv_cq *GetRecvCQ();
 
+    uint32_t GetQpNum();
+
      // for supporting IDs and native QPs
     void SetQp(struct ibv_qp*  qp){ this->qp_ = qp;   this->id_->qp = qp;  };
 

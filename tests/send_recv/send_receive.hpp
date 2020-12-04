@@ -13,7 +13,7 @@
 #include <stddef.h>
 #include <string>
 #include <vector>
-#include <memory> // For smart pointers
+#include <map>
 
 
 #include <rdma/rdma_cma.h>
@@ -75,6 +75,7 @@ class SendReceiveListener {
   public:
     SendReceiveListener(endpoint::Listener *listener);
     SendReceiveListener(endpoint::Listener *listener, endpoint::SharedReceiveQueue *srq);
+    SendReceiveListener(endpoint::Listener *listener, endpoint::SharedReceiveQueue *srq, bool single_receiver);
     ~SendReceiveListener();
 
     Status Close();
@@ -84,9 +85,19 @@ class SendReceiveListener {
 
     StatusOr<SendReceiveConnection *> Accept();
     endpoint::Listener *GetListener(){return this->listener_;};
+
+    StatusOr<ReceiveRegion> Receive();
+    Status Free(ReceiveRegion);
   private:
     endpoint::Listener *listener_;
     endpoint::SharedReceiveQueue *srq_;
+    struct ibv_cq *rcv_cq_;
+
+    
+
+    std::map<uint32_t, endpoint::ReceiveQueue*> rqs_;
+
+    bool single_receiver_;
 };
 
 StatusOr<SendReceiveListener *> ListenSendReceive(std::string ip, int port);

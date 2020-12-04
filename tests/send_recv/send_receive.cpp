@@ -174,6 +174,12 @@ StatusOr<SendReceiveConnection *> SendReceiveListener::Accept(){
   if (this->srq_ != nullptr){
     opts.qp_attr.srq = this->srq_->GetSRQ();
   }
+  if (this->single_receiver_) {
+    if (this->rcv_cq_ == nullptr) {
+      this->rcv_cq_ = ibv_create_cq(this->listener_->GetContext(), 1024, NULL, NULL, 0); // TODO(Fischi) not sure how big that should be
+    }
+    opts.qp_attr.recv_cq = this->rcv_cq_;
+  }
 
   auto epStatus = this->listener_->Accept(opts);
   if (!epStatus.ok()){
@@ -190,6 +196,7 @@ StatusOr<SendReceiveConnection *> SendReceiveListener::Accept(){
       return rq_stat.status().Wrap("error creating receive queue while accepting");
     }
     rq = rq_stat.value();
+    if (this->single_receiver_) this->rqs_[ep->GetQpNum()];
   } else {
     auto rq_stat = this->srq_->NewReceiver();
     if (!rq_stat.ok()){
@@ -203,10 +210,52 @@ StatusOr<SendReceiveConnection *> SendReceiveListener::Accept(){
   return conn;
 
 }
+StatusOr<ReceiveRegion> SendReceiveListener::Receive(){
+  struct ibv_wc wc;
+  int ret = ibv_poll_cq(this->rcv_cq_, 1, &wc);
+  if (ret < 0){
+    return Status(StatusCode::Internal, "error polling recv cq\n");
+  }
+
+  if (this->srq_ != nullptr){
+    struct endpoint::mr mr = this->srq_->GetMR(wc.wr_id);
+    ReceiveRegion reg;
+    reg.context = wc.wr_id;
+    reg.addr = mr.addr;
+    reg.length = wc.byte_len;
+
+    return reg;
+  }
+  
+  auto rq = this->rqs_[wc.qp_num];
+
+  struct endpoint::mr mr = rq->GetMR(wc.wr_id);
+  ReceiveRegion reg;
+  // In our case the wr_id is never larger than 32 bits. That means we can encode the qp num in the upper 32 bits 
+  // so we will cast it to a 64 bit integer. shift it 32 bits and take the bitwise or to move the qp num in the upper 32 bits
+  reg.context = (((uint64_t)wc.qp_num) << 32) | wc.wr_id;
+  reg.addr = mr.addr;
+  reg.length = wc.byte_len;
+  return reg;
+}
+
+Status SendReceiveListener::Free(ReceiveRegion region){
+  if (this->srq_ != nullptr){
+    return this->srq_->PostMR(region.context);
+  }
+
+  // qp num is in upper 32 bits. So shift right
+  uint32_t qp_num = region.context >> 32;
+  auto rq = this->rqs_[qp_num];
+  // wr_id is in lower 32 bits.
+  return rq->PostMR(region.context & 0xFFFFFFFF);
+}
 
 SendReceiveListener::SendReceiveListener(endpoint::Listener *listener) : listener_(listener), srq_(NULL) {}
 SendReceiveListener::SendReceiveListener(endpoint::Listener *listener, 
     endpoint::SharedReceiveQueue *srq ) : listener_(listener), srq_(srq) {}
+SendReceiveListener::SendReceiveListener(endpoint::Listener *listener, endpoint::SharedReceiveQueue *srq, 
+    bool single_receiver ) : listener_(listener), srq_(srq), single_receiver_(single_receiver) {}
 
 SendReceiveListener::~SendReceiveListener(){
   delete this->listener_;

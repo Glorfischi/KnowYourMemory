@@ -101,6 +101,10 @@ struct ibv_cq	*Endpoint::GetRecvCQ(){
   return this->id_->recv_cq;
 }
 
+uint32_t Endpoint::GetQpNum(){
+  return this->id_->qp->qp_num;
+}
+
 size_t Endpoint::GetConnectionInfo(void ** buf){
   *buf = this->private_data_;
   return this->private_data_len_;
