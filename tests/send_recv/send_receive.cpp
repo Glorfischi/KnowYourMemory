@@ -55,7 +55,7 @@ endpoint::Options defaultOptions = {
   .initiator_depth =  0,
   .flow_control = 0,
   .retry_count = 0,  
-  .rnr_retry_count = 15, 
+  .rnr_retry_count = 0, 
   .native_qp = false,
   .inline_recv = 0,
 };
@@ -171,9 +171,8 @@ StatusOr<SendReceiveListener *> ListenSharedReceive(std::string ip, int port) {
 StatusOr<SendReceiveConnection *> SendReceiveListener::Accept(){
   kym::endpoint::Options opts = defaultOptions;
   if (this->srq_ != nullptr){
-    // Create a bigger cq when using srq as spikes can overrun a cq
-    //struct ibv_cq * cq = ibv_create_cq(this->listener_->GetContext(), inflight, NULL, NULL, 0);
-
+    // Create a bigger cq when using srq 
+    //struct ibv_cq * cq = ibv_create_cq(this->listener_->GetContext(), 8*1024, NULL, NULL, 0);
     //opts.qp_attr.recv_cq = cq;
     opts.qp_attr.srq = this->srq_->GetSRQ();
   }
