@@ -413,14 +413,14 @@ int main(int argc, char* argv[]){
       float mean = 0.0;
       float mean2 = 0.0;
 
-      for(uint64_t i = 0; i<data.size(); i++){
+      for(uint64_t i = 0; i<times.size(); i++){
         float t = ((float)times[i])/(post_recv);
         mean += t; 
         mean2 += t*t; 
       }
 
-      mean /= data.size();
-      mean2 /= data.size();
+      mean /= times.size();
+      mean2 /= times.size();
       printf("mean: %.2f std: %.2f Nanosec/req\n",mean, sqrtf(mean2 - mean*mean));
     }
 
