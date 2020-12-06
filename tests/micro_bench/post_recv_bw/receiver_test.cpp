@@ -9,15 +9,16 @@
 const uint32_t UD_HEADER = 40;
 
 
-struct ibv_qp  * create_rc_qp(struct ibv_cq *cq,struct ibv_pd *pd, uint32_t max_recv_size, uint8_t ibport){
+struct ibv_qp  * create_rc_qp(struct ibv_cq *cq,struct ibv_pd *pd, uint32_t max_recv_size, uint8_t ibport, struct ibv_srq *srq){
  return NULL;
 }
 
-struct ibv_qp  * create_ud_qp(struct ibv_cq *cq,struct ibv_pd *pd, uint32_t max_recv_size, uint8_t ibport){
+struct ibv_qp  * create_ud_qp(struct ibv_cq *cq,struct ibv_pd *pd, uint32_t max_recv_size, uint8_t ibport, struct ibv_srq *srq){
       struct ibv_qp_init_attr init_attr;
       memset(&init_attr,0,sizeof init_attr);
       init_attr.send_cq = cq;  // use a single CQ for send and recv
       init_attr.recv_cq = cq;  // see above 
+      init_attr.srq = srq;
       init_attr.cap.max_send_wr  = 0; // the maximum number of send requests can be submitted to the QP at the same time. Polling CQ helps to remove requests from the device.
       init_attr.cap.max_recv_wr  = max_recv_size; // the maximum number of receives we can post to the QP.  It means no more than max_recv_size ibv_post_recv at a time
       init_attr.cap.max_send_sge = 1; // is not interesting for you. Must be 1 for you.
@@ -60,9 +61,6 @@ struct ibv_qp  * create_ud_qp(struct ibv_cq *cq,struct ibv_pd *pd, uint32_t max_
         }
 
       }
-      
- 
-
 
       return qp;
 }
@@ -86,6 +84,7 @@ parse(int argc, char* argv[])
       ("ib-dev", "device", cxxopts::value<std::string>(), "DEVNAME")
       ("CQ", "use experimental CQ with single threaded flag")
       ("RC", "use reliable connection (IS NOT IMPLEMENTED)")
+      ("SRQ", "use rshared receive queue)")
       ("g,gid-idx", "local port gid index", cxxopts::value<uint32_t>()->default_value("1"), "N") // default value =1 for RoCE v2
       ("recv-size", "The IB maximum receive size", cxxopts::value<uint32_t>()->default_value(std::to_string(256)), "N") // this is the size of the queue request on the device
       ("recv-batch-size", "Batching of receive requests", cxxopts::value<uint32_t>()->default_value(std::to_string(16)), "N")
@@ -189,11 +188,20 @@ int main(int argc, char* argv[]){
 
     // now we can create the connection.
     struct ibv_qp *qp = NULL;
+    struct ibv_srq *srq = NULL; 
+
+    if (allparams.count("SRQ")){  
+      struct ibv_srq_init_attr srq_init_attr;
+      memset(&srq_init_attr,0,sizeof(srq_init_attr));
+      srq_init_attr.attr.max_wr = max_recv_size;
+      srq_init_attr.attr.max_sge = 1;
+      srq = ibv_create_srq(pd, &srq_init_attr);
+    }
 
     if (allparams.count("RC")){
-      qp = create_rc_qp(cq,pd,max_recv_size,ibport);
+      qp = create_rc_qp(cq,pd,max_recv_size,ibport,srq);
     } else {
-      qp = create_ud_qp(cq,pd,max_recv_size,ibport);
+      qp = create_ud_qp(cq,pd,max_recv_size,ibport,srq);
     }
     if(qp == NULL){
       return 1;
@@ -255,7 +263,7 @@ int main(int argc, char* argv[]){
     wr.next       = NULL; 
 
     struct ibv_recv_wr *bad_wr;
-    int ret = ibv_post_recv(qp, &wr, &bad_wr);
+    int ret = srq ? ibv_post_srq_recv(srq, &wr, &bad_wr) : ibv_post_recv(qp, &wr, &bad_wr);
     if (ret) {
       fprintf(stderr, "Couldn't post receive.\n");
       return 1;
@@ -292,15 +300,26 @@ int main(int argc, char* argv[]){
 
         int post_loop = can_post/post_recv;
         can_post %= post_recv;
-        
-        for(int i=0; i< post_loop; i++){
-          struct ibv_recv_wr *bad_wr;
-          int ret = ibv_post_recv(qp, wrs, &bad_wr); // post all requests. once I received all, i push once the request....
-          if (ret) {
-            fprintf(stderr, "Couldn't post receive.\n");
-            return 1;
+        if(srq){
+          for(int i=0; i< post_loop; i++){
+            struct ibv_recv_wr *bad_wr;
+            int ret =  ibv_post_srq_recv(srq, wrs, &bad_wr); // post all requests. once I received all, i push once the request....
+            if (ret) {
+              fprintf(stderr, "Couldn't post receive.\n");
+              return 1;
+            }
+          }
+        } else {
+          for(int i=0; i< post_loop; i++){
+            struct ibv_recv_wr *bad_wr;
+            int ret = ibv_post_recv(qp, wrs, &bad_wr); // post all requests. once I received all, i push once the request....
+            if (ret) {
+              fprintf(stderr, "Couldn't post receive.\n");
+              return 1;
+            }
           }
         }
+
 
         if(recv>(1024*16)){
           data[measurements] = recv;
@@ -362,14 +381,26 @@ int main(int argc, char* argv[]){
         if(post_loop > 128/post_recv){ // I want at least 128 posts to measure time with smaller error
           can_post %= post_recv;
           auto t1 = std::chrono::high_resolution_clock::now();
-          for(int i=0; i < post_loop; i++){
-            struct ibv_recv_wr *bad_wr;
-            int ret = ibv_post_recv(qp, wrs, &bad_wr); // post all requests. once I received all, i push once the request....
-            if (ret) {
-              fprintf(stderr, "Couldn't post receive.\n");
-              return 1;
+          if(srq){
+            for(int i=0; i < post_loop; i++){
+              struct ibv_recv_wr *bad_wr;
+              int ret = ibv_post_srq_recv(srq, wrs, &bad_wr); // post all requests. once I received all, i push once the request....
+              if (ret) {
+                fprintf(stderr, "Couldn't post receive.\n");
+                return 1;
+              }
+            }
+          } else {
+            for(int i=0; i < post_loop; i++){
+              struct ibv_recv_wr *bad_wr;
+              int ret = ibv_post_recv(qp, wrs, &bad_wr); // post all requests. once I received all, i push once the request....
+              if (ret) {
+                fprintf(stderr, "Couldn't post receive.\n");
+                return 1;
+              }
             }
           }
+
           auto t2 = std::chrono::high_resolution_clock::now();
           measurements++;
           times[measurements] = std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1).count()/post_loop;
