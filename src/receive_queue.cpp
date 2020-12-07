@@ -60,6 +60,7 @@ StatusOr<ReceiveQueue *> GetReceiveQueue(Endpoint *ep, size_t transfer_size, siz
   char* buf = (char*)calloc(inflight, transfer_size);
   struct ibv_mr * mr = ibv_reg_mr(ep->GetPd(), buf, transfer_size*inflight, IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);  
   for (size_t i = 0; i < inflight; i++){
+    debug(stderr, "posting buffer to qp %d, with id %d\n",ep->GetQpNum(), i);
     auto regStatus = ep->PostRecv(i, mr->lkey, (void *)((uint64_t)mr->addr + i*transfer_size), transfer_size); 
     if (!regStatus.ok()){
       // Best effort, if we fail we can't really do anything about it

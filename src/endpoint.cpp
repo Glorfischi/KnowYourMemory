@@ -6,6 +6,9 @@
 
 #include "endpoint.hpp"
 
+#include <thread>
+#include <chrono>
+
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -64,8 +67,8 @@ Endpoint::Endpoint(rdma_cm_id* id, void *private_data, size_t private_data_len) 
   this->max_rcv_wc_ = rcv_wc;
   this->current_rcv_wc_ = 0;
   this->recv_wcs_ = (struct ibv_wc *)calloc(this->max_rcv_wc_, sizeof(struct ibv_wc));
-  debug(stderr, "New Endpoint\t[id: %p, pd: %p, qp: %p, rcv_cq: %p, snd_cp: %p, srq: %p, rcv_cq %p, rcv_cqe %d]\n", 
-      id, id->pd, id->qp, id->recv_cq, id->send_cq, id->srq, this->id_->recv_cq, this->id_->recv_cq->cqe);
+  debug(stderr, "New Endpoint\t[id: %p, pd: %p, qp: %p, qp_num %d, rcv_cq: %p, snd_cp: %p, srq: %p, rcv_cq %p]\n", 
+      id, id->pd, id->qp, id->qp->qp_num, id->recv_cq, id->send_cq, id->srq, this->id_->recv_cq);
 }
 
 Endpoint::~Endpoint() {
@@ -483,6 +486,7 @@ StatusOr<Endpoint *> Listener::Accept(Options opts){
     
 
   } else { // use RDMA CM for creating a QP
+    debug(stderr, "create qp\n");
     ret = rdma_create_qp(conn_id, this->id_->pd, &opts.qp_attr);
     if (ret) {
       // TODO(Fischi) Map error codes
@@ -490,6 +494,8 @@ StatusOr<Endpoint *> Listener::Accept(Options opts){
       return Status(StatusCode::Internal, "accept: error " + std::to_string(ret) + " getting creating qp");
     }
   }
+  
+
   ret = rdma_accept(conn_id, &conn_param);
   if (ret) {
     perror("ERROR");
@@ -497,8 +503,10 @@ StatusOr<Endpoint *> Listener::Accept(Options opts){
   }
 
   conn_id->srq = opts.qp_attr.srq;
+  conn_id->recv_cq = opts.qp_attr.recv_cq;
 
   
+  debug(stderr, "acceped with qp_num %d\n",conn_id->qp->qp_num);
   Endpoint *ep = new Endpoint(conn_id, private_data, private_data_len);
   if(qp) ep->SetQp(qp); // it is not good as we need to destroy it. Endpoint should have fields for self-created objects.
 
@@ -660,7 +668,7 @@ Status Endpoint::Connect(Options opts){
   int ret = rdma_connect(this->id_, &conn_param);
   if (ret) {
     perror("ERROR");
-    info(stderr, "error in rdma_connect\n");
+    debug(stderr, "error in rdma_connect\n");
     return Status(StatusCode::Internal, "Error " + std::to_string(ret) + " connecting to remote in rdma_connect");
   }
 
@@ -722,6 +730,7 @@ Status Endpoint::Connect(Options opts){
 
     this->id_->qp =  this->qp_; // for compatibility with the rest of the code
   }
+  debug(stderr, "connected with qp %d", this->id_->qp->qp_num);
   return Status();
 }
 

@@ -24,6 +24,7 @@
 #include "receive_queue.hpp"
 #include "shared_receive_queue.hpp"
 
+#include "debug.h"
 
 namespace kym {
 namespace connection {
@@ -131,7 +132,7 @@ StatusOr<SendReceiveConnection *> DialSendReceive(std::string ip, int port, std:
 /* 
  * Server listener
  */
-StatusOr<SendReceiveListener *> ListenSendReceive(std::string ip, int port) {
+StatusOr<SendReceiveListener *> ListenSendReceive(std::string ip, int port, bool shared_rcv) {
   // Default to port 18515
   if (port == 0) {
     port = 18515;
@@ -142,11 +143,14 @@ StatusOr<SendReceiveListener *> ListenSendReceive(std::string ip, int port) {
     return lnStatus.status();
   }
   endpoint::Listener *ln = lnStatus.value();
-  auto rcvLn = new SendReceiveListener(ln);
+  auto rcvLn = new SendReceiveListener(ln, nullptr, shared_rcv);
   return rcvLn;
 }
+StatusOr<SendReceiveListener *> ListenSendReceive(std::string ip, int port) {
+  return ListenSendReceive(ip, port, false);
+}
 
-StatusOr<SendReceiveListener *> ListenSharedReceive(std::string ip, int port) {
+StatusOr<SendReceiveListener *> ListenSharedReceive(std::string ip, int port, bool shared_rcv) {
   // Default to port 18515
   if (port == 0) {
     port = 18515;
@@ -165,8 +169,11 @@ StatusOr<SendReceiveListener *> ListenSharedReceive(std::string ip, int port) {
   }
   endpoint::SharedReceiveQueue *srq = srq_stat.value();
 
-  auto rcvLn = new SendReceiveListener(ln, srq);
+  auto rcvLn = new SendReceiveListener(ln, srq, shared_rcv);
   return rcvLn;
+}
+StatusOr<SendReceiveListener *> ListenSharedReceive(std::string ip, int port) {
+  return ListenSharedReceive(ip, port, false);
 }
 
 StatusOr<SendReceiveConnection *> SendReceiveListener::Accept(){
@@ -181,10 +188,12 @@ StatusOr<SendReceiveConnection *> SendReceiveListener::Accept(){
     opts.qp_attr.recv_cq = this->rcv_cq_;
   }
 
+  debug(stderr, "Accepting sl rcv_cq_: %p\n", this->rcv_cq_);
   auto epStatus = this->listener_->Accept(opts);
   if (!epStatus.ok()){
     return epStatus.status();
   }
+  debug(stderr, "Accepted sl\n");
   endpoint::Endpoint *ep = epStatus.value();
 
   auto allocator = new memory::DumbAllocator(ep->GetPd());
@@ -195,8 +204,11 @@ StatusOr<SendReceiveConnection *> SendReceiveListener::Accept(){
     if (!rq_stat.ok()){
       return rq_stat.status().Wrap("error creating receive queue while accepting");
     }
-    rq = rq_stat.value();
-    if (this->single_receiver_) this->rqs_[ep->GetQpNum()];
+    auto trq = rq_stat.value();
+    debug(stderr, "pushback rq %p, for qp %d\n",trq, ep->GetQpNum());
+    if (this->single_receiver_) this->rqs_[ep->GetQpNum()] = trq;
+    debug(stderr, "pushedback rq\n");
+    rq = trq;
   } else {
     auto rq_stat = this->srq_->NewReceiver();
     if (!rq_stat.ok()){
@@ -207,16 +219,25 @@ StatusOr<SendReceiveConnection *> SendReceiveListener::Accept(){
 
   auto conn = new SendReceiveConnection(ep, rq, this->srq_ != nullptr, allocator);
 
+  debug(stderr, "new conn\n");
   return conn;
 
 }
 StatusOr<ReceiveRegion> SendReceiveListener::Receive(){
   struct ibv_wc wc;
-  int ret = ibv_poll_cq(this->rcv_cq_, 1, &wc);
-  if (ret < 0){
-    return Status(StatusCode::Internal, "error polling recv cq\n");
-  }
+  debug(stderr, "Polling on cq %p\n", this->rcv_cq_);
 
+  int ret = 0;
+
+  while(ret == 0){
+    ret = ibv_poll_cq(this->rcv_cq_, 1, &wc);
+    if (ret < 0){
+      return Status(StatusCode::Internal, "error polling recv cq\n");
+    }
+  }
+  
+
+  debug(stderr, "Got wc with ctx %d for qp %d from %d with ret %d\n", wc.wr_id, wc.qp_num, wc.src_qp, ret);
   if (this->srq_ != nullptr){
     struct endpoint::mr mr = this->srq_->GetMR(wc.wr_id);
     ReceiveRegion reg;
@@ -229,6 +250,7 @@ StatusOr<ReceiveRegion> SendReceiveListener::Receive(){
   
   auto rq = this->rqs_[wc.qp_num];
 
+  debug(stderr, "Got rq %p\n", rq);
   struct endpoint::mr mr = rq->GetMR(wc.wr_id);
   ReceiveRegion reg;
   // In our case the wr_id is never larger than 32 bits. That means we can encode the qp num in the upper 32 bits 
@@ -246,8 +268,11 @@ Status SendReceiveListener::Free(ReceiveRegion region){
 
   // qp num is in upper 32 bits. So shift right
   uint32_t qp_num = region.context >> 32;
+  debug(stderr, "Getting rq for qp %d", qp_num);
   auto rq = this->rqs_[qp_num];
+  debug(stderr, "Got rq %p", rq);
   // wr_id is in lower 32 bits.
+  debug(stderr, "Freeeing %p", rq);
   return rq->PostMR(region.context & 0xFFFFFFFF);
 }
 

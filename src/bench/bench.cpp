@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 #include <chrono>
+#include <thread>
 
 int set_core_affinity(int id){
   cpu_set_t set;
@@ -32,6 +33,8 @@ kym::Status test_warmup_send(kym::connection::Sender *snd, int count, kym::conne
 kym::Status test_warmup_send(kym::connection::BatchSender *snd, int count, std::vector<kym::connection::SendRegion> bufs){
   for (int i = 0; i<count; i++){
     std::vector<kym::connection::SendRegion> buf{bufs[i%bufs.size()]};
+    std::chrono::milliseconds timespan(1000); // If we start the server at the same time we will wait a little
+    std::this_thread::sleep_for(timespan);
     auto send_s = snd->Send(buf);
     if (!send_s.ok()){
       return send_s.Wrap("error sending buffer");
@@ -222,6 +225,8 @@ kym::StatusOr<uint64_t> test_bw_batch_send(kym::connection::BatchSender *snd, in
   auto start = std::chrono::high_resolution_clock::now();
   uint64_t ids[unack_batch];
   for(int i = 0; i<unack_batch; i++){
+    std::chrono::milliseconds timespan(100); // If we start the server at the same time we will wait a little
+    std::this_thread::sleep_for(timespan);
     auto send_s = snd->SendAsync(batches[i]);
     if (!send_s.ok()){
       for(auto ba : batches){
@@ -283,6 +288,8 @@ kym::StatusOr<uint64_t> test_bw_send(kym::connection::Sender *snd, int count, in
   uint64_t ids[unack];
   for(int i = 0; i<unack; i++){
     // std::cout << i << std::endl;
+    //std::chrono::milliseconds timespan(1); // If we start the server at the same time we will wait a little
+    //std::this_thread::sleep_for(timespan);
     auto send_s = snd->SendAsync(bufs[i]);
     if (!send_s.ok()){
       for(auto buf : bufs){

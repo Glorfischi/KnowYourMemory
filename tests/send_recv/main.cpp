@@ -41,6 +41,7 @@ cxxopts::ParseResult parse(int argc, char* argv[]) {
       ("n,iters",  "Number of exchanges" , cxxopts::value<int>()->default_value("1000"))
       ("s,size",  "Size of message to exchange", cxxopts::value<int>()->default_value("1024"))
       ("c,conn",  "Number of connections" , cxxopts::value<int>()->default_value("1"))
+      ("single-receiver",  "whether to have single receiver for all connections N:1" , cxxopts::value<bool>()->default_value("false"))
       ("unack",  "Number of messages that can be unacknowleged. Only relevant for bandwidth benchmark", cxxopts::value<int>()->default_value("100"))
       ("batch",  "Number of messages to send in a single batch. Only relevant for bandwidth benchmark", cxxopts::value<int>()->default_value("1"))
       ("out", "filename to output measurements", cxxopts::value<std::string>()->default_value(""))
@@ -86,6 +87,7 @@ int main(int argc, char* argv[]) {
   int unack = flags["unack"].as<int>();  
 
   int conn_count = flags["conn"].as<int>();  
+  bool singlercv = flags["single-receiver"].as<bool>();  
 
   bool server = flags["server"].as<bool>();  
   bool client = flags["client"].as<bool>();  
@@ -99,7 +101,7 @@ int main(int argc, char* argv[]) {
       kym::connection::SendReceiveConnection *conns[conn_count];
       kym::connection::SendReceiveListener *ln;
       if (srq){
-        auto ln_s = kym::connection::ListenSharedReceive(ip, 9999);
+        auto ln_s = kym::connection::ListenSharedReceive(ip, 9999, singlercv);
         if (!ln_s.ok()){
           std::cerr << "Error listening for send_receive with shared receive queue " << ln_s.status().message() << std::endl;
           return 1;
@@ -107,7 +109,7 @@ int main(int argc, char* argv[]) {
         ln = ln_s.value();
 
       } else {
-        auto ln_s = kym::connection::ListenSendReceive(ip, 9999);
+        auto ln_s = kym::connection::ListenSendReceive(ip, 9999, singlercv);
         if (!ln_s.ok()){
           std::cerr << "Error listening for send_receive " << ln_s.status().message() << std::endl;
           return 1;
@@ -117,43 +119,46 @@ int main(int argc, char* argv[]) {
       ae_thread = DebugTrailAsyncEvents(ln->GetListener()->GetContext());
       
       for (int i = 0; i<conn_count; i++){
+        debug(stderr, "Accepting\n");
         auto conn_s = ln->Accept();
         if (!conn_s.ok()){
           std::cerr << "Error accepting for send_receive " << conn_s.status().message() << std::endl;
           return 1;
         }
+        debug(stderr, "Accepted\n");
         
-        auto conn = conn_s.value();
-        conns[i] = conn;
-        auto y = [i, bw, lat, conn, count, size, &measurements](){
-          set_core_affinity(2*i+2);
-          std::vector<float> *m = new std::vector<float>();
-          if (bw) {
-            auto bw_s = test_bw_recv(conn, count, size);
-            if (!bw_s.ok()){
-              std::cerr << "Error running benchmark: " << bw_s.status() << std::endl;
-              return 1;
+        if (!singlercv) {
+          auto conn = conn_s.value();
+          conns[i] = conn;
+          auto y = [i, bw, lat, conn, count, size, &measurements](){
+            set_core_affinity(2*i+2);
+            std::vector<float> *m = new std::vector<float>();
+            if (bw) {
+              auto bw_s = test_bw_recv(conn, count, size);
+              if (!bw_s.ok()){
+                std::cerr << "Error running benchmark: " << bw_s.status() << std::endl;
+                return 1;
+              }
+              m->push_back(bw_s.value());
+            } else if (lat) {
+              auto stat = test_lat_recv(conn, count);
+              if (!stat.ok()){
+                std::cerr << "Error running benchmark: " << stat << std::endl;
+                return 1;
+              }
+            } else {
+              auto stat = test_lat_pong(conn, conn, count, size);
+              if (!stat.ok()){
+                std::cerr << "Error running benchmark: " << stat << std::endl;
+                return 1;
+              }
             }
-            m->push_back(bw_s.value());
-          } else if (lat) {
-            auto stat = test_lat_recv(conn, count);
-            if (!stat.ok()){
-              std::cerr << "Error running benchmark: " << stat << std::endl;
-              return 1;
-            }
-          } else {
-            auto stat = test_lat_pong(conn, conn, count, size);
-            if (!stat.ok()){
-              std::cerr << "Error running benchmark: " << stat << std::endl;
-              return 1;
-            }
-          }
-
-          measurements[i] = m;
-          conn->Close();
-          return 0;
-        };
-        workers.push_back(std::thread(y));
+            measurements[i] = m;
+            conn->Close();
+            return 0;
+          };
+          workers.push_back(std::thread(y));
+        }
       }
       if (srq){
         rcver = std::thread([ln] {
@@ -161,7 +166,19 @@ int main(int argc, char* argv[]) {
           ln->RunReceiver();
         });
       }
-       
+      if(singlercv){
+        if (bw) {
+          std::vector<float> *m = new std::vector<float>();
+          auto bw_s = test_bw_recv(ln, conn_count*count, size);
+          if (!bw_s.ok()){
+            std::cerr << "Error running benchmark: " << bw_s.status() << std::endl;
+            return 1;
+          }
+          m->push_back(bw_s.value());
+          measurements[0] = m;
+        }
+      }
+      
       for (int i = 0; i<workers.size(); i++){
         workers[i].join();
       }
@@ -186,7 +203,7 @@ int main(int argc, char* argv[]) {
       }
       conns[i] = conn;
       workers.push_back(std::thread([i, bw, lat, conn, count, batch, size, unack, &measurements](){
-        set_core_affinity(i+2);
+        set_core_affinity(i+8);
         
         std::chrono::milliseconds timespan(1000); // This is because of a race condition...
         std::vector<float> *m = new std::vector<float>();

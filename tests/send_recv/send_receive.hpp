@@ -71,7 +71,7 @@ StatusOr<SendReceiveConnection *> DialSendReceive(std::string ip, int port, std:
 StatusOr<SendReceiveConnection *> DialSendReceive(std::string ip, int port, endpoint::IReceiveQueue *rq);
 StatusOr<SendReceiveConnection *> DialSendReceive(std::string ip, int port, std::string src, endpoint::IReceiveQueue *rq);
 
-class SendReceiveListener {
+class SendReceiveListener : public Receiver {
   public:
     SendReceiveListener(endpoint::Listener *listener);
     SendReceiveListener(endpoint::Listener *listener, endpoint::SharedReceiveQueue *srq);
@@ -100,7 +100,9 @@ class SendReceiveListener {
     bool single_receiver_;
 };
 
+StatusOr<SendReceiveListener *> ListenSendReceive(std::string ip, int port, bool single_receiver);
 StatusOr<SendReceiveListener *> ListenSendReceive(std::string ip, int port);
+StatusOr<SendReceiveListener *> ListenSharedReceive(std::string ip, int port, bool single_receiver);
 StatusOr<SendReceiveListener *> ListenSharedReceive(std::string ip, int port);
 
 
