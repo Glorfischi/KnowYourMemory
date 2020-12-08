@@ -183,6 +183,9 @@ int main(int argc, char* argv[]) {
         workers[i].join();
       }
       ln->Close();
+      if (srq){
+        rcver.join();
+      }
   }
 
   if(client){

@@ -59,6 +59,8 @@ class SharedReceiveQueue : public IReceiveQueue {
     inline uint64_t ContextToAddr(uint32_t wr_id){
       return ((uint64_t)this->mr_->addr) + wr_id*this->transfer_size_;
     }
+       
+    volatile bool running = true;
 
     int current_rcv_mr_;
     int max_rcv_mr_;

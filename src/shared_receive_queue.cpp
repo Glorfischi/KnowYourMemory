@@ -58,7 +58,7 @@ StatusOr<SharedReceiveQueueStub *> SharedReceiveQueue::NewReceiver(){
 }
 
 Status SharedReceiveQueue::Run() {
-  while (true) {
+  while (this->running) {
     for (auto q : this->queues_){
       uint32_t wr_id;
       bool suc = q->try_dequeue(wr_id);
@@ -70,6 +70,7 @@ Status SharedReceiveQueue::Run() {
       }
     }
   }
+  return Status();
 }
 
 
@@ -96,6 +97,7 @@ struct ibv_srq *SharedReceiveQueue::GetSRQ(){
 }
 
 Status SharedReceiveQueue::Close(){
+  this->running = false;
   int ret = ibv_dereg_mr(this->mr_);
   if (ret) {
       return Status(StatusCode::Internal, "error  " + std::to_string(ret) + " deregistering mr");
