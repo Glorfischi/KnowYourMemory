@@ -28,7 +28,7 @@
 namespace kym {
 namespace endpoint {
 
-int rcv_wc = 100;
+int rcv_wc = 64;
 
 int get_rdma_addr(const char *src, const char *dst, const char *port,
 		  struct rdma_addrinfo *hints, struct rdma_addrinfo **rai){

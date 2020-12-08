@@ -37,21 +37,16 @@ struct mr SharedReceiveQueue::GetMR(uint32_t wr_id){
 Status SharedReceiveQueue::PostMR(uint32_t wr_id){
   debug(stderr, "Posting mr %d\n", wr_id);
   uint64_t addr = ((uint64_t)this->mr_->addr) + wr_id*this->transfer_size_;
-
-  struct ibv_sge sge;
-  sge.addr = addr;
-  sge.length = this->transfer_size_;
-  sge.lkey = this->mr_->lkey;
-
-  struct ibv_recv_wr wr, *bad;
-  wr.wr_id = wr_id;
-  wr.next = NULL;
-  wr.sg_list = &sge;
-  wr.num_sge = 1;
- 
-  int ret = ibv_post_srq_recv(this->srq_, &wr, &bad);
-  if (ret) {
-    return Status(StatusCode::Internal, "error  " + std::to_string(ret) + " reposting buffer to SharedReceiveQueue");
+  int i = --this->current_rcv_mr_;
+  this->recv_mr_sge_[i].addr = addr;
+  this->recv_mr_wrs_[i].wr_id = wr_id;
+  if (this->current_rcv_mr_ == 0) {
+    this->current_rcv_mr_ = this->max_rcv_mr_;
+    struct ibv_recv_wr *bad;
+    int ret = ibv_post_srq_recv(this->srq_, this->recv_mr_wrs_, &bad);
+    if (ret) {
+      return Status(StatusCode::Internal, "error  " + std::to_string(ret) + " reposting buffer to SharedReceiveQueue");
+    }
   }
   return Status();
 }
@@ -148,11 +143,12 @@ StatusOr<SharedReceiveQueue *> GetSharedReceiveQueue(struct ibv_pd *pd, size_t t
       return Status(StatusCode::Internal, "error  " + std::to_string(ret) + " registering buffer for SharedReceiveQueue");
     }
   }
-  struct ibv_recv_wr *wrs = (struct ibv_recv_wr *)calloc(inflight/4, sizeof(struct ibv_recv_wr));
-  struct ibv_sge *sges = (struct ibv_sge *)calloc(inflight/4, sizeof(struct ibv_sge));
-  for (int i = 0; i < inflight/4; i++){
+  int batch_size = 64;
+  struct ibv_recv_wr *wrs = (struct ibv_recv_wr *)calloc(batch_size, sizeof(struct ibv_recv_wr));
+  struct ibv_sge *sges = (struct ibv_sge *)calloc(batch_size, sizeof(struct ibv_sge));
+  for (int i = 0; i < batch_size; i++){
     wrs[i].wr_id = i;
-    wrs[i].next = i==inflight/4 ? NULL : &wrs[i+1];
+    wrs[i].next = i==batch_size-1 ? NULL : &wrs[i+1];
     wrs[i].sg_list = &sges[i];
     wrs[i].num_sge = 1;
     sges[i].addr = 0;
@@ -160,7 +156,7 @@ StatusOr<SharedReceiveQueue *> GetSharedReceiveQueue(struct ibv_pd *pd, size_t t
     sges[i].lkey = mr->lkey;
   }
 
-  return new SharedReceiveQueue(srq, mr, transfer_size, inflight/4, wrs, sges);
+  return new SharedReceiveQueue(srq, mr, transfer_size, batch_size, wrs, sges);
 
 }
 

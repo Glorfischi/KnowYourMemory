@@ -29,7 +29,7 @@ namespace kym {
 namespace connection {
 namespace {
 
-const uint64_t inflight = 512;
+const uint64_t inflight = 1024;
 const uint64_t max_conn = 32;
 
 endpoint::Options defaultOptions = {
@@ -159,7 +159,7 @@ StatusOr<SendReceiveListener *> ListenSharedReceive(std::string ip, int port) {
   endpoint::Listener *ln = lnStatus.value();
 
   //TODO(Fischi) parameterize
-  auto srq_stat = endpoint::GetSharedReceiveQueue(ln->GetPd(), 16*1024, max_conn*inflight);
+  auto srq_stat = endpoint::GetSharedReceiveQueue(ln->GetPd(), 16*1024, inflight);
   if (!srq_stat.ok()){
     return srq_stat.status().Wrap("error creating shared receive queue");
   }

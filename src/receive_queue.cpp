@@ -68,11 +68,12 @@ StatusOr<ReceiveQueue *> GetReceiveQueue(Endpoint *ep, size_t transfer_size, siz
       return regStatus.Wrap("error setting up receive queue");
     }
   }
-  struct ibv_recv_wr *wrs = (struct ibv_recv_wr *)calloc(inflight/4, sizeof(struct ibv_recv_wr));
-  struct ibv_sge *sges = (struct ibv_sge *)calloc(inflight/4, sizeof(struct ibv_sge));
-  for (int i = 0; i < inflight/4; i++){
+  int batch_size = 64;
+  struct ibv_recv_wr *wrs = (struct ibv_recv_wr *)calloc(batch_size, sizeof(struct ibv_recv_wr));
+  struct ibv_sge *sges = (struct ibv_sge *)calloc(batch_size, sizeof(struct ibv_sge));
+  for (int i = 0; i < batch_size; i++){
     wrs[i].wr_id = i;
-    wrs[i].next = i==inflight/4-1 ? NULL : &wrs[i+1];
+    wrs[i].next = i==batch_size-1 ? NULL : &wrs[i+1];
     wrs[i].sg_list = &sges[i];
     wrs[i].num_sge = 1;
     sges[i].addr = 0;
@@ -80,7 +81,7 @@ StatusOr<ReceiveQueue *> GetReceiveQueue(Endpoint *ep, size_t transfer_size, siz
     sges[i].lkey = mr->lkey;
   }
 
-  return new ReceiveQueue(ep, mr, transfer_size, inflight/4, wrs, sges);
+  return new ReceiveQueue(ep, mr, transfer_size, batch_size, wrs, sges);
 }
 }
 }

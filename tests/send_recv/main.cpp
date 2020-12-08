@@ -126,7 +126,7 @@ int main(int argc, char* argv[]) {
         auto conn = conn_s.value();
         conns[i] = conn;
         auto y = [i, bw, lat, conn, count, size, &measurements](){
-          set_core_affinity(i+2);
+          set_core_affinity(2*i+2);
           std::vector<float> *m = new std::vector<float>();
           if (bw) {
             auto bw_s = test_bw_recv(conn, count, size);
