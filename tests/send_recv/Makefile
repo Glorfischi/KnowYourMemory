@@ -12,7 +12,7 @@ SRCPATH = $(PREFIX)/src
 
 BIN = $(BINDIR)/sendrecv
 SRCS =  ./main.cpp ./send_receive.cpp $(SRCPATH)/endpoint.cpp $(SRCPATH)/receive_queue.cpp $(SRCPATH)/mm/dumb_allocator.cpp  \
-				$(SRCPATH)/bench/bench.cpp $(SRCPATH)/async_events.cpp
+				$(SRCPATH)/bench/bench.cpp $(SRCPATH)/async_events.cpp $(SRCPATH)/shared_receive_queue.cpp
 
 
 OBJS = $(SRCS:.cpp=.o)

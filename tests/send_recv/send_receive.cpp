@@ -22,6 +22,7 @@
 #include "mm.hpp"
 #include "mm/dumb_allocator.hpp"
 #include "receive_queue.hpp"
+#include "shared_receive_queue.hpp"
 
 
 namespace kym {
@@ -171,9 +172,6 @@ StatusOr<SendReceiveListener *> ListenSharedReceive(std::string ip, int port) {
 StatusOr<SendReceiveConnection *> SendReceiveListener::Accept(){
   kym::endpoint::Options opts = defaultOptions;
   if (this->srq_ != nullptr){
-    // Create a bigger cq when using srq 
-    //struct ibv_cq * cq = ibv_create_cq(this->listener_->GetContext(), 8*1024, NULL, NULL, 0);
-    //opts.qp_attr.recv_cq = cq;
     opts.qp_attr.srq = this->srq_->GetSRQ();
   }
 
@@ -189,11 +187,15 @@ StatusOr<SendReceiveConnection *> SendReceiveListener::Accept(){
   if (this->srq_ == nullptr){
     auto rq_stat = endpoint::GetReceiveQueue(ep, 16*1024, inflight);
     if (!rq_stat.ok()){
-      return rq_stat.status().Wrap("error creating receive queue while dialing");
+      return rq_stat.status().Wrap("error creating receive queue while accepting");
     }
     rq = rq_stat.value();
   } else {
-        rq = this->srq_;
+    auto rq_stat = this->srq_->NewReceiver();
+    if (!rq_stat.ok()){
+      return rq_stat.status().Wrap("error creating shared receive queue while accepting");
+    }
+    rq = rq_stat.value();
   }
 
   auto conn = new SendReceiveConnection(ep, rq, this->srq_ != nullptr, allocator);
@@ -215,6 +217,9 @@ Status SendReceiveListener::Close() {
     this->srq_->Close();
   }
   return this->listener_->Close();
+}
+Status SendReceiveListener::RunReceiver(){
+  return this->srq_->Run();
 }
 /*
  *SendReceiveConnection
@@ -355,15 +360,7 @@ StatusOr<ReceiveRegion> SendReceiveConnection::Receive(){
 }
 
 Status SendReceiveConnection::Free(ReceiveRegion region){
-#ifdef BATCH_POST_RECV
-  if (this->next_post_id_ == this->max_to_post_){
-    this->rq_->PostMR(this->to_post_);
-    this->next_post_id_ = 0;
-  }
-  this->to_post_[this->next_post_id_++] = region.context;
-#else 
   return this->rq_->PostMR(region.context);
-#endif
 }
 }
 }

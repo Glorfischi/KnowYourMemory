@@ -93,6 +93,7 @@ int main(int argc, char* argv[]) {
   std::vector<std::vector<float>*> measurements(conn_count);
   std::thread ae_thread;
   set_core_affinity(0);
+  std::thread rcver;
   if (server){
       std::vector<std::thread> workers;
       kym::connection::SendReceiveConnection *conns[conn_count];
@@ -104,6 +105,7 @@ int main(int argc, char* argv[]) {
           return 1;
         }
         ln = ln_s.value();
+
       } else {
         auto ln_s = kym::connection::ListenSendReceive(ip, 9999);
         if (!ln_s.ok()){
@@ -124,7 +126,7 @@ int main(int argc, char* argv[]) {
         auto conn = conn_s.value();
         conns[i] = conn;
         auto y = [i, bw, lat, conn, count, size, &measurements](){
-          set_core_affinity(i+1);
+          set_core_affinity(i+2);
           std::vector<float> *m = new std::vector<float>();
           if (bw) {
             auto bw_s = test_bw_recv(conn, count, size);
@@ -151,12 +153,15 @@ int main(int argc, char* argv[]) {
           conn->Close();
           return 0;
         };
-#ifdef SINGLE_THREADED_RCV
-        y();
-#else
         workers.push_back(std::thread(y));
-#endif
       }
+      if (srq){
+        rcver = std::thread([ln] {
+          set_core_affinity(20);
+          ln->RunReceiver();
+        });
+      }
+       
       for (int i = 0; i<workers.size(); i++){
         workers[i].join();
       }

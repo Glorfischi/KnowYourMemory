@@ -23,6 +23,7 @@
 #include "error.hpp"
 #include "endpoint.hpp"
 #include "receive_queue.hpp"
+#include "shared_receive_queue.hpp"
 
 #include "conn.hpp"
 #include "mm.hpp"
@@ -77,6 +78,9 @@ class SendReceiveListener {
     ~SendReceiveListener();
 
     Status Close();
+
+    // TODO(Fischi) Somhow signal end
+    Status RunReceiver();
 
     StatusOr<SendReceiveConnection *> Accept();
     endpoint::Listener *GetListener(){return this->listener_;};

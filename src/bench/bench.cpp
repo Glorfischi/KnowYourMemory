@@ -49,7 +49,7 @@ kym::Status test_warmup_receive(kym::connection::Receiver *rcv, int count){
     }
     auto free_s = rcv->Free(buf_s.value());
     if (!free_s.ok()){
-      return free_s.Wrap("error receiving buffer");
+      return free_s.Wrap("error freeing receive buffer");
     }
   }
   return kym::Status();
