@@ -30,7 +30,7 @@
         groups: ault_client
     - name: Allocating resources..
       shell:
-        cmd: "salloc -w {{ intel_hosts[:2] | join(',') }} -t 10 --no-shell"
+        cmd: "salloc -w {{ intel_hosts[:2] | join(',') }} -t 15 --no-shell"
       register: job_raw
     - debug:
         var: job_raw
@@ -231,18 +231,19 @@
         name: bench/sendrcv
       vars:
         bench_type: "{{ item[0] }}"
-        bench_srq: false
-        bench_batch_size: 8
+        bench_srq: "{{ item[4] }}"
+        bench_batch_size: 1
         bench_msg_size: "{{ item[1] }}"
         bench_unack: "{{ item[2] }}"
         bench_conn: "{{ item[3] }}"
-        bench_output: "sendRcv-bw-batch-size-{{ item[1] }}-unack-{{ item[2] }}-batch-8-conn-{{ item[3] }}"
+        bench_output: "sendRcv-bw{{ item[4] | ternary('-srq', '') }}-batch-size-{{ item[1] }}-unack-{{ item[2] }}-batch-1-conn-{{ item[3] }}"
         bench_count: 1048576
       with_nested:
         - ["bw"]
-        - [8192, 512, 16] 
-        - [256]
-        - [1, 2, 4, 8, 16, 32]
+        - [16, 512, 8192] 
+        - [128]
+        - [1, 2, 3, 4]
+        - [false, true]
 
 - hosts: ault_runner
   gather_facts: yes
