@@ -154,3 +154,43 @@ well with what our model predicts when we are bottlenecked by the sending device
 \caption{Evaluation of the Send Receive bandwidth between two nodes and our performance model}
 \label{fig:plot-sndrcv-bw}
 \end{figure}
+
+
+\paragraph{Multithreading}
+
+We can see that when we have single point to point connection, we are almost always limited by the sender and the 
+amount of requests we are able to issue. In practice however we usually do not have a such a simple setup, but we
+need to send and receive from and to multiple different nodes. This means each nodes needs to handle multiple open
+connections.
+
+To evaluate the performance of our Send Receive protocol with multiple open connections we again us two nodes. Each 
+running \todo{Specs}. On each node we run $T$ threads, each thread $t_k$ opens a connection with the corresponding 
+thread on the other node, giving us a total of $T$ connection sharing the same NIC. We evaluate the throughput for 
+three different message sizes which had different characteristics in our single threaded evaluation: 16 bytes, 
+which was heavily bound by how fast we could post send requests, 512 bytes, which was also limited by the sender
+but less extreme, and 8192 bytes, which is limited by the actual device bandwidth. We do not perform any sender side
+batching but allow for 64 unacknowledged messages, keeping the pipeline full.
+
+
+Figure \ref{fig:plot-sndrcv-bw-thread} shows the total throughput of all connections with varying number of connections.
+We can easily see that for large messages we keep being bottlenecked by the device bandwidth of 100 Gbit/s. For smaller
+messages first increases linearly until we hit a bottleneck of ?? MOp/s. This seems to be the total throughput of the 
+receiving NIC \todo{Or sending?}. This is significantly higher than our maximum throughput seen for a single connection,
+this can be attributed to the usage of multiple processing units~\cite{}
+
+
+Figure \ref{fig:plot-sndrcv-bw-thread-srq} shows the same data when using a shared receive queue (SRQ) to share memory
+between the connections. It shows that all receivers sharing an SRQ are limited by it to a maximum of 2 MOp/s. This is 
+drastically lower than without any resource sharing and heavily limits the performance for small messages. This seems
+to be a limit of the receivers NIC, or in our model this means that $o_{nrcv}$ is significantly larger when using a 
+SRQ. \todo{This does not really fit with what we observe in the microbenchmark. How do we explain this?}
+
+
+\paragraph{Single Receiver}
+
+One of the most prevalent communication pattern is the N:1 configuration, where a single server handles the messages
+of multiple clients.
+
+\subsubsection{Result}
+
+

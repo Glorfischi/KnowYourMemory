@@ -18,7 +18,7 @@ SRCS =  ./main.cpp ./send_receive.cpp $(SRCPATH)/endpoint.cpp $(SRCPATH)/receive
 OBJS = $(SRCS:.cpp=.o)
 PLOT = $(PLOTDIR)/latency.png
 
-all: CFLAGS += -O2
+all: CFLAGS += -O2 -faligned-new
 all: $(OBJS)
 	mkdir -pm 755 $(BINDIR)
 	$(CC) $(CFLAGS) -o $(BIN) $(OBJS) $(LDFLAGS)

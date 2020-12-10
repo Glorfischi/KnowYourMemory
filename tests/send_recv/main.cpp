@@ -40,6 +40,7 @@ cxxopts::ParseResult parse(int argc, char* argv[]) {
       ("source", "source IP address", cxxopts::value<std::string>()->default_value(""))
       ("n,iters",  "Number of exchanges" , cxxopts::value<int>()->default_value("1000"))
       ("s,size",  "Size of message to exchange", cxxopts::value<int>()->default_value("1024"))
+      ("l,limit",  "Sender ratelimit to send at in Msg/s. Set to 0 to not limit sender", cxxopts::value<int>()->default_value("0"))
       ("c,conn",  "Number of connections" , cxxopts::value<int>()->default_value("1"))
       ("single-receiver",  "whether to have single receiver for all connections N:1" , cxxopts::value<bool>()->default_value("false"))
       ("unack",  "Number of messages that can be unacknowleged. Only relevant for bandwidth benchmark", cxxopts::value<int>()->default_value("100"))
@@ -85,6 +86,12 @@ int main(int argc, char* argv[]) {
   int size = flags["size"].as<int>();  
   int batch = flags["batch"].as<int>();  
   int unack = flags["unack"].as<int>();  
+  int limit = flags["limit"].as<int>();  
+
+  if (batch > 1 && limit) {
+    std::cerr << "ratelimit with batching is not supported" << std::endl;
+    exit(1);
+  }
 
   int conn_count = flags["conn"].as<int>();  
   bool singlercv = flags["single-receiver"].as<bool>();  
@@ -94,7 +101,6 @@ int main(int argc, char* argv[]) {
 
   std::vector<std::vector<float>*> measurements(conn_count);
   std::thread ae_thread;
-  set_core_affinity(0);
   std::thread rcver;
   if (server){
       std::vector<std::thread> workers;
@@ -136,7 +142,8 @@ int main(int argc, char* argv[]) {
             if (bw) {
               auto bw_s = test_bw_recv(conn, count, size);
               if (!bw_s.ok()){
-                std::cerr << "Error running benchmark: " << bw_s.status() << std::endl;
+                int cpu_num = sched_getcpu();
+                std::cerr << "[CPU: " << cpu_num << "] Error running benchmark: " << bw_s.status() << std::endl;
                 return 1;
               }
               m->push_back(bw_s.value());
@@ -160,18 +167,20 @@ int main(int argc, char* argv[]) {
           workers.push_back(std::thread(y));
         }
       }
-      if (srq){
+      if (srq && !singlercv){
         rcver = std::thread([ln] {
           set_core_affinity(1);
           ln->RunReceiver();
         });
       }
       if(singlercv){
+        set_core_affinity(1);
         if (bw) {
           std::vector<float> *m = new std::vector<float>();
           auto bw_s = test_bw_recv(ln, conn_count*count, size);
           if (!bw_s.ok()){
-            std::cerr << "Error running benchmark: " << bw_s.status() << std::endl;
+            int cpu_num = sched_getcpu();
+            std::cerr << "[CPU: " << cpu_num << "] Error running benchmark: " << bw_s.status() << std::endl;
             return 1;
           }
           m->push_back(bw_s.value());
@@ -183,7 +192,7 @@ int main(int argc, char* argv[]) {
         workers[i].join();
       }
       ln->Close();
-      if (srq){
+      if (srq && !singlercv){
         rcver.join();
       }
   }
@@ -205,24 +214,31 @@ int main(int argc, char* argv[]) {
         ae_thread = DebugTrailAsyncEvents(conn->GetEndpoint()->GetContext());
       }
       conns[i] = conn;
-      workers.push_back(std::thread([i, bw, lat, conn, count, batch, size, unack, &measurements](){
-        set_core_affinity(i+1);
+      workers.push_back(std::thread([i, bw, lat, conn, count, batch, size, unack, limit, &measurements](){
+        set_core_affinity(i+2);
         
-        std::chrono::milliseconds timespan(1000); // This is because of a race condition...
+        std::chrono::milliseconds timespan(4000); // This is because of a race condition...
         std::vector<float> *m = new std::vector<float>();
         std::this_thread::sleep_for(timespan);
         if (bw) {
           if (batch > 1){
             auto bw_s = test_bw_batch_send(conn, count, size, batch, unack);
             if (!bw_s.ok()){
-              std::cerr << "Error running benchmark: " << bw_s.status() << std::endl;
+              int cpu_num = sched_getcpu();
+              std::cerr << "[CPU: " << cpu_num << "] Error running benchmark: " << bw_s.status() << std::endl;
               return 1;
             }
             m->push_back(bw_s.value());
           } else {
-            auto bw_s = test_bw_send(conn, count, size, unack);
+            kym::StatusOr<uint64_t> bw_s;
+            if (limit) {
+              bw_s = test_bw_limit_send(conn, count, size, unack, limit);
+            } else {
+              bw_s = test_bw_send(conn, count, size, unack);
+            }
             if (!bw_s.ok()){
-              std::cerr << "Error running benchmark: " << bw_s.status() << std::endl;
+              int cpu_num = sched_getcpu();
+              std::cerr << "[CPU: " << cpu_num << "] Error running benchmark: " << bw_s.status() << std::endl;
               return 1;
             }
             m->push_back(bw_s.value());

@@ -21,10 +21,17 @@ int set_core_affinity(int id){
 
 // Warmup sender. This sends slowly so not to overwhelm a cold receiver
 kym::Status test_warmup_send(kym::connection::Sender *snd, int count, kym::connection::SendRegion buf){
+  std::chrono::seconds sec(5);
+  uint64_t nanodelay =  std::chrono::nanoseconds(sec).count() / count ;
+  auto start = std::chrono::high_resolution_clock::now();
   for (int i = 0; i<count; i++){
     auto send_s = snd->Send(buf);
     if (!send_s.ok()){
       return send_s.Wrap("error sending buffer");
+    }
+    auto sleep_end_time =  start + std::chrono::nanoseconds(nanodelay*i);
+    while (std::chrono::high_resolution_clock::now() < sleep_end_time){
+        // busy loop
     }
   }
   return kym::Status();
@@ -33,8 +40,6 @@ kym::Status test_warmup_send(kym::connection::Sender *snd, int count, kym::conne
 kym::Status test_warmup_send(kym::connection::BatchSender *snd, int count, std::vector<kym::connection::SendRegion> bufs){
   for (int i = 0; i<count; i++){
     std::vector<kym::connection::SendRegion> buf{bufs[i%bufs.size()]};
-    std::chrono::milliseconds timespan(1000); // If we start the server at the same time we will wait a little
-    std::this_thread::sleep_for(timespan);
     auto send_s = snd->Send(buf);
     if (!send_s.ok()){
       return send_s.Wrap("error sending buffer");
@@ -225,8 +230,6 @@ kym::StatusOr<uint64_t> test_bw_batch_send(kym::connection::BatchSender *snd, in
   auto start = std::chrono::high_resolution_clock::now();
   uint64_t ids[unack_batch];
   for(int i = 0; i<unack_batch; i++){
-    std::chrono::milliseconds timespan(100); // If we start the server at the same time we will wait a little
-    std::this_thread::sleep_for(timespan);
     auto send_s = snd->SendAsync(batches[i]);
     if (!send_s.ok()){
       for(auto ba : batches){
@@ -309,6 +312,70 @@ kym::StatusOr<uint64_t> test_bw_send(kym::connection::Sender *snd, int count, in
       return stat.Wrap("error waiting for buffer to be sent");
     }
 
+    auto send_s = snd->SendAsync(bufs[i%unack]);
+    if (!send_s.ok()){
+      for(auto buf : bufs){
+        snd->Free(buf);
+      }
+      return send_s.status().Wrap("error sending buffer");
+    }
+    ids[i%unack] = send_s.value();
+  }
+  auto end = std::chrono::high_resolution_clock::now();
+  double dur = std::chrono::duration_cast<std::chrono::nanoseconds>(end-start).count();
+  for(int i = 0; i<unack; i++){
+    snd->Wait(ids[i]);
+    snd->Free(bufs[i]);
+  }
+  return (double)size*((double)count/(dur/1e9));
+}
+
+kym::StatusOr<uint64_t> test_bw_limit_send(kym::connection::Sender *snd, int count, int size, int unack, int max_msgps){
+  std::chrono::seconds sec(1);
+  uint64_t nanodelay =  std::chrono::nanoseconds(sec).count() / max_msgps ;
+  std::vector<kym::connection::SendRegion> bufs;
+  for(int i = 0; i<unack; i++){
+    auto buf_s = snd->GetMemoryRegion(size);
+    if (!buf_s.ok()){
+      return buf_s.status().Wrap("error allocating send region");
+    }
+    auto buf = buf_s.value();
+    *(int *)buf.addr = i;
+    bufs.push_back(buf);
+  }
+  auto stat = test_warmup_send(snd, count/4, bufs[0]); // We don't touch the other bufs. That might be a problem..
+  if (!stat.ok()) {
+    return stat.Wrap("error during send warmup");
+  }
+  auto start = std::chrono::high_resolution_clock::now();
+  uint64_t ids[unack];
+  for(int i = 0; i<unack; i++){
+    // std::cout << i << std::endl;
+    //std::chrono::milliseconds timespan(1); // If we start the server at the same time we will wait a little
+    //std::this_thread::sleep_for(timespan);
+    auto send_s = snd->SendAsync(bufs[i]);
+    if (!send_s.ok()){
+      for(auto buf : bufs){
+        snd->Free(buf);
+      }
+      return send_s.status().Wrap("error sending buffer");
+    }
+    ids[i] = send_s.value();
+  }
+  for(int i = unack; i<count; i++){
+    // std::cout << i << std::endl;
+    auto stat = snd->Wait(ids[i%unack]);
+    if (!stat.ok()){
+      for(auto buf : bufs){
+        snd->Free(buf);
+      }
+      return stat.Wrap("error waiting for buffer to be sent");
+    }
+    // TODO(Fischi) to reduce overhead we could only sleep every n send.
+    auto sleep_end_time =  start + std::chrono::nanoseconds(nanodelay*i);
+    while (std::chrono::high_resolution_clock::now() < sleep_end_time){
+        // busy loop
+    }
     auto send_s = snd->SendAsync(bufs[i%unack]);
     if (!send_s.ok()){
       for(auto buf : bufs){

@@ -56,7 +56,7 @@ endpoint::Options defaultOptions = {
   .responder_resources = 0,
   .initiator_depth =  0,
   .flow_control = 0,
-  .retry_count = 2,  
+  .retry_count = 0,  
   .rnr_retry_count = 0, 
   .native_qp = false,
   .inline_recv = 0,
@@ -163,7 +163,7 @@ StatusOr<SendReceiveListener *> ListenSharedReceive(std::string ip, int port, bo
   endpoint::Listener *ln = lnStatus.value();
 
   //TODO(Fischi) parameterize
-  auto srq_stat = endpoint::GetSharedReceiveQueue(ln->GetPd(), 16*1024, inflight);
+  auto srq_stat = endpoint::GetSharedReceiveQueue(ln->GetPd(), 16*1024, 2*inflight);
   if (!srq_stat.ok()){
     return srq_stat.status().Wrap("error creating shared receive queue");
   }
@@ -184,6 +184,7 @@ StatusOr<SendReceiveConnection *> SendReceiveListener::Accept(){
   if (this->single_receiver_) {
     if (this->rcv_cq_ == nullptr) {
       this->rcv_cq_ = ibv_create_cq(this->listener_->GetContext(), 1024, NULL, NULL, 0); // TODO(Fischi) not sure how big that should be
+      debug(stderr, "new rcv_cq_: %p\n", this->rcv_cq_);
     }
     opts.qp_attr.recv_cq = this->rcv_cq_;
   }
@@ -276,11 +277,11 @@ Status SendReceiveListener::Free(ReceiveRegion region){
   return rq->PostMR(region.context & 0xFFFFFFFF);
 }
 
-SendReceiveListener::SendReceiveListener(endpoint::Listener *listener) : listener_(listener), srq_(NULL) {}
+SendReceiveListener::SendReceiveListener(endpoint::Listener *listener) : listener_(listener), srq_(NULL), rcv_cq_(nullptr) {}
 SendReceiveListener::SendReceiveListener(endpoint::Listener *listener, 
-    endpoint::SharedReceiveQueue *srq ) : listener_(listener), srq_(srq) {}
+    endpoint::SharedReceiveQueue *srq ) : listener_(listener), srq_(srq), rcv_cq_(nullptr) {}
 SendReceiveListener::SendReceiveListener(endpoint::Listener *listener, endpoint::SharedReceiveQueue *srq, 
-    bool single_receiver ) : listener_(listener), srq_(srq), single_receiver_(single_receiver) {}
+    bool single_receiver ) : listener_(listener), srq_(srq), rcv_cq_(nullptr), single_receiver_(single_receiver) {}
 
 SendReceiveListener::~SendReceiveListener(){
   delete this->listener_;

@@ -44,7 +44,7 @@ struct mr ReceiveQueue::GetMR(uint32_t wr_id){
 }
 Status ReceiveQueue::PostMR(uint32_t wr_id){
   uint64_t addr = ((uint64_t)this->mr_->addr) + wr_id*this->transfer_size_;
-  int i = --this->current_rcv_mr_;
+  /*int i = --this->current_rcv_mr_;
   this->recv_mr_sge_[i].addr = addr;
   this->recv_mr_wrs_[i].wr_id = wr_id;
   if (this->current_rcv_mr_ == 0) {
@@ -52,7 +52,8 @@ Status ReceiveQueue::PostMR(uint32_t wr_id){
     struct ibv_recv_wr *bad;
     auto stat = this->ep_->PostRecvRaw(this->recv_mr_wrs_, &bad);
     return stat;
-  }
+  }*/
+  return this->ep_->PostRecv(wr_id, this->mr_->lkey, (void *)addr, this->transfer_size_);
   return Status();
 }
 
