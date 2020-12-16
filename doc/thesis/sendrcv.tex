@@ -1,5 +1,5 @@
-\subsection{Send Receive}\label{sendrcv}
-\subsubsection{Design} \label{sendrcv-design}
+\section{Send Receive}\label{sendrcv}
+\subsection{Design} \label{sendrcv-design}
 \todo{Description of the connection}
 
 
@@ -46,9 +46,11 @@
 \paragraph{Shared Receive Queues}
 \todo{Look at srq. Talk about congestion when reposting buffers?}
 
-\subsubsection{Evaluation}
+\subsection{Evaluation}
 
-\paragraph{Model Parameters} We are using the model presented in Section \ref{sec:perf-model}, with the specific protocol 
+\subsubsection{Model Parameters}
+
+We are using the model presented in Section \ref{sec:perf-model}, with the specific protocol 
 we can look at what each of these parameters represents and allows us to at least give a qualitative understanding.
 
 
@@ -77,7 +79,7 @@ In practice it is fairly hard to asses some of these parameters. \todo{some sent
 \label{fig:plot-sndrcv-lat}
 \end{figure}
 
-\paragraph{Latency} \todo{filler}. For point to point latency, our model basically reduces to the $\alpha$-$\beta$ model. We
+\subsubsection{Latency} \todo{filler}. For point to point latency, our model basically reduces to the $\alpha$-$\beta$ model. We
 have the bandwidth $G$ and a bunch of overheads that are unrelated to the size of the message $k$.
 
 $$
@@ -95,7 +97,7 @@ Figure \ref{fig:plot-sndrcv-lat} also evaluates or model. Given that there is qu
 the observed data well. \todo{Except it doesn't really.. DARE uses a different B for messages over MTU. Why? Would this 
 fix the model?}. 
 
-\paragraph{Bandwidth}
+\subsubsection{Bandwidth}
 \todo{filler, what do these terms actually mean?}
 
 
@@ -156,7 +158,7 @@ well with what our model predicts when we are bottlenecked by the sending device
 \end{figure}
 
 
-\paragraph{Multithreading}
+\subsubsection{Multithreading}
 
 We can see that when we have single point to point connection, we are almost always limited by the sender and the 
 amount of requests we are able to issue. In practice however we usually do not have a such a simple setup, but we
@@ -186,11 +188,11 @@ to be a limit of the receivers NIC, or in our model this means that $o_{nrcv}$ i
 SRQ. \todo{This does not really fit with what we observe in the microbenchmark. How do we explain this?}
 
 
-\paragraph{Single Receiver}
+\subsubsection{Single Receiver}
 
 One of the most prevalent communication pattern is the N:1 configuration, where a single server handles the messages
 of multiple clients.
 
-\subsubsection{Result}
+\subsection{Result}
 
 

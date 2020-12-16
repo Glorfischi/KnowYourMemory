@@ -1,16 +1,16 @@
 
-\subsection{Buffered Write}
+\section{Buffered Write}
 \todo{Description of the connection}
 
-\subsubsection{Write Immidate}
+\subsection{Protocol}
+\subsubsection{Sender}
+\paragraph{Write Immidate}
 \todo{Description of writeImm}
 
 \todo{Basically the same as send receive + minor overhead for offset computation}
 
-\subsubsection{Write Reverse}
+\paragraph{Write Reverse}
 \todo{Description of writeRev}
-
-\paragraph{Latency Analysis}
 
 We estimate the latency $t_{bwr}$ of transfering a single message $m$ of size $k$ from the sender to the receiver. 
 A detailed sequence diagram of what exactly is happening is in figure \ref{fig:seq-bwriterev}. 
@@ -53,10 +53,9 @@ $$
 t_{bwr} \geq o_{snd} + (k-1)G + L + o_{wrt} + o_{poll}
 $$
 
-\subsubsection{Write Offset}
+\paragraph{Write Offset}
 \todo{Description of writeOff}
 
-\paragraph{Latency Analysis}
 \todo{This will have to be rewritten to not be so repetitive}
 We estimate the latency $t_{bwo}$ of transfering a single message $m$ of size $k$ from the sender to the receiver. 
 A detailed sequence diagram of what exactly is happening is in figure \ref{fig:seq-bwriteoff}. 
@@ -100,11 +99,54 @@ $$
 \label{fig:seq-bwriteoff}
 \end{figure}
 
+\subsubsection{Acknowledger}
+
+\todo{Push or pull to notify sender that there is free space}
+
+\paragraph{Read}
+
+\paragraph{Send}
+
 \subsubsection{"Magic" Buffer}
 \todo{Talk about the double mapped memory buffer. Include microbench}
-\subsubsection{Acknowledgements}
-\todo{Push or pull to notify sender that there is free space}
-\subsubsection{Evaluation}
+\subsection{Evaluation}
+\todo{Info on system etc.}
+
+\subsubsection{Latency}
+
+\begin{figure}[h]
+\includegraphics[width=1\textwidth]{write-lat-msgsize.png}
+\caption{Evaluation of the Send Receive latency between two nodes and our performance model}
+\label{fig:plot-write-lat}
+\end{figure}
+
+Figure \ref{fig:plot-write-lat} shows the latency the latency of sending a message of varying sizes using our write protocol
+with all presented sender. All measurements use the \emph{read} acknowledger. There is no significant difference in latency
+when switching to a \emph{send} acknowledger. \todo{do we need a graph for that?}
+We again perform \emph{ping-pong} measurements. We take half of this RTT as our measurement of latency.
+
+
+We can see that the additionally issued write of the \emph{WriteOff} gives us a noticeable increase in latency for all message
+sizes. The overhead however does seem to decrease a little for messages over the MTU of $4096$ Bytes. This is something we are
+not quite able to predict with our model. \todo{Why?}
+
+The latency characteristics of \emph{WriteRev} and \emph{WriteImm} seem to be very similar. This is in line with what we expect
+..
+
+\subsubsection{Bandwidth}
+
+\begin{figure}[h]
+\includegraphics[width=1\textwidth]{write-bw-unack.png}
+\caption{Evaluation of the Send Receive latency between two nodes and our performance model}
+\label{fig:plot-write-bw-unack}
+\end{figure}
+
+For us to be able to \todo{Something Something full pipeline. Should we really include this graphic}. For the send protocol 
+we did not implement any sender side batching. We did show that sender site batching is effective and can have its uses in 
+Section \ref{sendrcv}, but application level batching is in the end more effective when possible, so we decided not to look 
+into batching for the remaining protocols. We would however expect similar improvements for the buffered write 
+protocols with batching.
+
 
 
 

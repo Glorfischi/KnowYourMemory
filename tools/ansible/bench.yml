@@ -22,15 +22,15 @@
         msg: "{{ intel_hosts }}"
     - name: Add server to group
       add_host:
-        name: '{{ intel_hosts[0] }}.cscs.ch'
+        name: '{{ intel_hosts[-1] }}.cscs.ch'
         groups: ault_server
     - name: Add client to group
       add_host:
-        name: '{{ intel_hosts[1] }}.cscs.ch'
+        name: '{{ intel_hosts[-2] }}.cscs.ch'
         groups: ault_client
     - name: Allocating resources..
       shell:
-        cmd: "salloc -w {{ intel_hosts[:2] | join(',') }} -t 15 --no-shell"
+        cmd: "salloc -w {{ intel_hosts[-2:] | join(',') }} -t 20 --no-shell"
       register: job_raw
     - debug:
         var: job_raw
@@ -38,36 +38,6 @@
         job_id: "{{ job_raw.stderr.split()[-1] }}"
 
 
-
-- hosts: ault_runner
-  gather_facts: yes
-  tags: run, write, lat
-  tasks:
-    - name: "Gather IP of server"
-      set_fact:
-        bench_server_ip: "{{ ansible_default_ipv4.address }}"
-      delegate_to: ault_server
-      run_once: true
-    - debug:
-        verbosity: 1
-        msg: "Server ip: {{ bench_server_ip}}"
-    - name: Write
-      include_role:
-        name: bench/write
-      vars:
-        bench_type: "{{ item[0] }}"
-        bench_sender: "{{ item[1] }}"
-        bench_ack: "{{ item[2] }}"
-        bench_msg_size: "{{ item[3] }}"
-      with_nested:
-        #- ["pingpong", "lat", "bw"]
-        - ["pingpong", "lat"]
-        #- ["write", "writeOff", "writeImm"]
-        - ["writeImm", "writeOff", "writeRev"]
-        #- ["send", "read"]
-        - ["send", "read"]
-        #- [16, 32, 64, 1024, 4096, 8192]
-        - [16] 
 
 - hosts: ault_runner
   gather_facts: yes
@@ -301,8 +271,68 @@
         - [1, 2, 4, 8, 16, 32, 64, 128]
  
 
+- hosts: ault_runner
+  gather_facts: yes
+  tags: run, write, lat, write-lat
+  tasks:
+    - name: "Gather IP of server"
+      set_fact:
+        bench_server_ip: "{{ ansible_default_ipv4.address }}"
+      delegate_to: ault_server
+      run_once: true
+    - debug:
+        verbosity: 1
+        msg: "Server ip: {{ bench_server_ip}}"
+    - name: Write
+      include_role:
+        name: bench/write
+      vars:
+        bench_type: "{{ item[0] }}"
+        bench_sender: "{{ item[1] }}"
+        bench_ack: "{{ item[2] }}"
+        bench_unack: "1"
+        bench_msg_size: "{{ item[3] }}"
+        bench_output: "write-lat-single-size-{{item[3] }}-{{ item[1] }}-ack-{{ item[2] }}"
+        bench_count: 1048576
+      with_nested:
+        - ["pingpong"]
+          #- ["writeImm", "writeOff", "writeRev"]
+        - ["writeImm"]
+        - ["send", "read"]
+        - [16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384] 
 
 
+- hosts: ault_runner
+  gather_facts: yes
+  tags: run, write, bw, write-bw-param-unack
+  tasks:
+    - name: "Gather IP of server"
+      set_fact:
+        bench_server_ip: "{{ ansible_default_ipv4.address }}"
+      delegate_to: ault_server
+      run_once: true
+    - debug:
+        verbosity: 1
+        msg: "Server ip: {{ bench_server_ip}}"
+    - name: Write - Bandwith
+      include_role:
+        name: bench/write
+      vars:
+        bench_type: "{{ item[0] }}"
+        bench_sender: "{{ item[1] }}"
+        bench_ack: "{{ item[2] }}"
+        bench_batch_size: 1
+        bench_msg_size: "{{ item[3] }}"
+        bench_unack: "{{ item[4] }}"
+        bench_output: "write-bw-single-size-{{item[3] }}-{{ item[1] }}-ack-{{ item[2] }}-unack-{{ item[4] }}"
+        bench_count: 1048576
+      with_nested:
+        - ["bw"]
+          #- ["writeImm", "writeOff", "writeRev"]
+        - ["writeImm"]
+        - ["send", "read"]
+        - [16]
+        - [1, 4, 8, 16, 32, 64, 128]
 
 - hosts: ault_runner
   gather_facts: yes
@@ -326,14 +356,16 @@
         bench_batch_size: 1
         bench_msg_size: "{{ item[3] }}"
         bench_unack: "{{ item[4] }}"
-        bench_output: "write-bw-{{ item[1] }}-{{ item[2] }}-{{ item[3] }}-{{ item[4] }}.data"
-        bench_count: 100000
+        bench_output: "write-bw-single-size-{{item[3] }}-{{ item[1] }}-ack-{{ item[2] }}-unack-{{ item[4] }}"
+        bench_count: 1048576
       with_nested:
         - ["bw"]
-        - ["writeImm", "writeOff", "writeRev"]
+          #- ["writeImm", "writeOff", "writeRev"]
+        - ["writeImm"]
         - ["send", "read"]
-        - [16, 32, 64, 128, 1024, 4096, 8192, 16384]
-        - [1, 4, 8, 16, 32, 64, 128]
+        - [16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384] 
+        - [64]
+
 
 
 - hosts: ault_runner
