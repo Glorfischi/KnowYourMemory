@@ -32,6 +32,8 @@ class AckReceiver {
     virtual kym::Status Close() = 0;
 
     virtual kym::StatusOr<uint32_t> Get() = 0;
+    // Will eventually update the head and will return a new head in this or subsequent calls
+    virtual kym::StatusOr<uint32_t> GetEventually() = 0; 
 };
 
 
@@ -61,9 +63,12 @@ class SendAckReceiver : public AckReceiver {
     Status Close();
 
     StatusOr<uint32_t> Get();
+    StatusOr<uint32_t> GetEventually(){return this->Get();}; 
   private:
     endpoint::Endpoint *ep_; 
     endpoint::IReceiveQueue *rq_;
+
+    uint32_t last_offset_ = 0;
 };
 StatusOr<SendAckReceiver *> GetSendAckReceiver(endpoint::Endpoint *ep);
 
@@ -93,6 +98,7 @@ class ReadAckReceiver : public AckReceiver {
     Status Close();
 
     StatusOr<uint32_t> Get();
+    StatusOr<uint32_t> GetEventually();
   private:
     endpoint::Endpoint *ep_; 
 
@@ -101,6 +107,9 @@ class ReadAckReceiver : public AckReceiver {
 
     struct ibv_mr *mr_;
     volatile uint32_t *curr_offset_;
+
+    uint32_t last_offset_;
+    uint32_t waiting_;
 };
 StatusOr<ReadAckReceiver *> GetReadAckReceiver(endpoint::Endpoint *ep, AcknowledgerContext ctx);
 

@@ -111,10 +111,10 @@ StatusOr<uint64_t> WriteReverseSender::SendAsync(SendRegion reg){
     start = std::chrono::high_resolution_clock::now();
   }
   uint32_t len = reg.length+2*sizeof(char)+sizeof(uint32_t);
-  //bool update = false;
-  //auto addr_s = this->rbuf_->GetWriteAddr(len, &update);
-  auto addr_s = this->rbuf_->GetWriteAddr(len);
+  bool update = false;
+  auto addr_s = this->rbuf_->GetWriteAddr(len, &update); // update means we should premtively get the new head, to not empty our pipeline
   if (!addr_s.ok()){
+    //info(stderr, "======================================== RNR ======================\n");
     auto head_s = this->ack_->Get();
     if (!head_s.ok()){
       return head_s.status().Wrap("error getting new head");
@@ -123,7 +123,6 @@ StatusOr<uint64_t> WriteReverseSender::SendAsync(SendRegion reg){
     addr_s = this->rbuf_->GetWriteAddr(len);
     int rnr_i = 0;
     while (!addr_s.ok()){
-      //info(stderr, "======================================== RNR ======================\n");
       head_s = this->ack_->Get();
       if (!head_s.ok()){
         return addr_s.status().Wrap("error getting head in RNR");
@@ -135,9 +134,9 @@ StatusOr<uint64_t> WriteReverseSender::SendAsync(SendRegion reg){
     }
     
   }
-  /*if (update) {
+  if (update) {
     d_head_up++;
-    auto head_s = this->ack_->Get();
+    auto head_s = this->ack_->GetEventually();
     if (!head_s.ok()){
       return head_s.status().Wrap("error getting new head");
     }
@@ -145,7 +144,7 @@ StatusOr<uint64_t> WriteReverseSender::SendAsync(SendRegion reg){
     if (d_head_up%1000 == 0) {
       info(stderr, "UpdateHead the %d time\n", d_head_up);
     }
-  }*/
+  }
   uint64_t addr = addr_s.value();
 
   auto stat = this->ep_->PostWrite(id, reg.lkey, (char *)reg.addr-sizeof(char), len, addr, this->rbuf_->GetKey());

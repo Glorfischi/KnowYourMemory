@@ -92,6 +92,7 @@ StatusOr<uint32_t> SendAckReceiver::Get(){
       return stat;
     }
   }
+  this->last_offset_ = offset;
   return offset;
 }
 
@@ -173,6 +174,40 @@ StatusOr<uint32_t> ReadAckReceiver::Get(){
     }
     id = wc_s.value().wr_id;
   }
+  return *this->curr_offset_;
+}
+
+StatusOr<uint32_t> ReadAckReceiver::GetEventually(){
+  // Hacky way to say. If we still see the same offset and the sender has not been asking "too often" 
+  // the last request is probably not done yet and we should not send another one.
+  if (*this->curr_offset_ == this->last_offset_ && this->waiting_ < 100) {
+    return *this->curr_offset_;
+  }
+  this->last_offset_ = *this->curr_offset_;
+  this->waiting_ = 0;
+
+  struct ibv_sge sge;
+  sge.addr = (uintptr_t)this->mr_->addr;
+  sge.length = sizeof(uint32_t);
+  sge.lkey =  this->mr_->lkey;
+  struct ibv_send_wr wr, *bad;
+
+  wr.wr_id = 0;
+  wr.next = NULL;
+  wr.sg_list = &sge;
+  wr.num_sge = 1;
+  wr.opcode = IBV_WR_RDMA_READ;
+  wr.send_flags = 0;  
+  wr.wr.rdma.remote_addr = this->addr_;
+  wr.wr.rdma.rkey = this->key_;
+
+
+  auto stat = this->ep_->PostSendRaw(&wr, &bad);
+  if (!stat.ok()){
+    return stat;
+  }
+
+
   return *this->curr_offset_;
 }
 
