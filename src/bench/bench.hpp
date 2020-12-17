@@ -27,6 +27,7 @@ kym::StatusOr<uint64_t> test_bw_send(kym::connection::Sender *snd, int count, in
 kym::StatusOr<uint64_t> test_bw_limit_send(kym::connection::Sender *snd, int count, int size, int unack, int max_msgps);
 kym::StatusOr<uint64_t> test_bw_batch_send(kym::connection::BatchSender *snd, int count, int size, int batch, int unack);
 kym::StatusOr<uint64_t> test_bw_recv(kym::connection::Receiver *rcv, int count, int size);
+kym::StatusOr<uint64_t> test_bw_recv(std::vector<kym::connection::Receiver *>rcvers, int count, int size);
 
 
 #endif // KYM_BENCH_BENCH_HPP

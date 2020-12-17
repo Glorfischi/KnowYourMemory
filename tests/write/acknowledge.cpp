@@ -7,6 +7,12 @@
 #include <infiniband/verbs.h>
 #include <string>
 
+#include "debug.h"
+
+namespace {
+  int d_ack = 0;
+}
+
 namespace kym {
 namespace connection {
 
@@ -40,7 +46,7 @@ AcknowledgerContext SendAcknowledger::GetContext(){
 
 
 StatusOr<SendAckReceiver *> GetSendAckReceiver(endpoint::Endpoint *ep){
-  auto rq_s = endpoint::GetReceiveQueue(ep, 4, 10);
+  auto rq_s = endpoint::GetReceiveQueue(ep, 4, 100);
   if (!rq_s.ok()){
     return rq_s.status().Wrap("Error setting up receive queue");
   }
@@ -115,9 +121,11 @@ Status ReadAcknowledger::Close() {
 void ReadAcknowledger::Ack(volatile uint32_t off){
   *this->curr_offset_ = off;
 }
+
 Status ReadAcknowledger::Flush(){
   return Status();
 }
+
 AcknowledgerContext ReadAcknowledger::GetContext(){
   auto ctx = AcknowledgerContext();
   *(uint64_t *)ctx.data = (uint64_t)this->mr_->addr;
@@ -146,17 +154,25 @@ Status ReadAckReceiver::Close(){
     return Status(StatusCode::Internal, "Error deregistering mr " + std::to_string(ret));
   }
   free(this->mr_->addr);
+  info(stderr, "Got new head %d times\n", d_ack);
   return this->ep_->Close();
 }
 StatusOr<uint32_t> ReadAckReceiver::Get(){
+  d_ack++;
   auto stat = this->ep_->PostRead(0, this->mr_->lkey, this->mr_->addr, sizeof(uint32_t), this->addr_, this->key_);
   if (!stat.ok()){
     return stat;
   }
-  auto wc_s = this->ep_->PollSendCq();
-  if (!wc_s.ok()){
-    return wc_s.status();
+  // This will block until we actually updated 
+  int id = 1;
+  while (id != 0){
+    auto wc_s = this->ep_->PollSendCq();
+    if (!wc_s.ok()){
+      return wc_s.status();
+    }
+    id = wc_s.value().wr_id;
   }
+  
   return *this->curr_offset_;
 }
 

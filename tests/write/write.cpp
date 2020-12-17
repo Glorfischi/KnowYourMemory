@@ -26,8 +26,8 @@ namespace kym {
 namespace connection {
 
 namespace {
-  uint32_t write_buf_size = 4*1024*1024;
-  uint32_t inflight = 300;
+  uint32_t write_buf_size = 16*1024*1024;
+  uint32_t inflight = 400;
   struct conn_details {
     WriteOpts opts; // 2 Bytes
     ringbuffer::BufferContext buffer_ctx; // 16 Bytes
@@ -48,7 +48,7 @@ namespace {
   },
   .responder_resources = 16,
   .initiator_depth = 16,
-  .retry_count = 15,  
+  .retry_count = 100,  
   .rnr_retry_count = 0,
   .native_qp = false,
   .inline_recv = 0,
@@ -64,14 +64,14 @@ WriteReceiver::WriteReceiver(endpoint::Endpoint *ep, ringbuffer::Buffer *rbuf, A
   : ep_(ep), owns_ep_(true), rbuf_(rbuf), ack_(ack){
   this->length_ = write_buf_size;
   this->acked_ = 0;
-  this->max_unacked_ = write_buf_size/8;
+  this->max_unacked_ = write_buf_size/2;
 
 };
 WriteReceiver::WriteReceiver(endpoint::Endpoint *ep, bool owns_ep, ringbuffer::Buffer *rbuf, Acknowledger *ack) 
   : ep_(ep), owns_ep_(owns_ep), rbuf_(rbuf), ack_(ack){
   this->length_ = write_buf_size;
   this->acked_ = 0;
-  this->max_unacked_ = write_buf_size/8;
+  this->max_unacked_ = write_buf_size/2;
 };
 
 StatusOr<ReceiveRegion> WriteReceiver::Receive(){
@@ -283,7 +283,10 @@ Status WriteSender::Wait(uint64_t id){
       return wcStatus.status();
     }
     ibv_wc wc = wcStatus.value();
-    this->ackd_id_ = wc.wr_id;
+    if (wc.wr_id > this->ackd_id_) {
+      this->ackd_id_ = wc.wr_id;
+    }
+
   }
   return Status();
 }
@@ -542,7 +545,9 @@ Status WriteOffsetSender::Wait(uint64_t id){
       return wcStatus.status();
     }
     ibv_wc wc = wcStatus.value();
-    this->ackd_id_ = wc.wr_id;
+    if (wc.wr_id > this->ackd_id_) {
+      this->ackd_id_ = wc.wr_id;
+    }
   }
   return Status();
 }

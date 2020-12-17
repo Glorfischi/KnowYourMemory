@@ -22,6 +22,8 @@
 #include "error.hpp"
 #include "write.hpp"
 
+#include "debug.h"
+
 cxxopts::ParseResult parse(int argc, char* argv[]) {
   cxxopts::Options options(argv[0], "sendrecv");
   try {
@@ -36,6 +38,7 @@ cxxopts::ParseResult parse(int argc, char* argv[]) {
       ("n,iters",  "Number of exchanges" , cxxopts::value<int>()->default_value("1000"))
       ("s,size",  "Size of message to exchange", cxxopts::value<int>()->default_value("60"))
       ("c,conn",  "Number of connections" , cxxopts::value<int>()->default_value("1"))
+      ("single-receiver",  "whether to have single receiver for all connections N:1" , cxxopts::value<bool>()->default_value("false"))
       ("batch",  "Number of messages to send in a single batch. Only relevant for bandwidth benchmark", cxxopts::value<int>()->default_value("1"))
       ("unack",  "Number of messages that can be unacknowleged. Only relevant for bandwidth benchmark", cxxopts::value<int>()->default_value("100"))
       ("sender", "Write sender type (write, writeImm, writeOff)", cxxopts::value<std::string>()->default_value("write"))
@@ -86,6 +89,7 @@ int main(int argc, char* argv[]) {
   int unack = flags["unack"].as<int>();  
 
   int conn_count = flags["conn"].as<int>();  
+  bool singlercv = flags["single-receiver"].as<bool>();  
 
   bool server = flags["server"].as<bool>();  
   bool client = flags["client"].as<bool>();  
@@ -118,6 +122,7 @@ int main(int argc, char* argv[]) {
 
   if (server){
     std::vector<std::thread> workers;
+    std::vector<kym::connection::Receiver *> conns;
 
     auto ln_s = kym::connection::ListenWrite(ip, 9999);
     if (!ln_s.ok()){
@@ -155,39 +160,59 @@ int main(int argc, char* argv[]) {
         }
         conn = conn_s.value();
       }
+      conns.push_back(conn);
 
-      workers.push_back(std::thread([i, bw, lat, conn, snd, rcv, count, size, &measurements](){
-        kym::Status stat;
-        std::vector<float> *m = new std::vector<float>();
-        if (lat) {
-          stat = test_lat_recv(conn, count);
-        } else if (bw) {
-          auto bw_s = test_bw_recv(conn, count, size);
-          if (!bw_s.ok()){
-            std::cerr << "Error running benchmark: " << bw_s.status() << std::endl;
+      if (!singlercv) {
+        workers.push_back(std::thread([i, bw, lat, conn, snd, rcv, count, size, &measurements](){
+          set_core_affinity(i+2);
+          kym::Status stat;
+          std::vector<float> *m = new std::vector<float>();
+          if (lat) {
+            stat = test_lat_recv(conn, count);
+          } else if (bw) {
+            auto bw_s = test_bw_recv(conn, count, size);
+            if (!bw_s.ok()){
+              std::cerr << "Error running benchmark: " << bw_s.status() << std::endl;
+              return 1;
+            }
+            m->push_back(bw_s.value());
+          } else {
+            stat = test_lat_pong(conn, conn, count, size);
+          }
+          if (!stat.ok()){
+            std::cerr << "Error running benchmark: " << stat << std::endl;
             return 1;
           }
-          m->push_back(bw_s.value());
-        } else {
-          stat = test_lat_pong(conn, conn, count, size);
-        }
-        if (!stat.ok()){
-          std::cerr << "Error running benchmark: " << stat << std::endl;
+
+
+          if (snd != nullptr){
+            rcv->Close();
+            snd->Close();
+          } else {
+            conn->Close();
+          }
+          measurements[i] = m;
+          delete conn;
+          return 0;
+        }));
+      }
+    }
+
+    if (singlercv) {
+      set_core_affinity(1);
+      if (bw) {
+        std::vector<float> *m = new std::vector<float>();
+        auto bw_s = test_bw_recv(conns, count, size);
+        if (!bw_s.ok()){
+          int cpu_num = sched_getcpu();
+          std::cerr << "[CPU: " << cpu_num << "] Error running benchmark: " << bw_s.status() << std::endl;
           return 1;
         }
-
-
-        if (snd != nullptr){
-          rcv->Close();
-          snd->Close();
-        } else {
-          conn->Close();
-        }
-        measurements[i] = m;
-        delete conn;
-        return 0;
-      }));
+        m->push_back(bw_s.value());
+        measurements[0] = m;
+      }
     }
+    info(stderr, "received\n");
     for (int i = 0; i<workers.size(); i++){
       workers[i].join();
     }
@@ -228,6 +253,7 @@ int main(int argc, char* argv[]) {
         conn = conn_s.value();
       }
       workers.push_back(std::thread([i, bw, lat, conn, snd, rcv, count, batch, size, unack, &measurements](){
+        set_core_affinity(i+2);
         kym::Status stat;
         std::vector<float> *m = new std::vector<float>();
         if (lat) {

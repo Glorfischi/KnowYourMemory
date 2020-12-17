@@ -222,7 +222,7 @@ kym::StatusOr<uint64_t> test_bw_batch_send(kym::connection::BatchSender *snd, in
       batches[j].push_back(buf);
     }
   }
-  auto stat = test_warmup_send(snd, count/4, batches[0]); // We don't touch the other batches. This might be a problem
+  auto stat = test_warmup_send(snd, count/16, batches[0]); // We don't touch the other batches. This might be a problem
   if (!stat.ok()) {
     return stat.Wrap("error during send warmup");
   }
@@ -283,7 +283,8 @@ kym::StatusOr<uint64_t> test_bw_send(kym::connection::Sender *snd, int count, in
     *(int *)buf.addr = i;
     bufs.push_back(buf);
   }
-  auto stat = test_warmup_send(snd, count/4, bufs[0]); // We don't touch the other bufs. That might be a problem..
+  info(stderr, "warmup for %d", count/16);
+  auto stat = test_warmup_send(snd, count/16, bufs[0]); // We don't touch the other bufs. That might be a problem..
   if (!stat.ok()) {
     return stat.Wrap("error during send warmup");
   }
@@ -343,7 +344,7 @@ kym::StatusOr<uint64_t> test_bw_limit_send(kym::connection::Sender *snd, int cou
     *(int *)buf.addr = i;
     bufs.push_back(buf);
   }
-  auto stat = test_warmup_send(snd, count/4, bufs[0]); // We don't touch the other bufs. That might be a problem..
+  auto stat = test_warmup_send(snd, count/16, bufs[0]); // We don't touch the other bufs. That might be a problem..
   if (!stat.ok()) {
     return stat.Wrap("error during send warmup");
   }
@@ -394,11 +395,11 @@ kym::StatusOr<uint64_t> test_bw_limit_send(kym::connection::Sender *snd, int cou
   return (double)size*((double)count/(dur/1e9));
 }
 kym::StatusOr<uint64_t> test_bw_recv(kym::connection::Receiver *rcv, int count, int size){
-  int interval = std::min(count, 1000);
+  int interval = std::min(count, 5000);
   std::vector<long> measurements;
   measurements.reserve(count/interval);
 
-  auto stat = test_warmup_receive(rcv, count/4);
+  auto stat = test_warmup_receive(rcv, count/16);
   if (!stat.ok()) {
     return stat.Wrap("error during receive warmup");
   }
@@ -428,9 +429,73 @@ kym::StatusOr<uint64_t> test_bw_recv(kym::connection::Receiver *rcv, int count, 
     }
   }
 
+  for (auto m : measurements) {
+    std::cout << m << std::endl;
+  }
+
   std::sort (measurements.begin(), measurements.end());
   int median = (int)(measurements.size()*0.5);
 
-  //return (double)size*(double)(count-1)/(measurements[median]/1e9);
+  return measurements[median];
+}
+
+
+kym::StatusOr<uint64_t> test_bw_recv(std::vector<kym::connection::Receiver *>rcvers, int count, int size) {
+  int interval = std::min(count, 5000);
+  int cn = rcvers.size();
+  info(stderr, "cn: %d\n", cn);
+  std::vector<long> measurements;
+  measurements.reserve(count/interval);
+
+  // Warmup each connection 
+  info(stderr, "warmup for %d", count/16);
+  for (int k = 0; k<count/16; k++){
+    for ( auto rcv : rcvers){
+      auto buf_s = rcv->Receive();
+      if (!buf_s.ok()){
+        return buf_s.status().Wrap("error receiving buffer");
+      }
+      auto free_s = rcv->Free(buf_s.value());
+      if (!free_s.ok()){
+        return free_s.Wrap("error freeing receive buffer");
+      }
+    }
+  }
+
+  info(stderr, "Warm\n");
+  auto start = std::chrono::high_resolution_clock::now();
+  auto begin = start;
+  int i = 0;
+  int j = 0;
+  while(i<count){
+    i++;
+    j++;
+    for (auto rcv : rcvers) {
+      auto buf_s = rcv->Receive();
+      if (!buf_s.ok()){
+        return buf_s.status().Wrap("error receiving buffer");
+      }
+      //std::cout << "# GOT: " << *(int *)buf_s.value().addr << std::endl;
+      auto free_s = rcv->Free(buf_s.value());
+      if (!free_s.ok()){
+        return free_s.Wrap("error receiving buffer");
+      }
+    }
+    if (j == interval) {
+      auto now = std::chrono::high_resolution_clock::now(); 
+      j = 0;
+      auto dur = std::chrono::duration_cast<std::chrono::nanoseconds>(now - start).count();
+      measurements.push_back(interval*cn*(double)size/(dur/1e9));
+      start = now;
+    }
+  }
+  info(stderr, "done\n");
+
+  std::sort (measurements.begin(), measurements.end());
+  int median = (int)(measurements.size()*0.5);
+  auto end = std::chrono::high_resolution_clock::now();
+  double dur = std::chrono::duration_cast<std::chrono::nanoseconds>(end-begin).count();
+
+  //return (double)size*cn*((double)count/(dur/1e9));
   return measurements[median];
 }

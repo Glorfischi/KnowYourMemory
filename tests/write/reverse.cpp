@@ -46,7 +46,6 @@ StatusOr<ReceiveRegion> WriteReverseReceiver::Receive(){
   // Also we might acutally roll over the beginning of the buffer. To prevent that let's skip to the mirrored buffer..
   uint32_t msg_len = *msg_len_addr;
 
-  
   void *addr = this->rbuf_->Read(msg_len);
   reg.addr = addr;
   reg.length = msg_len-sizeof(char)-sizeof(uint32_t); // Last 5 bytes are not interesting
@@ -112,13 +111,16 @@ StatusOr<uint64_t> WriteReverseSender::SendAsync(SendRegion reg){
     }
     this->rbuf_->UpdateHead(head_s.value());
     addr_s = this->rbuf_->GetWriteAddr(len);
+    int rnr_i = 0;
     while (!addr_s.ok()){
       head_s = this->ack_->Get();
       if (!head_s.ok()){
-        return addr_s.status().Wrap(head_s.status().message());
+        return addr_s.status().Wrap("error getting head in RNR");
       }
       this->rbuf_->UpdateHead(head_s.value());
       addr_s = this->rbuf_->GetWriteAddr(len);
+      rnr_i++;
+      info(stderr, "RNR Error %d\n", rnr_i);
     }
   }
   uint64_t addr = addr_s.value();
@@ -151,7 +153,9 @@ Status WriteReverseSender::Wait(uint64_t id){
       return wcStatus.status();
     }
     ibv_wc wc = wcStatus.value();
-    this->ackd_id_ = wc.wr_id;
+    if (wc.wr_id > this->ackd_id_) {
+      this->ackd_id_ = wc.wr_id;
+    }
   }
   return Status();
 }
