@@ -11,7 +11,7 @@ SRCPATH = $(PREFIX)/src
 BIN = $(BINDIR)/write
 SRCS=  ./main.cpp ./write.cpp ./reverse.cpp ./acknowledge.cpp $(SRCPATH)/endpoint.cpp $(SRCPATH)/mm/dumb_allocator.cpp \
 			 $(SRCPATH)/bench/bench.cpp  $(SRCPATH)/receive_queue.cpp $(SRCPATH)/ring_buffer/ring_buffer.cpp  \
-			 $(SRCPATH)/ring_buffer/magic_buffer.cpp $(SRCPATH)/ring_buffer/reverse_buffer.cpp
+			 $(SRCPATH)/ring_buffer/magic_buffer.cpp $(SRCPATH)/ring_buffer/reverse_buffer.cpp $(SRCPATH)/async_events.cpp
 OBJS= $(SRCS:.cpp=.o)
 
 TSRCS=  ./write_test.cpp ./write.cpp ./reverse.cpp ./acknowledge.cpp $(SRCPATH)/endpoint.cpp $(SRCPATH)/mm/dumb_allocator.cpp \
@@ -24,7 +24,7 @@ all: $(OBJS)
 	mkdir -pm 755 $(BINDIR)
 	$(CC) $(CFLAGS) -o $(BIN) $(OBJS) $(LDFLAGS)
 
-debug: CFLAGS += -DDEBUG -g -O0
+debug: CFLAGS += -DDEBUG -g -O2
 debug: $(OBJS)
 	mkdir -pm 755 $(BINDIR)
 	$(CC) $(CFLAGS) -o $(BIN) $(OBJS) $(LDFLAGS)

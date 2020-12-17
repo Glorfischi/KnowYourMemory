@@ -183,6 +183,8 @@ class WriteConnection : public Connection, public BatchSender {
 
     ~WriteConnection();
 
+    endpoint::Endpoint *GetEp(){return this->ep_;};
+
     Status Close();
 
     StatusOr<ReceiveRegion> Receive(){return this->rcv_->Receive();};
@@ -214,6 +216,8 @@ class WriteListener {
     WriteListener(endpoint::Listener *listener)
       : listener_(listener){};
     ~WriteListener();
+
+    endpoint::Listener *GetListener(){return this->listener_;};
 
     Status Close();
 

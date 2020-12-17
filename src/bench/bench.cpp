@@ -313,6 +313,7 @@ kym::StatusOr<uint64_t> test_bw_send(kym::connection::Sender *snd, int count, in
       return stat.Wrap("error waiting for buffer to be sent");
     }
 
+    *(int *)bufs[i%unack].addr = i;
     auto send_s = snd->SendAsync(bufs[i%unack]);
     if (!send_s.ok()){
       for(auto buf : bufs){
@@ -408,18 +409,19 @@ kym::StatusOr<uint64_t> test_bw_recv(kym::connection::Receiver *rcv, int count, 
   int i = 0;
   int j = 0;
   while(i<count){
-    i++;
-    j++;
-    if (i % 100 == 0) debug(stderr, "BW RECEIVE: %d\t[rcv: %p, core: %d]\n",i, rcv, sched_getcpu());
+    //if (i % 100 == 0) debug(stderr, "BW RECEIVE: %d\t[rcv: %p, core: %d]\n",i, rcv, sched_getcpu());
     auto buf_s = rcv->Receive();
     if (!buf_s.ok()){
       return buf_s.status().Wrap("error receiving buffer");
     }
     //std::cout << "# GOT: " << *(int *)buf_s.value().addr << std::endl;
+    if (*(int *)buf_s.value().addr != i) info(stderr, "Error expected %d, got %d\n", i,  *(int *)buf_s.value().addr);
     auto free_s = rcv->Free(buf_s.value());
     if (!free_s.ok()){
       return free_s.Wrap("error receiving buffer");
     }
+    i++;
+    j++;
     if (j == interval) {
       auto now = std::chrono::high_resolution_clock::now(); 
       j = 0;
@@ -490,12 +492,9 @@ kym::StatusOr<uint64_t> test_bw_recv(std::vector<kym::connection::Receiver *>rcv
     }
   }
   info(stderr, "done\n");
-
   std::sort (measurements.begin(), measurements.end());
   int median = (int)(measurements.size()*0.5);
   auto end = std::chrono::high_resolution_clock::now();
   double dur = std::chrono::duration_cast<std::chrono::nanoseconds>(end-begin).count();
-
-  //return (double)size*cn*((double)count/(dur/1e9));
   return measurements[median];
 }

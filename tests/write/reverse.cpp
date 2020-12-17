@@ -18,10 +18,14 @@
 #include "ring_buffer/reverse_buffer.hpp"
 
 #include "debug.h"
+#include <chrono>
 
 #include "acknowledge.hpp"
 
-
+namespace {
+  int d_head_up = 0;
+  int d_rnr = 0;
+}
 
 namespace kym {
 namespace connection {
@@ -36,10 +40,10 @@ StatusOr<ReceiveRegion> WriteReverseReceiver::Receive(){
   // We check the last byte. If this byte was written in all x86 systems we know the write is completed
   volatile char *next = ((volatile char *)this->rbuf_->GetReadPtr()) + this->length_;
   volatile uint32_t *msg_len_addr = (volatile uint32_t *)(next - sizeof(uint32_t));
-  debug(stderr, "Spinning for next message\t[next: %p, offset: %d, msg_len_addr: %p]\n",
-      next, this->rbuf_->GetReadOff(), msg_len_addr);  
+  //debug(stderr, "Spinning for next message\t[next: %p, offset: %d, msg_len_addr: %p]\n",
+  //    next, this->rbuf_->GetReadOff(), msg_len_addr);  
   while (*next == 0){}
-  debug(stderr, "Spunn next message\t[*next: %d]\n", *next);
+  //debug(stderr, "Spunn next message\t[*next: %d]\n", *next);
 
   // We cannot spin on the length, as we cannot be certain that the complete 4 bytes have been written when we
   // read it. Giving us some potentially interesting message lengths
@@ -51,7 +55,7 @@ StatusOr<ReceiveRegion> WriteReverseReceiver::Receive(){
   reg.length = msg_len-sizeof(char)-sizeof(uint32_t); // Last 5 bytes are not interesting
   reg.lkey = 0;
   reg.context = 0;
-  debug(stderr, "Receiving message\t[addr: %p, msg_length: %d, reg_length %d]\n", addr, msg_len, reg.length);  
+  //debug(stderr, "Receiving message\t[addr: %p, msg_length: %d, reg_length %d]\n", addr, msg_len, reg.length);  
   return reg;
 }
 
@@ -102,7 +106,13 @@ Status WriteReverseSender::Send(SendRegion reg){
 
 StatusOr<uint64_t> WriteReverseSender::SendAsync(SendRegion reg){
   auto id = this->next_id_++;
+  std::chrono::time_point<std::chrono::high_resolution_clock> start;
+  if (id%500000 == 0){
+    start = std::chrono::high_resolution_clock::now();
+  }
   uint32_t len = reg.length+2*sizeof(char)+sizeof(uint32_t);
+  //bool update = false;
+  //auto addr_s = this->rbuf_->GetWriteAddr(len, &update);
   auto addr_s = this->rbuf_->GetWriteAddr(len);
   if (!addr_s.ok()){
     auto head_s = this->ack_->Get();
@@ -113,6 +123,7 @@ StatusOr<uint64_t> WriteReverseSender::SendAsync(SendRegion reg){
     addr_s = this->rbuf_->GetWriteAddr(len);
     int rnr_i = 0;
     while (!addr_s.ok()){
+      //info(stderr, "======================================== RNR ======================\n");
       head_s = this->ack_->Get();
       if (!head_s.ok()){
         return addr_s.status().Wrap("error getting head in RNR");
@@ -122,7 +133,19 @@ StatusOr<uint64_t> WriteReverseSender::SendAsync(SendRegion reg){
       rnr_i++;
       info(stderr, "RNR Error %d\n", rnr_i);
     }
+    
   }
+  /*if (update) {
+    d_head_up++;
+    auto head_s = this->ack_->Get();
+    if (!head_s.ok()){
+      return head_s.status().Wrap("error getting new head");
+    }
+    this->rbuf_->UpdateHead(head_s.value());
+    if (d_head_up%1000 == 0) {
+      info(stderr, "UpdateHead the %d time\n", d_head_up);
+    }
+  }*/
   uint64_t addr = addr_s.value();
 
   auto stat = this->ep_->PostWrite(id, reg.lkey, (char *)reg.addr-sizeof(char), len, addr, this->rbuf_->GetKey());
@@ -131,6 +154,10 @@ StatusOr<uint64_t> WriteReverseSender::SendAsync(SendRegion reg){
   }
   // One byte does not belong to us.
   this->rbuf_->Write(len-sizeof(char));
+  if (id%500000 == 0){
+    auto end = std::chrono::high_resolution_clock::now();
+    info(stderr, "writing took %f us\n", std::chrono::duration_cast<std::chrono::nanoseconds>(end-start).count()/1000.0);
+  }
   return id;
 }
 
@@ -147,6 +174,11 @@ StatusOr<uint64_t> WriteReverseSender::SendAsync(std::vector<SendRegion> regions
 }
 
 Status WriteReverseSender::Wait(uint64_t id){
+  std::chrono::time_point<std::chrono::high_resolution_clock> start;
+  if (id%500000 == 0){
+    start = std::chrono::high_resolution_clock::now();
+  }
+  int i = 0;
   while (this->ackd_id_ < id){
     auto wcStatus = this->ep_->PollSendCq();
     if (!wcStatus.ok()){
@@ -156,6 +188,11 @@ Status WriteReverseSender::Wait(uint64_t id){
     if (wc.wr_id > this->ackd_id_) {
       this->ackd_id_ = wc.wr_id;
     }
+    i++;
+  }
+  if (id%500000 == 0){
+    auto end = std::chrono::high_resolution_clock::now();
+    info(stderr, "waited for %f us, acked %d msgs\n", std::chrono::duration_cast<std::chrono::nanoseconds>(end-start).count()/1000.0, i);
   }
   return Status();
 }

@@ -18,6 +18,7 @@
 
 #include "conn.hpp"
 #include "bench/bench.hpp"
+#include "async_events.hpp"
 
 #include "error.hpp"
 #include "write.hpp"
@@ -106,7 +107,6 @@ int main(int argc, char* argv[]) {
   } else if (sender.compare("writeOff") == 0){
     opts.sender = kym::connection::kSenderWriteOffset;
   } else if (sender.compare("writeRev") == 0){
-    opts.buffer = kym::connection::kBufferReverse;
     opts.sender = kym::connection::kSenderWriteReverse;
     opts.buffer = kym::connection::kBufferReverse;
   } else {
@@ -131,6 +131,7 @@ int main(int argc, char* argv[]) {
     }
     kym::connection::WriteListener *ln = ln_s.value();
 
+    ae_thread = DebugTrailAsyncEvents(ln->GetListener()->GetContext());
     for (int i = 0; i<conn_count; i++){
       kym::connection::WriteConnection *conn;
       kym::connection::WriteReceiver *rcv = 0;
@@ -222,7 +223,7 @@ int main(int argc, char* argv[]) {
 
   if(client){
     std::vector<std::thread> workers;
-    std::chrono::milliseconds timespan(1000); // Make sure we received all acks
+    std::chrono::milliseconds timespan(2000);
     std::this_thread::sleep_for(timespan);
     for (int i = 0; i<conn_count; i++){
       kym::connection::WriteConnection *conn;
@@ -252,8 +253,11 @@ int main(int argc, char* argv[]) {
         }
         conn = conn_s.value();
       }
+      ae_thread = DebugTrailAsyncEvents(conn->GetEp()->GetContext());
       workers.push_back(std::thread([i, bw, lat, conn, snd, rcv, count, batch, size, unack, &measurements](){
         set_core_affinity(i+2);
+        std::chrono::milliseconds timespan(1000);
+        std::this_thread::sleep_for(timespan);
         kym::Status stat;
         std::vector<float> *m = new std::vector<float>();
         if (lat) {

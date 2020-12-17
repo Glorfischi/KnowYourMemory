@@ -27,6 +27,11 @@
 
 #include "error.hpp"
 
+namespace {
+  int d_read = 0;
+  int d_write = 0;
+  int d_raw = 0;
+}
 
 namespace kym {
 namespace endpoint {
@@ -85,6 +90,7 @@ Status Endpoint::Close() {
     // TODO(Fischi) Map error codes
     return Status(StatusCode::Internal, "error disconnecting endpoint");
   }
+  info(stderr, "Performed %d writes and %d reads -> total %d\n", d_write, d_read, d_raw);
   return Status();
 }
 
@@ -114,6 +120,7 @@ size_t Endpoint::GetConnectionInfo(void ** buf){
 }
 
 Status Endpoint::PostSendRaw(struct ibv_send_wr *wr , struct ibv_send_wr **bad_wr){
+  d_raw++;
   int ret = ibv_post_send(this->id_->qp, wr, bad_wr);
   if (ret) {
     // TODO(Fischi) Map error codes
@@ -175,6 +182,7 @@ Status Endpoint::PostImmidate(uint64_t ctx, uint32_t imm){
   return this->PostSendRaw(&wr, &bad);
 }
 Status Endpoint::PostRead(uint64_t ctx, uint32_t lkey, void *addr, size_t size, uint64_t remote_addr, uint32_t rkey){
+  d_read++;
   struct ibv_sge sge;
   sge.addr = (uintptr_t)addr;
   sge.length = size;
@@ -193,6 +201,7 @@ Status Endpoint::PostRead(uint64_t ctx, uint32_t lkey, void *addr, size_t size, 
   return this->PostSendRaw(&wr, &bad);
 }
 Status Endpoint::PostWrite(uint64_t ctx, uint32_t lkey, void *addr, size_t size, uint64_t remote_addr, uint32_t rkey){
+  d_write++;
   struct ibv_sge sge;
   sge.addr = (uintptr_t)addr;
   sge.length = size;
@@ -214,6 +223,7 @@ Status Endpoint::PostWrite(uint64_t ctx, uint32_t lkey, void *addr, size_t size,
 
 Status Endpoint::PostWriteWithImmidate(uint64_t ctx, uint32_t lkey, void *addr, size_t size, 
     uint64_t remote_addr, uint32_t rkey, uint32_t imm){
+  d_write++;
   struct ibv_sge sge;
   sge.addr = (uintptr_t)addr;
   sge.length = size;

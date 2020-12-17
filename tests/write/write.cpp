@@ -20,6 +20,12 @@
 #include "acknowledge.hpp"
 #include "reverse.hpp"
 
+#include "debug.h"
+
+namespace {
+  int d_head_up = 0;
+  int d_rnr = 0;
+}
 
 
 namespace kym {
@@ -48,7 +54,7 @@ namespace {
   },
   .responder_resources = 16,
   .initiator_depth = 16,
-  .retry_count = 100,  
+  .retry_count = 0,  
   .rnr_retry_count = 0,
   .native_qp = false,
   .inline_recv = 0,
@@ -199,19 +205,26 @@ StatusOr<uint64_t> WriteSender::SendAsync(SendRegion reg){
 StatusOr<uint64_t> get_write_addr_or_die(ringbuffer::RemoteBuffer *rbuf, AckReceiver *ack, uint32_t len){
   auto addr_s = rbuf->GetWriteAddr(len);
   if (!addr_s.ok()){
+    d_head_up++;
+    if (d_head_up%10 == 0) {
+      info(stderr, "UpdateHead the %d time\n", d_head_up);
+    }
     auto head_s = ack->Get();
     if (!head_s.ok()){
       return head_s.status().Wrap("error getting new head");
     }
     rbuf->UpdateHead(head_s.value());
     addr_s = rbuf->GetWriteAddr(len);
+    int rnr_i = 0;
     while (!addr_s.ok()){
+      
       head_s = ack->Get();
       if (!head_s.ok()){
         return addr_s.status().Wrap(head_s.status().message());
       }
       rbuf->UpdateHead(head_s.value());
       addr_s = rbuf->GetWriteAddr(len);
+      //info(stderr, "RNR %d i %d\n", d_rnr++, rnr_i++);
     }
   }
   return addr_s;

@@ -53,6 +53,7 @@ class RemoteBuffer {
     // Returns the write address if you want to write len bytes to the buffer without updating the tail
     // Can return an error if there is not enough free space
     virtual StatusOr<uint64_t>GetWriteAddr(uint32_t len) = 0;
+    virtual StatusOr<uint64_t>GetWriteAddr(uint32_t len, bool *update) = 0;
     // Returns the tail address if you want to write len bytes to the buffer without actually updating the tail
     // Can return an error if there is not enough free space
     virtual StatusOr<uint32_t>GetNextTail(uint32_t len) = 0;
@@ -95,6 +96,7 @@ class BasicRemoteBuffer : public RemoteBuffer {
     uint32_t GetTail();
 
     StatusOr<uint64_t>GetWriteAddr(uint32_t len);
+    StatusOr<uint64_t>GetWriteAddr(uint32_t len, bool *update){return Status(StatusCode::NotImplemented);};
     StatusOr<uint32_t>GetNextTail(uint32_t len);
     StatusOr<uint64_t>Write(uint32_t len);
   private:
@@ -142,6 +144,7 @@ class MagicRemoteBuffer : public RemoteBuffer {
     uint32_t GetTail();
 
     StatusOr<uint64_t>GetWriteAddr(uint32_t len);
+    StatusOr<uint64_t>GetWriteAddr(uint32_t len, bool *update){return Status(StatusCode::NotImplemented);};
     StatusOr<uint32_t>GetNextTail(uint32_t len);
     StatusOr<uint64_t>Write(uint32_t len);
   private:

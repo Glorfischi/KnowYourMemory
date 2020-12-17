@@ -9,6 +9,8 @@
 #include <infiniband/verbs.h>
 #include <string>
 
+#include "debug.h"
+
 namespace kym {
 namespace ringbuffer {
 

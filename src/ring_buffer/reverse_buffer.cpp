@@ -44,7 +44,7 @@ void *ReverseRingBuffer::Read(uint32_t len) {
   // Wrap arround front
   this->read_ptr_ = (this->read_ptr_ > len) ? this->read_ptr_ - len : this->length_ + this->read_ptr_ - len;
   uint32_t read_offset = this->read_ptr_;
-  debug(stderr, "Reverse buffer read\t[read_offset: %d]\n", read_offset);
+  //debug(stderr, "Reverse buffer read\t[read_offset: %d]\n", read_offset);
   this->outstanding_.push_back(read_offset);
   return (void *)((size_t)this->addr_ + read_offset);
 }
@@ -98,6 +98,8 @@ ReverseRemoteBuffer::ReverseRemoteBuffer(BufferContext ctx){
 }
 
 void ReverseRemoteBuffer::UpdateHead(uint32_t head){
+  //if(this->head_ != head) info(stderr, "UpdateHead. Old %d, New %d, Diff %d\n", this->head_, head, head-this->head_);
+  //info(stderr, "UpdateHead. Old %d, New %d, Diff %d\n", this->head_, head, head-this->head_);
   this->head_ = head;
   this->full_ = false;
 }
@@ -115,6 +117,22 @@ StatusOr<uint64_t> ReverseRemoteBuffer::GetWriteAddr(uint32_t len){
   }
   return this->addr_ + tail_s.value();
 }
+StatusOr<uint64_t> ReverseRemoteBuffer::GetWriteAddr(uint32_t len, bool *update){
+  auto tail_s = this->GetNextTail(len);
+  if (!tail_s.ok()){
+    return tail_s.status();
+  }
+  // FIXME(Fischi) Just a quick hack
+  int buf_size = 8*1024*1024;
+  if (
+      (this->head_ > this->tail_ && (this->length_ - this->head_) + this->tail_ <= buf_size/2 ) ||
+      (this->head_ < this->tail_ && this->tail_ - this->head_ <= buf_size/2 )
+    ){
+    *update = true;
+  }
+
+  return this->addr_ + tail_s.value();
+}
 StatusOr<uint32_t> ReverseRemoteBuffer::GetNextTail(uint32_t len){
   // Check if there is space to send
   if (this->head_ == this->tail_ && this->full_){
@@ -123,7 +141,7 @@ StatusOr<uint32_t> ReverseRemoteBuffer::GetNextTail(uint32_t len){
     // We are empty, but the message is larger then our complete buffer.
     return Status(StatusCode::Unknown, "message larger then buffer");
   } else if (this->head_ > this->tail_ 
-      && (this->length_ - this->head_) + this->tail_ <= len){
+     && (this->length_ - this->head_) + this->tail_ <= len){
     // The free region does "wrap around" the end of the buffer.
     return Status(StatusCode::Unknown, "not enough free space for message");
   } else if (this->head_ < this->tail_ 
@@ -139,7 +157,7 @@ StatusOr<uint64_t> ReverseRemoteBuffer::Write(uint32_t len){
   if (!tail_s.ok()){
     return tail_s.status();
   }
-  debug(stderr, "Reverse buffer update tail\t[old_tail: %d, new_tail %d]\n", this->tail_, tail_s.value());
+  //debug(stderr, "Reverse buffer update tail\t[old_tail: %d, new_tail %d]\n", this->tail_, tail_s.value());
   this->tail_ = tail_s.value();
   this->full_ = (this->tail_ == this->head_);
 
