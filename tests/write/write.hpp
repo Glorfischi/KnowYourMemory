@@ -61,7 +61,7 @@ class WriteReceiver : public Receiver {
 
 
     StatusOr<ReceiveRegion> Receive();
-    Status Free(ReceiveRegion);
+    Status Free(const ReceiveRegion&);
   protected:
     endpoint::Endpoint *ep_;
     bool owns_ep_;
@@ -113,7 +113,7 @@ class WriteOffsetReceiver : public WriteReceiver {
     Status Close();
 
     StatusOr<ReceiveRegion> Receive();
-    Status Free(ReceiveRegion);
+    Status Free(const ReceiveRegion&);
   private:
     struct ibv_mr *tail_mr_;
     volatile uint32_t *tail_;
@@ -152,7 +152,7 @@ class WriteImmReceiver : public WriteReceiver {
       : WriteReceiver(ep, owns_ep, rbuf, ack), rq_(rq) {};
     Status Close();
     StatusOr<ReceiveRegion> Receive();
-    Status Free(ReceiveRegion);
+    Status Free(const ReceiveRegion&);
   private:
     endpoint::IReceiveQueue *rq_;
 };
@@ -188,7 +188,7 @@ class WriteConnection : public Connection, public BatchSender {
     Status Close();
 
     StatusOr<ReceiveRegion> Receive(){return this->rcv_->Receive();};
-    Status Free(ReceiveRegion reg){return this->rcv_->Free(reg);};
+    Status Free(const ReceiveRegion& reg){return this->rcv_->Free(reg);};
 
 
     StatusOr<SendRegion> GetMemoryRegion(size_t size){return this->snd_->GetMemoryRegion(size);};

@@ -31,13 +31,18 @@ class ReverseRingBuffer : public Buffer {
     void *Read(uint32_t len);
     uint32_t Free(void *addr);
   private:
+
+    inline uint32_t fastGetReadOff(){
+        return (this->read_ptr_ > 0) ? this->read_ptr_ - 1 : this->length_ - 1;
+    }
+
     struct ibv_mr *mr_;
     void *addr_;
 
     uint32_t head_;
     std::list<uint32_t> outstanding_;
     
-    uint32_t read_ptr_;
+    uint32_t read_ptr_; // it is an offset from addr
     uint32_t length_;
 };
 StatusOr<ReverseRingBuffer*> NewReverseRingBuffer(struct ibv_pd *pd, uint32_t size);

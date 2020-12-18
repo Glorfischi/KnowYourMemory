@@ -59,12 +59,17 @@ StatusOr<ReceiveRegion> WriteReverseReceiver::Receive(){
   return reg;
 }
 
-Status WriteReverseReceiver::Free(ReceiveRegion reg){
+Status WriteReverseReceiver::Free(const ReceiveRegion& reg){
   uint32_t head = this->rbuf_->Free(reg.addr);
   this->ack_->Ack(head);
-  if ((head < this->acked_ && this->acked_ - head > this->max_unacked_)
-      || (head > this->acked_ && this->acked_ + (this->length_ - head) > this->max_unacked_)){
-    auto stat = this->ack_->Flush();
+  
+  // in theory the conditions like that can be replaced with a simple math operation (e.g., addition followed by &mask) if the this->length_ is a power of 2;
+  if (
+      (head < this->acked_ && this->acked_ - head > this->max_unacked_) // if propagated and more than a threshold 
+      || (head > this->acked_ && this->acked_ + (this->length_ - head) > this->max_unacked_) // the same as above but with wrapping
+     )
+  {
+    auto stat = this->ack_->Flush(); // send ack for push approach
     if (!stat.ok()){
       return stat;
     }
@@ -88,6 +93,7 @@ StatusOr<SendRegion> WriteReverseSender::GetMemoryRegion(size_t size){
   reg.context = buf.context;
 
   // Set indicator byte
+  // Probably that is the source of problems? for 4096 we send few bytes from the first page.
   *(char *)buf.addr = 0;
   *((char *)buf.addr + buf.length - sizeof(char)) = 1;
   *(uint32_t *)((char *)buf.addr + buf.length - sizeof(char) - sizeof(uint32_t)) = size + sizeof(uint32_t) + sizeof(char);
@@ -132,7 +138,6 @@ StatusOr<uint64_t> WriteReverseSender::SendAsync(SendRegion reg){
       rnr_i++;
       info(stderr, "RNR Error %d\n", rnr_i);
     }
-    
   }
   if (update) {
     d_head_up++;

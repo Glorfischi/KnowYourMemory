@@ -48,7 +48,7 @@ class SendReceiveConnection : public Connection, public BatchSender {
     Status Wait(uint64_t id);
 
     StatusOr<ReceiveRegion> Receive();
-    Status Free(ReceiveRegion);
+    Status Free(const ReceiveRegion&);
 
     endpoint::Endpoint *GetEndpoint(){ return this->ep_; };
   private:
@@ -87,7 +87,7 @@ class SendReceiveListener : public Receiver {
     endpoint::Listener *GetListener(){return this->listener_;};
 
     StatusOr<ReceiveRegion> Receive();
-    Status Free(ReceiveRegion);
+    Status Free(const ReceiveRegion&);
   private:
     endpoint::Listener *listener_;
     endpoint::SharedReceiveQueue *srq_;

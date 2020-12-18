@@ -52,7 +52,7 @@ class ReadConnection : public Connection {
 
 
     StatusOr<ReceiveRegion> Receive();
-    Status Free(ReceiveRegion);
+    Status Free(const ReceiveRegion&);
 
     StatusOr<ReceiveRegion> RegisterReceiveRegion(void *addr, uint32_t length);
     Status DeregisterReceiveRegion(ReceiveRegion reg);

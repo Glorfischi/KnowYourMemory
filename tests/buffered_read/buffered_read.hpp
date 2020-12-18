@@ -56,7 +56,7 @@ class BufferedReadConnection {
     Status Send(void *buf, uint32_t length);
     StatusOr<ReceiveRegion> Receive(); 
     // (Fischi) An Async receive would probably result in an out of order receive. This way we will just periodically "pay" for the transfer
-    Status Free(ReceiveRegion);
+    Status Free(const ReceiveRegion&);
   private:
     endpoint::Endpoint *ep_;
 

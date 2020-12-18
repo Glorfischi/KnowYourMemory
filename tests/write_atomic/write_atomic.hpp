@@ -75,7 +75,7 @@ class WriteAtomicListener : Receiver {
     Status Accept();
 
     StatusOr<ReceiveRegion> Receive();
-    Status Free(ReceiveRegion);
+    Status Free(const ReceiveRegion&);
   private:
     std::unique_ptr<endpoint::Listener> listener_;
     std::vector<std::unique_ptr<endpoint::Endpoint>> eps_;

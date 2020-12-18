@@ -159,7 +159,7 @@ StatusOr<ReceiveRegion> DirectWriteConnection::Receive(){
 
   return reg;
 }
-Status DirectWriteConnection::Free(ReceiveRegion region){
+Status DirectWriteConnection::Free(const ReceiveRegion& region){
   // Write to tail of remote rcv buf
   DirectWriteReceiveBuffer buf = { (uint64_t)region.addr, region.lkey, true };
 

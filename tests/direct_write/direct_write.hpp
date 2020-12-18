@@ -68,7 +68,7 @@ class DirectWriteConnection : public Connection {
     Status Free(SendRegion region);
 
     StatusOr<ReceiveRegion> Receive();
-    Status Free(ReceiveRegion);
+    Status Free(const ReceiveRegion&);
 
     endpoint::Endpoint *GetEndpoint(){ return this->ep_; };
   private:

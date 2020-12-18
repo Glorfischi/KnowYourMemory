@@ -192,7 +192,7 @@ StatusOr<ReceiveRegion> WriteAtomicListener::Receive(){
   reg.length = wc.byte_len;
   return reg;
 }
-Status WriteAtomicListener::Free(ReceiveRegion reg){
+Status WriteAtomicListener::Free(const ReceiveRegion& reg){
   this->buf_meta_->head  =  (this->buf_meta_->head + reg.length);
   return Status();
 }

@@ -384,7 +384,7 @@ StatusOr<uint64_t> ReadConnection::ReceiveAsync(ReceiveRegion reg, uint32_t *len
 
 
 
-Status ReadConnection::Free(ReceiveRegion region){
+Status ReadConnection::Free(const ReceiveRegion& region){
   memory::Region mr = memory::Region();
   mr.addr = region.addr;
   mr.length = region.length;

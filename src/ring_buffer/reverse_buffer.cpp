@@ -50,11 +50,11 @@ void *ReverseRingBuffer::Read(uint32_t len) {
 }
 
 void *ReverseRingBuffer::GetReadPtr() {
-  return (char *)this->addr_ + this->GetReadOff();
+  return (char *)this->addr_ + this->fastGetReadOff();
 }
 
 uint32_t ReverseRingBuffer::GetReadOff() {
-  return (this->read_ptr_ > 0) ? this->read_ptr_ - 1 : this->length_ - 1;
+  return this->fastGetReadOff();
 }
 
 uint32_t ReverseRingBuffer::Free(void *addr) {
@@ -65,8 +65,11 @@ uint32_t ReverseRingBuffer::Free(void *addr) {
     front++;
     this->head_ = (front == this->outstanding_.end()) ? this->read_ptr_ : *front;
   }
-  this->outstanding_.remove(region_start);
-
+  // It is O(N). I think it is possible make outstanding_ ordered and use binary remove (e.g., using set<>) 
+  // They are already ordered except wrapping around elements. That can be addressed with leading wrap generation.
+  // I do not ask to do, I am just pointing out.
+  this->outstanding_.remove(region_start); 
+ 
   return this->head_;
 }
 

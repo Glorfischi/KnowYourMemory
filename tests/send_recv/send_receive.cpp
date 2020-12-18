@@ -262,7 +262,7 @@ StatusOr<ReceiveRegion> SendReceiveListener::Receive(){
   return reg;
 }
 
-Status SendReceiveListener::Free(ReceiveRegion region){
+Status SendReceiveListener::Free(const ReceiveRegion& region){
   if (this->srq_ != nullptr){
     return this->srq_->PostMR(region.context);
   }
@@ -434,7 +434,7 @@ StatusOr<ReceiveRegion> SendReceiveConnection::Receive(){
   return reg;
 }
 
-Status SendReceiveConnection::Free(ReceiveRegion region){
+Status SendReceiveConnection::Free(const ReceiveRegion& region){
   return this->rq_->PostMR(region.context);
 }
 }

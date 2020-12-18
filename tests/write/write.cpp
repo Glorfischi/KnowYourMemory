@@ -101,7 +101,7 @@ StatusOr<ReceiveRegion> WriteReceiver::Receive(){
   return reg;
 }
 
-Status WriteReceiver::Free(ReceiveRegion reg){
+Status WriteReceiver::Free(const ReceiveRegion& reg){
   uint32_t head = this->rbuf_->Free((void *)((size_t)reg.addr - 2*sizeof(uint32_t)));
   memset((void *)((size_t)reg.addr - 2*sizeof(uint32_t)), 0, reg.length + 2*sizeof(uint32_t));
   this->ack_->Ack(head);
@@ -389,7 +389,7 @@ StatusOr<ReceiveRegion> WriteOffsetReceiver::Receive(){
 
 }
 
-Status WriteOffsetReceiver::Free(ReceiveRegion reg){
+Status WriteOffsetReceiver::Free(const ReceiveRegion& reg){
   uint32_t head = this->rbuf_->Free((void *)((char *)reg.addr - sizeof(uint32_t)));
   this->ack_->Ack(head);
   if ((head > this->acked_ && head - this->acked_ > this->max_unacked_)
@@ -612,7 +612,7 @@ StatusOr<ReceiveRegion> WriteImmReceiver::Receive(){
   return reg;
 }
 
-Status WriteImmReceiver::Free(ReceiveRegion reg){
+Status WriteImmReceiver::Free(const ReceiveRegion& reg){
   uint32_t head = this->rbuf_->Free(reg.addr);
   this->ack_->Ack(head);
   if ((head > this->acked_ && head - this->acked_ > this->max_unacked_)

@@ -106,7 +106,7 @@ StatusOr<ReceiveRegion> BufferedReadConnection::Receive(){
   return ReceiveRegion{addr, (void *)(addr + sizeof(uint32_t)), len, 0};
 }
 
-Status BufferedReadConnection::Free(ReceiveRegion reg){
+Status BufferedReadConnection::Free(const ReceiveRegion& reg){
   uint64_t reg_start = reg.context;
   auto front  = this->outstanding_.begin();
   if (reg_start == *front){ // this next in line to be freed

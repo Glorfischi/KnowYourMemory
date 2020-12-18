@@ -34,7 +34,8 @@ Status SendAcknowledger::Flush(){
   if (!stat.ok()){
     return stat;
   }
-  auto wc_s = this->ep_->PollSendCq();
+  // I understand that it should be fast, but it would be better if it was in another place.
+  auto wc_s = this->ep_->PollSendCq(); 
   if (!wc_s.ok()){
     return wc_s.status();
   }

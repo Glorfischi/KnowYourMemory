@@ -61,7 +61,7 @@ class Receiver {
   public:
     virtual ~Receiver() = default;
     virtual StatusOr<ReceiveRegion> Receive() = 0;
-    virtual Status Free(ReceiveRegion region) = 0;
+    virtual Status Free(const ReceiveRegion& region) = 0;
 };
 
 

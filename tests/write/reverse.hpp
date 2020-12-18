@@ -34,7 +34,7 @@ class WriteReverseReceiver : public WriteReceiver {
       : WriteReceiver(ep, owns_ep, rbuf, ack) {};
     Status Close();
     StatusOr<ReceiveRegion> Receive();
-    Status Free(ReceiveRegion);
+    Status Free(const ReceiveRegion&);
   private:
 };
 
