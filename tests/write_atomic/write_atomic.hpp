@@ -112,6 +112,7 @@ class WriteAtomicConnection : public Connection {
     StatusOr<SendRegion> GetMemoryRegion(size_t size);
     Status Free(SendRegion region);
     Status Send(SendRegion region);
+
     StatusOr<uint64_t> SendAsync(SendRegion region);
     Status Wait(uint64_t id);
 
@@ -121,6 +122,9 @@ class WriteAtomicConnection : public Connection {
   private:
     endpoint::Endpoint *ep_;
     memory::Allocator *allocator_;
+
+    uint64_t ackd_id_ = 0;
+    uint64_t next_id_ = 1;
    
     // Remote Buffer
     uint64_t rbuf_vaddr_;

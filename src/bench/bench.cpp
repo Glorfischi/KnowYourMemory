@@ -283,7 +283,7 @@ kym::StatusOr<uint64_t> test_bw_send(kym::connection::Sender *snd, int count, in
     *(int *)buf.addr = i;
     bufs.push_back(buf);
   }
-  info(stderr, "warmup for %d", count/16);
+  info(stderr, "warmup for %d\n", count/16);
   auto stat = test_warmup_send(snd, count/16, bufs[0]); // We don't touch the other bufs. That might be a problem..
   if (!stat.ok()) {
     return stat.Wrap("error during send warmup");

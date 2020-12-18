@@ -281,6 +281,14 @@ Status WriteAtomicConnection::Free(SendRegion region){
   return this->allocator_->Free(mr);
 }
 Status WriteAtomicConnection::Send(SendRegion region){
+  auto id_stat = this->SendAsync(region);
+  if (!id_stat.ok()){
+    return id_stat.status();
+  }
+  return this->Wait(id_stat.value());
+}
+
+StatusOr<uint64_t> WriteAtomicConnection::SendAsync(SendRegion region){
   if(region.length >= this->rbuf_size_){
     return Status(StatusCode::InvalidArgument, "message too large");
   }
@@ -288,53 +296,58 @@ Status WriteAtomicConnection::Send(SendRegion region){
   // We add the length of our message to the remote tail. We get the tail before our addition, so this is our (global)
   // write address.
   // We talk about global and local offsets. Global means 64 bit address that we wraps around. The local address is 32 bit
-  // and equalt to g_off % buf_len. The global offset is unique.
-  auto fetch_stat = this->ep_->PostFetchAndAdd(region.context, region.length, this->rbuf_meta_mr_->lkey, 
+  // and equal to g_off % buf_len. The global offset is unique.
+  uint64_t id = this->next_id_++;
+  auto fetch_stat = this->ep_->PostFetchAndAdd(id, region.length, this->rbuf_meta_mr_->lkey, 
       &this->rbuf_meta_->tail, (uint64_t)&((struct write_atomic_meta *)this->rbuf_meta_vaddr_)->tail, this->rbuf_meta_rkey_);
   if (!fetch_stat.ok()){
     return fetch_stat;
   }
-  auto wc_stat = this->ep_->PollSendCq();
-  if (!wc_stat.ok()){
-    return wc_stat.status().Wrap("error during fetch and add");
+  // TODO(Fischi) To get any reasonable single threaded performance, we would need to be able to pipline the F&A.
+  // But this would require a major refactor and interface change
+  auto stat = this->Wait(id);
+  if (!stat.ok()){
+    return stat;
   }
 
   // FIXME(Fischi) We should NEVER fail in here. If we do the buffer is in an inconsistent state
 
   // We check if there is space to write. We essentiall reserve space without knowing if we can actually write to it.
   while(this->rbuf_meta_->head + this->rbuf_size_ <= this->rbuf_meta_->tail + region.length){
-    auto read_stat = this->ep_->PostRead(region.context, this->rbuf_meta_mr_->lkey, &this->rbuf_meta_->head, sizeof(this->rbuf_meta_->head),
+    uint64_t id = this->next_id_++;
+    auto read_stat = this->ep_->PostRead(id, this->rbuf_meta_mr_->lkey, &this->rbuf_meta_->head, sizeof(this->rbuf_meta_->head),
         (uint64_t)&((struct write_atomic_meta *)this->rbuf_meta_vaddr_)->head, this->rbuf_meta_rkey_);
     if (!fetch_stat.ok()){
       return fetch_stat;
     }
-    auto wc_stat = this->ep_->PollSendCq();
-    if (!wc_stat.ok()){
-      return wc_stat.status().Wrap("error during reading head position");
+    auto stat = this->Wait(id);
+    if (!stat.ok()){
+      return stat;
     }
     // TODO(fischi) Maybe add some kind of backoff?
   }
 
   uint32_t local_off = this->rbuf_meta_->tail % this->rbuf_size_; // We calculate the local offset to know where to write to.
 
-  auto send_stat = this->ep_->PostWriteWithImmidate(1, region.lkey, region.addr, region.length, 
+  id = this->next_id_++;
+  auto send_stat = this->ep_->PostWriteWithImmidate(id, region.lkey, region.addr, region.length, 
       this->rbuf_vaddr_ + local_off, this->rbuf_rkey_, this->rbuf_meta_->tail);
   if (!send_stat.ok()){
     return send_stat;
   }
-  wc_stat = this->ep_->PollSendCq();
-  if (!wc_stat.ok()){
-    return wc_stat.status();
-  }
-  return Status();
-}
-StatusOr<uint64_t> WriteAtomicConnection::SendAsync(SendRegion region){
-  //TODO(Fischi)
-  return Status(StatusCode::NotImplemented);
+  return id; 
+
 }
 Status WriteAtomicConnection::Wait(uint64_t id){
-  //TODO(Fischi)
-  return Status(StatusCode::NotImplemented);
+  while (this->ackd_id_ < id){
+    auto wcStatus = this->ep_->PollSendCq();
+    if (!wcStatus.ok()){
+      return wcStatus.status();
+    }
+    ibv_wc wc = wcStatus.value();
+    this->ackd_id_ = wc.wr_id;
+  }
+  return Status();
 }
 
 

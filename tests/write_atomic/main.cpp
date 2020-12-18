@@ -37,7 +37,7 @@ cxxopts::ParseResult parse(int argc, char* argv[]) {
       ("source", "source IP address", cxxopts::value<std::string>()->default_value(""))
       ("n,iters",  "Number of exchanges" , cxxopts::value<int>()->default_value("1000"))
       ("s,size",  "Size of message to exchange", cxxopts::value<int>()->default_value("1024"))
-      ("unack",  "Number of messages that can be unacknowleged. Only relevant for bandwidth benchmark", cxxopts::value<int>()->default_value("100"))
+      ("unack",  "Number of messages that can be unacknowleged. Only relevant for bandwidth benchmark", cxxopts::value<int>()->default_value("1"))
       ("batch",  "Number of messages to send in a single batch. Only relevant for bandwidth benchmark", cxxopts::value<int>()->default_value("1"))
       ("out", "filename to output measurements", cxxopts::value<std::string>()->default_value(""))
      ;
@@ -81,7 +81,6 @@ int main(int argc, char* argv[]) {
 
   int count = flags["iters"].as<int>();  
   int size = flags["size"].as<int>();  
-  int batch = flags["batch"].as<int>();  
   int unack = flags["unack"].as<int>();  
 
 
@@ -115,6 +114,13 @@ int main(int argc, char* argv[]) {
       stat = test_lat_recv(inst, count);
     } else if (pingpong) {
       stat = test_lat_pong(conn, inst, count, size);
+    } else if (bw) {
+      auto bw_s = test_bw_recv(inst, count, size);
+      if (!bw_s.ok()){
+        std::cerr << "Error running bench " << bw_s.status() << std::endl;
+      }
+      std::cerr << "## Bandwidth (MB/s)" << std::endl;
+      std::cout << (double)bw_s.value()/(1024*1024) << std::endl;
     }
     if (!stat.ok()){
       std::cerr << "Error sending " << stat << std::endl;
@@ -140,7 +146,15 @@ int main(int argc, char* argv[]) {
       stat = test_lat_send(conn, count, size, &measurements);
     } else if (pingpong) {
       stat = test_lat_ping(conn, inst, count, size, &measurements);
+    } else if (bw) {
+      auto bw_s = test_bw_send(conn, count, size, unack);
+      if (!bw_s.ok()){
+        std::cerr << "Error running bench " << bw_s.status() << std::endl;
+      }
+      std::cerr << "## Bandwidth (MB/s)" << std::endl;
+      std::cout << (double)bw_s.value()/(1024*1024) << std::endl;
     }
+
     if (!stat.ok()){
       std::cerr << "Error sending " << stat << std::endl;
     }
