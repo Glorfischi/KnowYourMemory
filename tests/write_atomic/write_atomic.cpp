@@ -70,11 +70,30 @@ Status WriteAtomicInstance::Init(struct ibv_context *ctx, struct ibv_pd *pd){
     return magic_stat.status().Wrap("error initialzing magic buffer");
   }
   this->buf_mr_ = ibv_reg_mr(pd, magic_stat.value(), 2 * this->buf_size_, 
-      IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);  
-
+        IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);  
   this->buf_meta_ =  (struct write_atomic_meta *)calloc(1, sizeof(struct write_atomic_meta));
-  this->buf_meta_mr_ = ibv_reg_mr(pd, (void *)this->buf_meta_, sizeof(struct write_atomic_meta),
-      IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_ATOMIC);  
+
+  if (this->use_dm_) {
+    struct ibv_alloc_dm_attr attr = {};
+    attr.length = sizeof(struct write_atomic_meta);
+    this->buf_meta_dm_ = ibv_alloc_dm(ctx, &attr);
+    if (this->buf_meta_dm_ == nullptr) {
+      return Status(StatusCode::Internal, "Error registering device memory ");
+    }
+    this->buf_meta_mr_ = ibv_reg_dm_mr(pd, this->buf_meta_dm_, 0, sizeof(struct write_atomic_meta),
+        IBV_ACCESS_REMOTE_READ | IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_ZERO_BASED 
+        | IBV_ACCESS_REMOTE_ATOMIC);
+    if (this->buf_meta_mr_ == nullptr) {
+      return Status(StatusCode::Internal, "Error registering device memory MR");
+    }
+    int ret = ibv_memcpy_to_dm(this->buf_meta_dm_, 0, this->buf_meta_, sizeof(struct write_atomic_meta));
+    if (ret) {
+      return Status(StatusCode::Internal, "Error initialzing device memory");
+    }
+  } else {
+    this->buf_meta_mr_ = ibv_reg_mr(pd, (void *)this->buf_meta_, sizeof(struct write_atomic_meta),
+        IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_ATOMIC);  
+  }
 
   // TODO(fischi): Parameter
   auto srq_s = endpoint::GetSharedReceiveQueue(pd, 1, 100);
@@ -90,11 +109,16 @@ Status WriteAtomicInstance::Init(struct ibv_context *ctx, struct ibv_pd *pd){
   return Status();
 }
 WriteAtomicInstance::~WriteAtomicInstance(){
-  // TODO
+  free(this->buf_meta_);
+  
 }
 Status WriteAtomicInstance::Close(){
-  // TODO
-  return Status();
+  ibv_dereg_mr(this->buf_mr_);
+  ibv_dereg_mr(this->buf_meta_mr_);
+  if (this->use_dm_) {
+    ibv_free_dm(this->buf_meta_dm_);
+  }
+  return ringbuffer::FreeMagicBuffer(this->buf_mr_->addr, this->buf_size_);
 }
 
 Status WriteAtomicInstance::Listen(std::string ip, int port){
@@ -132,7 +156,11 @@ StatusOr<WriteAtomicConnection *> WriteAtomicInstance::Accept(write_atomic_conn_
   local_ci.buf_addr = (uint64_t)this->buf_mr_->addr;
   local_ci.buf_key = this->buf_mr_->lkey;
   local_ci.buf_size = this->buf_size_;
-  local_ci.meta_addr = (uint64_t)this->buf_meta_;
+  if (this->use_dm_ ) {
+    local_ci.meta_addr = 0; // DM is zero indexed
+  } else {
+    local_ci.meta_addr = (uint64_t)this->buf_meta_;
+  }
   local_ci.meta_key = this->buf_meta_mr_->lkey;
   
   conn_opts.private_data = &local_ci;
@@ -180,7 +208,11 @@ StatusOr<WriteAtomicConnection *> WriteAtomicInstance::Dial(std::string ip, int 
   local_ci.buf_addr = (uint64_t)this->buf_mr_->addr;
   local_ci.buf_key = this->buf_mr_->lkey;
   local_ci.buf_size = this->buf_size_;
-  local_ci.meta_addr = (uint64_t)this->buf_meta_;
+  if (this->use_dm_ ) {
+    local_ci.meta_addr = 0; // DM is zero indexed
+  } else {
+    local_ci.meta_addr = (uint64_t)this->buf_meta_;
+  }
   local_ci.meta_key = this->buf_meta_mr_->lkey;
   
   conn_opts.private_data = &local_ci;
@@ -240,8 +272,16 @@ Status WriteAtomicInstance::Free(ReceiveRegion reg){
     global_end = tmp;
   }
   // If the region we are freeing is the head, we update it otherwise add the regions to the freed_regions map
-  if (global_start == this->buf_meta_->head){
+  if (global_start == this->buf_meta_->head){ 
     this->buf_meta_->head = global_end;
+    if (this->use_dm_) {
+      // The receiver is authorative of the head field. We need to reconcile the version in device memory
+      // This depends on the head being the first field.
+      int ret = ibv_memcpy_to_dm(this->buf_meta_dm_, 0, &this->buf_meta_->head, sizeof(uint64_t));
+      if (ret) {
+        return Status(StatusCode::Internal, "Error initialzing device memory");
+      }
+    }
   } else {
     this->freed_regions_[global_start] = global_end;
   }

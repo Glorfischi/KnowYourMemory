@@ -24,6 +24,7 @@
 namespace kym {
 namespace connection {
 
+// Changing order here will break the code
 struct write_atomic_meta {
   uint64_t head;
   uint64_t tail;
@@ -31,10 +32,12 @@ struct write_atomic_meta {
 
 struct write_atomic_inst_opts {
   uint32_t buf_size;
+  bool use_dm;
 };
 namespace {
   const write_atomic_inst_opts default_write_atomic_inst_opts = {
     .buf_size=10*1024*1024,
+    .use_dm = true,
   };
 }
 
@@ -55,7 +58,7 @@ class WriteAtomicInstance : public Receiver {
   public:
     // Memory regions will be lazily initialized on the first Listen() or Dial()
     WriteAtomicInstance(write_atomic_inst_opts opts): pd_(nullptr), listener_(nullptr), srq_(nullptr),
-       buf_mr_(nullptr), buf_size_(opts.buf_size), buf_meta_mr_(nullptr), buf_meta_(nullptr)  {};
+       buf_mr_(nullptr), buf_size_(opts.buf_size), use_dm_(opts.use_dm), buf_meta_mr_(nullptr), buf_meta_(nullptr)  {};
     WriteAtomicInstance(): WriteAtomicInstance(default_write_atomic_inst_opts) {};
     ~WriteAtomicInstance();
 
@@ -92,6 +95,8 @@ class WriteAtomicInstance : public Receiver {
     uint32_t           buf_size_;
     std::map<uint64_t, uint64_t> freed_regions_;
 
+    bool               use_dm_;
+    struct ibv_dm     *buf_meta_dm_;
     struct ibv_mr     *buf_meta_mr_;   
     write_atomic_meta *buf_meta_;   
 };

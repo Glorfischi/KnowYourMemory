@@ -41,6 +41,7 @@ cxxopts::ParseResult parse(int argc, char* argv[]) {
       ("unack",  "Number of messages that can be unacknowleged. Only relevant for bandwidth benchmark", cxxopts::value<int>()->default_value("1"))
       ("batch",  "Number of messages to send in a single batch. Only relevant for bandwidth benchmark", cxxopts::value<int>()->default_value("1"))
       ("out", "filename to output measurements", cxxopts::value<std::string>()->default_value(""))
+      ("dm", "Whether to use device memory for meta data", cxxopts::value<bool>())
      ;
  
     auto result = options.parse(argc, argv);
@@ -84,14 +85,22 @@ int main(int argc, char* argv[]) {
   int size = flags["size"].as<int>();  
   int unack = flags["unack"].as<int>();  
 
+  bool dm = flags["dm"].as<bool>();  
+
   int conn_count = flags["conn"].as<int>();  
 
   bool server = flags["server"].as<bool>();  
   bool client = flags["client"].as<bool>();  
 
   std::vector<std::vector<float>*> measurements(conn_count);
-  
-  kym::connection::WriteAtomicInstance *inst = new kym::connection::WriteAtomicInstance();
+  const kym::connection::write_atomic_inst_opts opts = {
+    .buf_size=10*1024*1024,
+    .use_dm = dm,
+  };
+  kym::connection::WriteAtomicInstance *inst = new kym::connection::WriteAtomicInstance(opts);
+  if (!dm) {
+    std::cerr << "Not using dm" << std::endl;
+  }
 
   if (server){
     kym::connection::WriteAtomicConnection *conns[conn_count];
