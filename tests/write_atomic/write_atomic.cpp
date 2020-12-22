@@ -51,7 +51,7 @@ namespace {
       },
       .qp_type = IBV_QPT_RC,
     },
-    .use_srq = true,
+    .use_srq = false,
     .responder_resources = 15,
     .initiator_depth =  15,
     .retry_count = 5,  
@@ -98,17 +98,17 @@ Status WriteAtomicInstance::Init(struct ibv_context *ctx, struct ibv_pd *pd){
         IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_ATOMIC);  
   }
 
-  // TODO(fischi): Parameter
-  auto srq_s = endpoint::GetSharedReceiveQueue(pd, 1, 1024);
-  if (!srq_s.ok()){
-    return srq_s.status().Wrap("error getting srq");
+  if(this->use_srq_) {
+    auto srq_s = endpoint::GetSharedReceiveQueue(pd, 1, 1024);
+    if (!srq_s.ok()){
+      return srq_s.status().Wrap("error getting srq");
+    }
+    this->srq_ = srq_s.value();
   }
-  this->srq_ = srq_s.value();
-
   // TODO(fischi): Parameter
   this->rcv_cq_ = ibv_create_cq(ctx, 1024, NULL, NULL, 0 );
   
-  debug(stderr, "Initialized instance with pd %p | srq %p\n", this->pd_, this->srq_->GetSRQ());
+  //debug(stderr, "Initialized instance with pd %p | srq %p\n", this->pd_, this->srq_->GetSRQ());
   return Status();
 }
 WriteAtomicInstance::~WriteAtomicInstance(){
@@ -170,8 +170,9 @@ StatusOr<WriteAtomicConnection *> WriteAtomicInstance::Accept(write_atomic_conn_
   conn_opts.private_data = &local_ci;
   conn_opts.private_data_len = sizeof(local_ci);
 
-  conn_opts.qp_attr.srq = this->srq_->GetSRQ();
-  // TODO(Fischi) extend srq through ibv_modify_srq
+  if (this->use_srq_) {
+    conn_opts.qp_attr.srq = this->srq_->GetSRQ();
+  }
 
   if (!opts.standalone_receive) {
     conn_opts.qp_attr.recv_cq = this->rcv_cq_;
@@ -187,6 +188,16 @@ StatusOr<WriteAtomicConnection *> WriteAtomicInstance::Accept(write_atomic_conn_
   auto allocator = new memory::DumbAllocator(ep->GetPd());
   struct write_atomic_meta *rbuf_meta = (struct write_atomic_meta *)calloc(1, sizeof(struct write_atomic_meta));
   struct ibv_mr *rbuf_meta_mr = ibv_reg_mr(ep->GetPd(), rbuf_meta, sizeof(struct write_atomic_meta), IBV_ACCESS_LOCAL_WRITE);  
+
+  if (!this->use_srq_) {
+    auto rq_stat = endpoint::GetReceiveQueue(ep, 1, 20);
+    if (!rq_stat.ok()){
+      return rq_stat.status().Wrap("error creating receive queue while accepting");
+    }
+    auto trq = rq_stat.value();
+    this->rqs_[ep->GetQpNum()] = trq;
+  }
+
   WriteAtomicConnection *conn = new WriteAtomicConnection(ep, allocator,
       remote_ci->buf_addr, remote_ci->buf_key, remote_ci->buf_size,
       remote_ci->meta_addr, remote_ci->meta_key, rbuf_meta_mr);
@@ -222,8 +233,9 @@ StatusOr<WriteAtomicConnection *> WriteAtomicInstance::Dial(std::string ip, int 
   conn_opts.private_data = &local_ci;
   conn_opts.private_data_len = sizeof(local_ci);
 
-  conn_opts.qp_attr.srq = this->srq_->GetSRQ();
-  // TODO(Fischi) extend srq through ibv_modify_srq
+  if (this->use_srq_) {
+    conn_opts.qp_attr.srq = this->srq_->GetSRQ();
+  }
 
   if (!opts.standalone_receive) {
     conn_opts.qp_attr.recv_cq = this->rcv_cq_;
@@ -238,6 +250,15 @@ StatusOr<WriteAtomicConnection *> WriteAtomicInstance::Dial(std::string ip, int 
   auto allocator = new memory::DumbAllocator(ep->GetPd());
   struct write_atomic_meta *rbuf_meta = (struct write_atomic_meta *)calloc(1, sizeof(struct write_atomic_meta));
   struct ibv_mr *rbuf_meta_mr = ibv_reg_mr(ep->GetPd(), rbuf_meta, sizeof(struct write_atomic_meta), IBV_ACCESS_LOCAL_WRITE);  
+  if (!this->use_srq_) {
+    auto rq_stat = endpoint::GetReceiveQueue(ep, 1, 20);
+    if (!rq_stat.ok()){
+      return rq_stat.status().Wrap("error creating receive queue while accepting");
+    }
+    auto trq = rq_stat.value();
+    this->rqs_[ep->GetQpNum()] = trq;
+  }
+
   WriteAtomicConnection *conn = new WriteAtomicConnection(ep, allocator,
       remote_ci->buf_addr, remote_ci->buf_key, remote_ci->buf_size,
       remote_ci->meta_addr, remote_ci->meta_key, rbuf_meta_mr);
@@ -253,9 +274,17 @@ StatusOr<ReceiveRegion> WriteAtomicInstance::Receive(){
   if (wc.status){
     return Status(StatusCode::Internal, "error " + std::to_string(wc.status) +  " polling recv cq\n" + std::string(ibv_wc_status_str(wc.status)));
   }
-  auto stat = this->srq_->PostMR(wc.wr_id);
-  if (!stat.ok()){
-    return stat.Wrap("error reposing receive buffer");
+  if (!this->use_srq_) {
+    auto rq = this->rqs_[wc.qp_num];
+    auto stat = rq->PostMR(wc.wr_id);
+    if (!stat.ok()){
+      return stat.Wrap("error reposing receive buffer");
+    }
+  } else {
+    auto stat = this->srq_->PostMR(wc.wr_id);
+    if (!stat.ok()){
+      return stat.Wrap("error reposing receive buffer");
+    }
   }
 
   int32_t local_off = wc.imm_data;

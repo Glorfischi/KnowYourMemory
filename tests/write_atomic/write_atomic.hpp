@@ -31,11 +31,13 @@ struct write_atomic_meta {
 struct write_atomic_inst_opts {
   uint32_t buf_size;
   bool use_dm;
+  bool use_srq;
 };
 namespace {
   const write_atomic_inst_opts default_write_atomic_inst_opts = {
     .buf_size=10*1024*1024,
     .use_dm = true,
+    .use_srq = false,
   };
 }
 
@@ -55,7 +57,7 @@ class WriteAtomicConnection;
 class WriteAtomicInstance : public Receiver {
   public:
     // Memory regions will be lazily initialized on the first Listen() or Dial()
-    WriteAtomicInstance(write_atomic_inst_opts opts): pd_(nullptr), listener_(nullptr), srq_(nullptr),
+    WriteAtomicInstance(write_atomic_inst_opts opts): pd_(nullptr), listener_(nullptr), use_srq_(opts.use_srq), srq_(nullptr),
        buf_mr_(nullptr), buf_size_(opts.buf_size), use_dm_(opts.use_dm), buf_meta_mr_(nullptr), buf_meta_(nullptr)  {};
     WriteAtomicInstance(): WriteAtomicInstance(default_write_atomic_inst_opts) {};
     ~WriteAtomicInstance();
@@ -86,7 +88,9 @@ class WriteAtomicInstance : public Receiver {
     endpoint::Listener *listener_;
     std::vector<WriteAtomicConnection*> conns_;
 
-    endpoint::SharedReceiveQueue *srq_;
+    bool                                        use_srq_;
+    endpoint::SharedReceiveQueue               *srq_;
+    std::map<uint32_t, endpoint::ReceiveQueue*> rqs_;
 
     // Ringbuffer
     struct ibv_mr     *buf_mr_;

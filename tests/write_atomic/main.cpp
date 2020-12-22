@@ -97,6 +97,7 @@ int main(int argc, char* argv[]) {
   const kym::connection::write_atomic_inst_opts opts = {
     .buf_size=100*1024*1024,
     .use_dm = dm,
+    .use_srq = false,
   };
   kym::connection::WriteAtomicInstance *inst = new kym::connection::WriteAtomicInstance(opts);
 
