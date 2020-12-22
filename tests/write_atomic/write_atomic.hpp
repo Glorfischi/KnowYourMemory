@@ -14,6 +14,7 @@
 
 #include "error.hpp"
 #include "endpoint.hpp"
+#include "receive_queue.hpp"
 #include "shared_receive_queue.hpp"
 
 #include "conn.hpp"

@@ -326,6 +326,8 @@ Status Endpoint::PostRecv(uint64_t ctx, uint32_t lkey, void *addr, size_t size){
     ret = ibv_post_recv(this->id_->qp, &wr, &bad);
   }
   if (ret) {
+    info(stderr, "Error %d posting receive buffer ctx %ld", ret, ctx); 
+    perror("ERR");
     return Status(StatusCode::Internal, "error posting receive buffer");
   }
   return Status();

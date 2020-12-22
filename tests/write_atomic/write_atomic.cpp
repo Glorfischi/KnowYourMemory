@@ -21,6 +21,7 @@
 #include "mm.hpp"
 #include "mm/dumb_allocator.hpp"
 #include "shared_receive_queue.hpp"
+#include "receive_queue.hpp"
 
 #include <chrono>
 #include "debug.h"
@@ -44,7 +45,7 @@ namespace {
     .qp_attr = {
       .cap = {
         .max_send_wr = write_atomic_outstanding,
-        .max_recv_wr = write_atomic_outstanding,
+        .max_recv_wr = 1024,
         .max_send_sge = 1,
         .max_recv_sge = 1,
         .max_inline_data = 0,
@@ -106,7 +107,7 @@ Status WriteAtomicInstance::Init(struct ibv_context *ctx, struct ibv_pd *pd){
     this->srq_ = srq_s.value();
   }
   // TODO(fischi): Parameter
-  this->rcv_cq_ = ibv_create_cq(ctx, 1024, NULL, NULL, 0 );
+  this->rcv_cq_ = ibv_create_cq(ctx, 10*1024, NULL, NULL, 0 );
   
   //debug(stderr, "Initialized instance with pd %p | srq %p\n", this->pd_, this->srq_->GetSRQ());
   return Status();
@@ -190,7 +191,7 @@ StatusOr<WriteAtomicConnection *> WriteAtomicInstance::Accept(write_atomic_conn_
   struct ibv_mr *rbuf_meta_mr = ibv_reg_mr(ep->GetPd(), rbuf_meta, sizeof(struct write_atomic_meta), IBV_ACCESS_LOCAL_WRITE);  
 
   if (!this->use_srq_) {
-    auto rq_stat = endpoint::GetReceiveQueue(ep, 1, 20);
+    auto rq_stat = endpoint::GetReceiveQueue(ep, 1, 256);
     if (!rq_stat.ok()){
       return rq_stat.status().Wrap("error creating receive queue while accepting");
     }
@@ -251,7 +252,7 @@ StatusOr<WriteAtomicConnection *> WriteAtomicInstance::Dial(std::string ip, int 
   struct write_atomic_meta *rbuf_meta = (struct write_atomic_meta *)calloc(1, sizeof(struct write_atomic_meta));
   struct ibv_mr *rbuf_meta_mr = ibv_reg_mr(ep->GetPd(), rbuf_meta, sizeof(struct write_atomic_meta), IBV_ACCESS_LOCAL_WRITE);  
   if (!this->use_srq_) {
-    auto rq_stat = endpoint::GetReceiveQueue(ep, 1, 20);
+    auto rq_stat = endpoint::GetReceiveQueue(ep, 1, 256);
     if (!rq_stat.ok()){
       return rq_stat.status().Wrap("error creating receive queue while accepting");
     }
@@ -281,6 +282,7 @@ StatusOr<ReceiveRegion> WriteAtomicInstance::Receive(){
       return stat.Wrap("error reposing receive buffer");
     }
   } else {
+    info(stderr, "USING SRQ!!\n");
     auto stat = this->srq_->PostMR(wc.wr_id);
     if (!stat.ok()){
       return stat.Wrap("error reposing receive buffer");

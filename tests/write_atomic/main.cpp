@@ -102,6 +102,7 @@ int main(int argc, char* argv[]) {
   kym::connection::WriteAtomicInstance *inst = new kym::connection::WriteAtomicInstance(opts);
 
   if (server){
+    set_core_affinity(0);
     kym::connection::WriteAtomicConnection *conns[conn_count];
     auto stat = inst->Listen(ip, 9999);
     if (!stat.ok()){
