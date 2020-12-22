@@ -1,0 +1,52 @@
+\section{Shared Write}
+\subsection{Protocol}
+\subsection{Device Memory}
+\subsection{Evaluation}
+\todo{Info on system etc.}
+
+\subsubsection{Latency}
+
+\begin{figure}[h]
+\includegraphics[width=1\textwidth]{write-atomic-lat-msgsize.png}
+\caption{Evaluation of the Shared Write latency between two nodes}
+\label{fig:plot-write-atomic-lat}
+\end{figure}
+
+Figure \ref{fig:plot-write-atomic-lat} shows the latency of our \emph{Shared Write} protocol between two nodes. 
+We again show half the ping-pong round-trip time. We can clearly see that we have a large constant overhead, caused
+by the reserving phase of over $2L$ independent of the message size.
+
+We are reduce this constant overhead by about 0.25 $\mu$s by using device memory for the connections metadata. This is 
+in line with what we expect given our micro benchmark, and is caused by the receiving NIC not having to access the 
+receivers RAM.
+
+
+\subsubsection{Bandwidth}
+
+\begin{figure}[h]
+\includegraphics[width=1\textwidth]{write-atomic-bw-msgsize.png}
+\caption{Evaluation of the Shared Write bandwidth between two nodes}
+\label{fig:plot-write-atomic-bw}
+\end{figure}
+
+In figure \ref{fig:plot-write-atomic-bw} we can see the throughput of the \emph{Shared Write} protocol for a single 
+connections, with varying message size. 
+
+\todo{This is very slow, we would need to redesign the connection a little, as right now we can only support 2 unack 
+messages}
+
+show linear
+
+
+\subsubsection{Resource Sharing}
+
+\begin{figure}[h]
+\includegraphics[width=1\textwidth]{write-atomic-bw-threads.png}
+\caption{Shared Write bandwidth with a single receiver and varying number of sender}
+\label{fig:plot-write-bw-unack}
+\end{figure}
+
+
+
+
+

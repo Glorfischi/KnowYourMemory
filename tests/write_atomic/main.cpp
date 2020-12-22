@@ -93,8 +93,9 @@ int main(int argc, char* argv[]) {
   bool client = flags["client"].as<bool>();  
 
   std::vector<std::vector<float>*> measurements(conn_count);
+  info(stderr, "USE DM %d\n", dm);
   const kym::connection::write_atomic_inst_opts opts = {
-    .buf_size=10*1024*1024,
+    .buf_size=100*1024*1024,
     .use_dm = dm,
   };
   kym::connection::WriteAtomicInstance *inst = new kym::connection::WriteAtomicInstance(opts);

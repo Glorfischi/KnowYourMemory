@@ -43,6 +43,9 @@ do for [c in conns] {
 set terminal png small size 960,640 enhanced
 set output "plots/write-atomic-bw-threads.png"
 
+set grid ytics lt 0 lw 1 lc rgb "#bbbbbb"
+set grid xtics lt 0 lw 1 lc rgb "#bbbbbb"
+
 set title "Write Atomic Bandwidth" 
 set xlabel "Connections" 
 set ylabel "Bandwith (Gbit/s)" enhanced

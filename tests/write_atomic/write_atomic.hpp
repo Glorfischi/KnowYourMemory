@@ -8,8 +8,6 @@
 #include <vector>
 #include <map>
 
-
-
 #include <rdma/rdma_cma.h>
 #include <rdma/rdma_verbs.h>
 #include <infiniband/verbs.h>
@@ -94,6 +92,7 @@ class WriteAtomicInstance : public Receiver {
     struct ibv_mr     *buf_mr_;
     uint32_t           buf_size_;
     std::map<uint64_t, uint64_t> freed_regions_;
+    uint64_t           acked_head_ = 0;
 
     bool               use_dm_;
     struct ibv_dm     *buf_meta_dm_;

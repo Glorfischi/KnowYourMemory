@@ -22,6 +22,7 @@
 #include "mm/dumb_allocator.hpp"
 #include "shared_receive_queue.hpp"
 
+#include <chrono>
 #include "debug.h"
 
 namespace kym {
@@ -30,6 +31,7 @@ namespace connection {
 const uint32_t write_atomic_outstanding = 30;
 
 namespace {
+  uint64_t d_head_update = 0;
   struct connectionInfo {
     uint64_t buf_addr;
     uint32_t buf_key;
@@ -53,7 +55,7 @@ namespace {
     .responder_resources = 15,
     .initiator_depth =  15,
     .retry_count = 5,  
-    .rnr_retry_count = 2, 
+    .rnr_retry_count = 0, 
     .native_qp = false,
     .inline_recv = 0,
   };
@@ -74,6 +76,7 @@ Status WriteAtomicInstance::Init(struct ibv_context *ctx, struct ibv_pd *pd){
   this->buf_meta_ =  (struct write_atomic_meta *)calloc(1, sizeof(struct write_atomic_meta));
 
   if (this->use_dm_) {
+    info(stderr, "USING DM\n");
     struct ibv_alloc_dm_attr attr = {};
     attr.length = sizeof(struct write_atomic_meta);
     this->buf_meta_dm_ = ibv_alloc_dm(ctx, &attr);
@@ -96,14 +99,14 @@ Status WriteAtomicInstance::Init(struct ibv_context *ctx, struct ibv_pd *pd){
   }
 
   // TODO(fischi): Parameter
-  auto srq_s = endpoint::GetSharedReceiveQueue(pd, 1, 100);
+  auto srq_s = endpoint::GetSharedReceiveQueue(pd, 1, 1024);
   if (!srq_s.ok()){
     return srq_s.status().Wrap("error getting srq");
   }
   this->srq_ = srq_s.value();
 
   // TODO(fischi): Parameter
-  this->rcv_cq_ = ibv_create_cq(ctx, 100, NULL, NULL, 0 );
+  this->rcv_cq_ = ibv_create_cq(ctx, 1024, NULL, NULL, 0 );
   
   debug(stderr, "Initialized instance with pd %p | srq %p\n", this->pd_, this->srq_->GetSRQ());
   return Status();
@@ -113,6 +116,7 @@ WriteAtomicInstance::~WriteAtomicInstance(){
   
 }
 Status WriteAtomicInstance::Close(){
+  info(stderr, "needed to update head %ld times, with using dm %d\n", d_head_update, this->use_dm_);
   ibv_dereg_mr(this->buf_mr_);
   ibv_dereg_mr(this->buf_meta_mr_);
   if (this->use_dm_) {
@@ -269,14 +273,17 @@ StatusOr<ReceiveRegion> WriteAtomicInstance::Receive(){
   reg.context = global_off;
   reg.addr = (void *)((uint64_t)this->buf_mr_->addr + local_off);
   reg.length = wc.byte_len;
+
   return reg;
 }
 Status WriteAtomicInstance::Free(ReceiveRegion reg){
   // TODO(fischi) Locks?
   uint64_t global_start = reg.context;  // the beginning of the to be freed buffer as a unique global offset
   uint64_t global_end = global_start+reg.length; // the end of the freed buffer as a unique global offset
+
   // freed_regions is a hashmap that maps the start of a freed region to the end of it
   // if there exists a freed region that starts at the end of the region we currently freeing we merge them
+  // We need to do this as messages can come in out of order.
   while (this->freed_regions_.count(global_end)){
     uint64_t tmp = this->freed_regions_[global_end];
     this->freed_regions_.erase(global_end);
@@ -285,7 +292,8 @@ Status WriteAtomicInstance::Free(ReceiveRegion reg){
   // If the region we are freeing is the head, we update it otherwise add the regions to the freed_regions map
   if (global_start == this->buf_meta_->head){ 
     this->buf_meta_->head = global_end;
-    if (this->use_dm_) {
+    // We try to limit the number of DM interactions
+    if (this->use_dm_ && this->acked_head_ + 10*1024 < this->buf_meta_->head) {
       // The receiver is authorative of the head field. We need to reconcile the version in device memory
       // This depends on the head being the first field.
       int ret = ibv_memcpy_to_dm(this->buf_meta_dm_, 0, &this->buf_meta_->head, sizeof(uint64_t));
@@ -339,6 +347,7 @@ Status WriteAtomicConnection::Send(SendRegion region){
   return this->Wait(id_stat.value());
 }
 
+
 StatusOr<uint64_t> WriteAtomicConnection::SendAsync(SendRegion region){
   if(region.length >= this->rbuf_size_){
     return Status(StatusCode::InvalidArgument, "message too large");
@@ -364,8 +373,11 @@ StatusOr<uint64_t> WriteAtomicConnection::SendAsync(SendRegion region){
   // FIXME(Fischi) We should NEVER fail in here. If we do the buffer is in an inconsistent state
 
   // We check if there is space to write. We essentiall reserve space without knowing if we can actually write to it.
-  int rnr_i = 0;
+  int i = 0;
+  bool update_head = false;
   while(this->rbuf_meta_->head + this->rbuf_size_ <= this->rbuf_meta_->tail + region.length){
+    auto start = std::chrono::high_resolution_clock::now();
+    update_head = true;
     uint64_t id = this->next_id_++;
     auto read_stat = this->ep_->PostRead(id, this->rbuf_meta_mr_->lkey, &this->rbuf_meta_->head, sizeof(this->rbuf_meta_->head),
         (uint64_t)&((struct write_atomic_meta *)this->rbuf_meta_vaddr_)->head, this->rbuf_meta_rkey_);
@@ -376,10 +388,16 @@ StatusOr<uint64_t> WriteAtomicConnection::SendAsync(SendRegion region){
     if (!stat.ok()){
       return stat;
     }
-    rnr_i++;
-    //if (rnr_i > 100) info(stderr, "Waiting for head to update %d, local cache %ld, tail at %ld\n", rnr_i, this->rbuf_meta_->head, this->rbuf_meta_->tail);
-    // TODO(fischi) Maybe add some kind of backoff?
+    if (i > 10 && i%100 ==0) info(stderr, "Waiting for head to update %d, local cache %ld, tail at %ld\n", i, this->rbuf_meta_->head, this->rbuf_meta_->tail);
+
+    // Rate limit this to one read every 10 us
+    i++;
+    auto sleep_end_time =  start + std::chrono::nanoseconds(10000*i);
+    while (std::chrono::high_resolution_clock::now() < sleep_end_time){
+        // busy loop
+    }
   }
+  if (update_head) d_head_update++;
 
   uint64_t local_off = this->rbuf_meta_->tail % this->rbuf_size_; // We calculate the local offset to know where to write to.
 
