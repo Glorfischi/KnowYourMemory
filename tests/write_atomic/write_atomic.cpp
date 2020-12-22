@@ -242,6 +242,7 @@ StatusOr<WriteAtomicConnection *> WriteAtomicInstance::Dial(std::string ip, int 
   return conn;
 }
 
+
 StatusOr<ReceiveRegion> WriteAtomicInstance::Receive(){
   struct ibv_wc wc;
   while(ibv_poll_cq(this->rcv_cq_, 1, &wc) == 0){}
@@ -253,9 +254,19 @@ StatusOr<ReceiveRegion> WriteAtomicInstance::Receive(){
     return stat.Wrap("error reposing receive buffer");
   }
 
-  int32_t local_off = wc.imm_data % this->buf_size_;
+  int32_t local_off = wc.imm_data;
+  // Let's convert the local 32 bit offset to a unique 64 bit offset 
+  int32_t local_head = this->buf_meta_->head % this->buf_size_;
+  int64_t global_off;
+  if (local_head <= local_off) {
+    // global head is in the same "buffer interval" as the global offset
+    global_off = (this->buf_meta_->head/this->buf_size_)*this->buf_size_ + local_off;
+  } else {
+    // the global head is in the previous "interval"
+    global_off = (this->buf_meta_->head/this->buf_size_ + 1)*this->buf_size_ + local_off;
+  }
   ReceiveRegion reg;
-  reg.context = wc.imm_data;
+  reg.context = global_off;
   reg.addr = (void *)((uint64_t)this->buf_mr_->addr + local_off);
   reg.length = wc.byte_len;
   return reg;
@@ -353,6 +364,7 @@ StatusOr<uint64_t> WriteAtomicConnection::SendAsync(SendRegion region){
   // FIXME(Fischi) We should NEVER fail in here. If we do the buffer is in an inconsistent state
 
   // We check if there is space to write. We essentiall reserve space without knowing if we can actually write to it.
+  int rnr_i = 0;
   while(this->rbuf_meta_->head + this->rbuf_size_ <= this->rbuf_meta_->tail + region.length){
     uint64_t id = this->next_id_++;
     auto read_stat = this->ep_->PostRead(id, this->rbuf_meta_mr_->lkey, &this->rbuf_meta_->head, sizeof(this->rbuf_meta_->head),
@@ -364,14 +376,16 @@ StatusOr<uint64_t> WriteAtomicConnection::SendAsync(SendRegion region){
     if (!stat.ok()){
       return stat;
     }
+    rnr_i++;
+    //if (rnr_i > 100) info(stderr, "Waiting for head to update %d, local cache %ld, tail at %ld\n", rnr_i, this->rbuf_meta_->head, this->rbuf_meta_->tail);
     // TODO(fischi) Maybe add some kind of backoff?
   }
 
-  uint32_t local_off = this->rbuf_meta_->tail % this->rbuf_size_; // We calculate the local offset to know where to write to.
+  uint64_t local_off = this->rbuf_meta_->tail % this->rbuf_size_; // We calculate the local offset to know where to write to.
 
   id = this->next_id_++;
   auto send_stat = this->ep_->PostWriteWithImmidate(id, region.lkey, region.addr, region.length, 
-      this->rbuf_vaddr_ + local_off, this->rbuf_rkey_, this->rbuf_meta_->tail);
+      this->rbuf_vaddr_ + local_off, this->rbuf_rkey_, local_off);
   if (!send_stat.ok()){
     return send_stat;
   }

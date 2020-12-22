@@ -98,9 +98,6 @@ int main(int argc, char* argv[]) {
     .use_dm = dm,
   };
   kym::connection::WriteAtomicInstance *inst = new kym::connection::WriteAtomicInstance(opts);
-  if (!dm) {
-    std::cerr << "Not using dm" << std::endl;
-  }
 
   if (server){
     kym::connection::WriteAtomicConnection *conns[conn_count];
@@ -124,6 +121,7 @@ int main(int argc, char* argv[]) {
       conns[i] = conn;
       debug(stderr, "accepted\n");
     }
+    std::vector<float> *m = new std::vector<float>();
       
     if (lat) {
       stat = test_lat_recv(inst, count);
@@ -134,12 +132,12 @@ int main(int argc, char* argv[]) {
       if (!bw_s.ok()){
         std::cerr << "Error running bench " << bw_s.status() << std::endl;
       }
-      std::cerr << "## Bandwidth (MB/s)" << std::endl;
-      std::cout << (double)bw_s.value()/(1024*1024) << std::endl;
+      m->push_back(bw_s.value());
     }
     if (!stat.ok()){
       std::cerr << "Error sending " << stat << std::endl;
     }
+    measurements[0] = m;
   }
 
   if(client){
@@ -205,6 +203,41 @@ int main(int argc, char* argv[]) {
       std::ofstream file(filename, std::ios_base::app);
       file << conn_count <<  " " << size << " " << unack << " "  <<  bandwidth << "\n";
       file.close();
+    }
+  }
+  if (pingpong) {
+    // Handle Latency distribution
+    std::vector<float> joined;
+    for (auto m : measurements){
+      if (m != nullptr) {
+        joined.reserve(m->size());
+        joined.insert(joined.end(), m->begin(), m->end());
+      }
+    }
+    if (!filename.empty()){
+      std::ofstream file(filename);
+      for (float f : joined){
+        file << f << "\n";
+      }
+      file.close();
+    }
+
+    if (joined.size() > 0) {
+      if (lat) {
+        std::cout << "\tLatency";
+      } else if(pingpong)  {
+        std::cout << "\tPingPong Latency";
+      }
+      auto n = joined.size();
+      std::cout << std::endl;
+      std::cout << "N: " << n << std::endl;
+      
+      std::sort (joined.begin(), joined.end());
+      int q025 = (int)(n*0.025);
+      int q500 = (int)(n*0.5);
+      int q975 = (int)(n*0.975);
+      std::cout << "q025" << "\t" << "q50" << "\t" << "q975" << std::endl;
+      std::cout << joined[q025] << "\t" << joined[q500] << "\t" << joined[q975] << std::endl;
     }
   }
   
