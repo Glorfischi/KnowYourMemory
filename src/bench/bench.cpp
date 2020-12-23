@@ -283,7 +283,7 @@ kym::StatusOr<uint64_t> test_bw_send(kym::connection::Sender *snd, int count, in
     *(int *)buf.addr = i;
     bufs.push_back(buf);
   }
-  info(stderr, "warmup for %d\n", count/16);
+  //info(stderr, "warmup for %d\n", count/16);
   auto stat = test_warmup_send(snd, count/16, bufs[0]); // We don't touch the other bufs. That might be a problem..
   if (!stat.ok()) {
     return stat.Wrap("error during send warmup");
@@ -429,9 +429,9 @@ kym::StatusOr<uint64_t> test_bw_recv(kym::connection::Receiver *rcv, int count, 
     }
   }
 
-  for (auto m : measurements) {
+  /*for (auto m : measurements) {
     std::cout << m << std::endl;
-  }
+  }*/
 
   std::sort (measurements.begin(), measurements.end());
   int median = (int)(measurements.size()*0.5);
@@ -443,12 +443,12 @@ kym::StatusOr<uint64_t> test_bw_recv(kym::connection::Receiver *rcv, int count, 
 kym::StatusOr<uint64_t> test_bw_recv(std::vector<kym::connection::Receiver *>rcvers, int count, int size) {
   int interval = std::min(count, 5000);
   int cn = rcvers.size();
-  info(stderr, "cn: %d\n", cn);
+  //info(stderr, "cn: %d\n", cn);
   std::vector<long> measurements;
   measurements.reserve(count/interval);
 
   // Warmup each connection 
-  info(stderr, "warmup for %d", count/16);
+  //info(stderr, "warmup for %d", count/16);
   for (int k = 0; k<count/16; k++){
     for ( auto rcv : rcvers){
       auto buf_s = rcv->Receive();
@@ -462,7 +462,7 @@ kym::StatusOr<uint64_t> test_bw_recv(std::vector<kym::connection::Receiver *>rcv
     }
   }
 
-  info(stderr, "Warm\n");
+  //info(stderr, "Warm\n");
   auto start = std::chrono::high_resolution_clock::now();
   auto begin = start;
   int i = 0;

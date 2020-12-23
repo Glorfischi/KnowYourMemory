@@ -58,7 +58,7 @@ endpoint::Options default_opts = {
   .responder_resources = 15,
   .initiator_depth =  15,
   .flow_control = 0,
-  .retry_count = 0,  
+  .retry_count = 8,  
   .rnr_retry_count = 0, 
   .native_qp = false,
   .inline_recv = 0,
@@ -112,7 +112,7 @@ StatusOr<uint64_t> DirectWriteConnection::SendAsync(SendRegion region){
   volatile DirectWriteReceiveBuffer *buf;
   int rnr_i = 0;
   do {
-    if (rnr_i > 1000) info(stderr, "RNR %d\n", rnr_i);
+    //if (rnr_i > 1000) info(stderr, "RNR %d\n", rnr_i);
     rnr_i++;
     buf = &this->target_buf_[id%this->nr_buffers_];
     debug(stderr, "Sending: Getting buffer [id: %d, addr: %p, buffaddr: %p valid: %d]\n", id, &this->target_buf_[id%this->nr_buffers_], (void*)buf.addr, buf.valid);
@@ -121,7 +121,7 @@ StatusOr<uint64_t> DirectWriteConnection::SendAsync(SendRegion region){
   uint32_t rkey = buf->rkey;
   // We will send the complete buffer everytime.. That might be far too slow
   
-  debug(stderr, "Sending: Writing [id: %d, destaddr: %p, end: %p]\n", id, (void *)addr, getLengthAddr((void *)addr, this->buf_size_));
+  debug(stderr, "Sending: Writing [id: %ld, destaddr: %p, end: %p, size %d]\n", id, (void *)addr, getLengthAddr((void *)addr, this->buf_size_), this->buf_size_);
   auto sendStatus = this->ep_->PostWrite(id, region.lkey, region.addr, this->buf_size_, addr, rkey); 
   if (!sendStatus.ok()){
     return sendStatus;
@@ -267,7 +267,7 @@ StatusOr<DirectWriteConnection *> DialDirectWrite(std::string ip, int port, int3
       tar_buf_mr,
       remote_conn_details->buf_addr, remote_conn_details->buf_key);
 
-  std::chrono::milliseconds timespan(400); // FIXME uggy hack as synchronization is not quite right
+  std::chrono::milliseconds timespan(100); // FIXME uggy hack as synchronization is not quite right
   std::this_thread::sleep_for(timespan);
 
   for (auto mr : rcv_buf_mrs){
@@ -334,7 +334,7 @@ StatusOr<DirectWriteConnection *> DirectWriteListener::Accept(int32_t buf_size){
       tar_buf_mr,
       remote_conn_details->buf_addr, remote_conn_details->buf_key);
 
-  std::chrono::milliseconds timespan(400); // FIXME uggy hack as synchronization is not quite right
+  std::chrono::milliseconds timespan(100); // FIXME uggy hack as synchronization is not quite right
   std::this_thread::sleep_for(timespan);
 
   for (auto mr : rcv_buf_mrs){
