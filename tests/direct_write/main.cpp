@@ -135,6 +135,8 @@ int main(int argc, char* argv[]) {
     }
     auto conn = conn_s.value();
 
+    std::chrono::milliseconds timespan(1000);
+    std::this_thread::sleep_for(timespan);
     if (pingpong){
       auto stat = test_lat_ping(conn, conn, count, size, &measurements);
       if (!stat.ok()){
@@ -154,7 +156,6 @@ int main(int argc, char* argv[]) {
       std::cout << (double)bandwidth/(1024*1024) << std::endl;
 
     }
-    std::chrono::milliseconds timespan(1000);
     std::this_thread::sleep_for(timespan);
     conn->Close();
   }

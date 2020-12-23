@@ -33,7 +33,7 @@ namespace kym {
 namespace connection {
 namespace {
 
-const uint64_t inflight = 60;
+const uint64_t inflight = 128;
 
 endpoint::Options default_opts = {
   .pd = NULL,
@@ -44,7 +44,7 @@ endpoint::Options default_opts = {
     .srq = NULL,
     .cap = {
       .max_send_wr = inflight,
-      .max_recv_wr = inflight,
+      .max_recv_wr = 1,
       .max_send_sge = 1,
       .max_recv_sge = 1,
       .max_inline_data = 0,
@@ -55,8 +55,8 @@ endpoint::Options default_opts = {
   .use_srq = false,
   .private_data = NULL,
   .private_data_len = 0,
-  .responder_resources = 10,
-  .initiator_depth =  10,
+  .responder_resources = 15,
+  .initiator_depth =  15,
   .flow_control = 0,
   .retry_count = 0,  
   .rnr_retry_count = 0, 
@@ -109,14 +109,16 @@ Status DirectWriteConnection::Send(SendRegion region){
 }
 StatusOr<uint64_t> DirectWriteConnection::SendAsync(SendRegion region){
   uint64_t id = this->next_id_++;
-  
-  DirectWriteReceiveBuffer buf = this->target_buf_[id%this->nr_buffers_];
-  debug(stderr, "Sending: Getting buffer [id: %d, addr: %p, buffaddr: %p valid: %d]\n", id, &this->target_buf_[id%this->nr_buffers_], (void*)buf.addr, buf.valid);
-  if (!buf.valid){
-    return Status(StatusCode::RateLimit, "No receive buffer ready");
-  }
-  uint64_t addr = buf.addr;
-  uint32_t rkey = buf.rkey;
+  volatile DirectWriteReceiveBuffer *buf;
+  int rnr_i = 0;
+  do {
+    if (rnr_i > 1000) info(stderr, "RNR %d\n", rnr_i);
+    rnr_i++;
+    buf = &this->target_buf_[id%this->nr_buffers_];
+    debug(stderr, "Sending: Getting buffer [id: %d, addr: %p, buffaddr: %p valid: %d]\n", id, &this->target_buf_[id%this->nr_buffers_], (void*)buf.addr, buf.valid);
+  } while (!buf->valid);
+  uint64_t addr = buf->addr;
+  uint32_t rkey = buf->rkey;
   // We will send the complete buffer everytime.. That might be far too slow
   
   debug(stderr, "Sending: Writing [id: %d, destaddr: %p, end: %p]\n", id, (void *)addr, getLengthAddr((void *)addr, this->buf_size_));
@@ -180,7 +182,6 @@ Status DirectWriteConnection::Free(ReceiveRegion region){
     return sendStatus;
   }
 
-  
   debug(stderr, "Appending free buffer [index %d]\n", this->rcv_tail_);
   this->rcv_buffers_[this->rcv_tail_] = buf;
   this->rcv_tail_ = (this->rcv_tail_ + 1) % this->nr_buffers_;
