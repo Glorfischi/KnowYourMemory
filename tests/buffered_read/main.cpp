@@ -24,7 +24,7 @@
 #include "buffered_read.hpp"
 
 cxxopts::ParseResult parse(int argc, char* argv[]) {
-  cxxopts::Options options(argv[0], "sendrecv");
+  cxxopts::Options options(argv[0], "read");
   try {
     options.add_options()
       ("bw", "Whether to test bandwidth", cxxopts::value<bool>())
@@ -37,6 +37,8 @@ cxxopts::ParseResult parse(int argc, char* argv[]) {
       ("n,iters",  "Number of exchanges" , cxxopts::value<int>()->default_value("1000"))
       ("s,size",  "Size of message to exchange", cxxopts::value<int>()->default_value("60"))
       ("unack",  "Number of messages that can be unacknowleged. Only relevant for bandwidth benchmark", cxxopts::value<int>()->default_value("100"))
+      ("c,conn",  "Number of connections" , cxxopts::value<int>()->default_value("1"))
+      ("single-receiver",  "whether to have single receiver for all connections N:1" , cxxopts::value<bool>()->default_value("false"))
       ("out", "filename to output measurements", cxxopts::value<std::string>()->default_value(""))
      ;
  
@@ -60,107 +62,6 @@ cxxopts::ParseResult parse(int argc, char* argv[]) {
   }
 }
 
-
-kym::Status test_lat_ping(kym::connection::BufferedReadConnection *conn, int count, int size, std::vector<float> *lat_us){
-  lat_us->reserve(count);
-  void *buf = malloc(size);
-  // TODO(fischi) Warmup
-  for(int i = 0; i<count; i++){
-    auto start = std::chrono::high_resolution_clock::now();
-    auto send_s = conn->Send(buf, size);
-    if (!send_s.ok()){
-      free(buf);
-      return send_s.Wrap("error sending buffer");
-    }
-    auto rcv_s = conn->Receive();
-    auto finish = std::chrono::high_resolution_clock::now();
-    if (!rcv_s.ok()){
-      free(buf);
-      return rcv_s.status().Wrap("error receiving buffer");
-    }
-    auto free_s = conn->Free(rcv_s.value());
-    if (!free_s.ok()){
-      return free_s.Wrap("error freeing receive buffer");
-    }
-    lat_us->push_back(std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count()/1000.0);
-  }
-  free(buf);
-  return kym::Status();
-
-}
-kym::Status test_lat_pong(kym::connection::BufferedReadConnection *conn, int count, int size){
-  void *buf = malloc(size);
-  // TODO(fischi) Warmup
-  for(int i = 0; i<count; i++){
-    auto rcv_s = conn->Receive();
-    auto send_s = conn->Send(buf, size);
-    if (!rcv_s.ok()){
-      free(buf);
-      return rcv_s.status().Wrap("error receiving buffer");
-    }
-    if (!send_s.ok()){
-      free(buf);
-      return send_s.Wrap("error sending buffer");
-    }
-    auto free_s = conn->Free(rcv_s.value());
-    if (!free_s.ok()){
-      free(buf);
-      return free_s.Wrap("error freeing receive buffer");
-    }
-  }
-  free(buf);
-  return kym::Status();
-
-}
-kym::StatusOr<uint64_t> test_bw_send(kym::connection::BufferedReadConnection *conn, int count, int size){
-  void *buf = malloc(size);
-  // TODO(fischi) Warmup
-  auto start = std::chrono::high_resolution_clock::now();
-  for(int i = 0; i<count; i++){
-    *(uint32_t *)buf = i;
-    auto send_s = conn->Send(buf, size);
-    if (!send_s.ok()){
-      free(buf);
-      return send_s.Wrap("error sending buffer");
-    }
-  }
-  auto end = std::chrono::high_resolution_clock::now();
-  double dur = std::chrono::duration_cast<std::chrono::nanoseconds>(end-start).count();
-  return (double)size*((double)count/(dur/1e9));
-}
-kym::StatusOr<uint64_t> test_bw_recv(kym::connection::BufferedReadConnection *conn, int count, int size){
-  // TODO(fischi) Warmup
-  auto buf_s = conn->Receive();
-  if (!buf_s.ok()){
-    return buf_s.status().Wrap("error receiving buffer");
-  }
-  // std::cout << "# GOT: " << *(int *)buf_s.value().addr << std::endl;
-  auto free_s = conn->Free(buf_s.value());
-  if (!free_s.ok()){
-    return free_s.Wrap("error receiving buffer");
-  }
-  auto start = std::chrono::high_resolution_clock::now();
-  int i = 1;
-  while(i<count){
-    i++;
-    if (i % 100 == 0) debug(stderr, "BW RECEIVE: %d\t[rcv: %p, core: %d]\n",i, rcv, sched_getcpu());
-    auto buf_s = conn->Receive();
-    if (!buf_s.ok()){
-      return buf_s.status().Wrap("error receiving buffer");
-    }
-    auto free_s = conn->Free(buf_s.value());
-    if (!free_s.ok()){
-      return free_s.Wrap("error receiving buffer");
-    }
-  }
-  auto end = std::chrono::high_resolution_clock::now();
-  double dur = std::chrono::duration_cast<std::chrono::nanoseconds>(end-start).count();
-  return (double)size*(double)(count-1)/(dur/1e9);
-}
-
-
-
-
 int main(int argc, char* argv[]) {
   auto flags = parse(argc,argv);
   std::string ip = flags["address"].as<std::string>();  
@@ -176,46 +77,95 @@ int main(int argc, char* argv[]) {
   int unack = flags["unack"].as<int>();  
 
 
+  int conn_count = flags["conn"].as<int>();  
+  bool singlercv = flags["single-receiver"].as<bool>();  
+
 
   bool server = flags["server"].as<bool>();  
   bool client = flags["client"].as<bool>();  
 
-  std::vector<float> latency_m;
+  std::vector<std::vector<float>*> measurements(conn_count);
 
-  std::vector<float> measurements;
+  uint64_t mean_msg_size = 0;
+
   if (server){
+    std::vector<std::thread> workers;
+    std::vector<kym::connection::BufferedReadConnection*> conns;
+    std::vector<kym::connection::Receiver *> recvrs;
+
     auto ln_s = kym::connection::ListenBufferedRead(ip, 9999);
     if (!ln_s.ok()){
       std::cerr << "Error listening  " << ln_s.status() << std::endl;
       return 1;
     }
     kym::connection::BufferedReadListener *ln = ln_s.value();
-    auto conn_s = ln->Accept();
-    if (!conn_s.ok()){
-      std::cerr << "Error accepting : " << conn_s.status() << std::endl;
-      return 1;
-    }
-    kym::connection::BufferedReadConnection *conn = conn_s.value();
-    if (pingpong) {
-      auto stat = test_lat_pong(conn, count, size);
-      if (!stat.ok()){
-        std::cerr << "Error running benchmark: " << stat << std::endl;
+
+    for (int i = 0; i<conn_count; i++){
+      auto conn_s = ln->Accept();
+      if (!conn_s.ok()){
+        std::cerr << "Error accepting : " << conn_s.status() << std::endl;
         return 1;
       }
+      kym::connection::BufferedReadConnection *conn = conn_s.value();
+      conns.push_back(conn);
+      recvrs.push_back(conn);
     }
-    if (bw) {
-      auto stat = test_bw_recv(conn, count, size);
-      if (!stat.ok()){
-        std::cerr << "Error running benchmark: " << stat.status() << std::endl;
-        return 1;
+
+    if (!singlercv) {
+      for (int i = 0; i<conn_count; i++){
+        auto conn = conns[i];
+        workers.push_back(std::thread([i, bw, pingpong, conn, count, size, &measurements, &mean_msg_size](){
+          set_core_affinity(i+2);
+          std::vector<float> *m = new std::vector<float>();
+
+          if (pingpong){
+            auto stat = test_lat_pong(conn, conn, count, size);
+            if (!stat.ok()){
+              std::cerr << "Error running benchmark: " << stat << std::endl;
+              return 1;
+            }
+          }
+          if (bw) {
+            auto bw_s = test_bw_recv(conn, count, size);
+            if (!bw_s.ok()){
+              std::cerr << "Error running benchmark: " << bw_s.status() << std::endl;
+              return 1;
+            }
+            m->push_back(bw_s.value());
+          }
+
+          measurements[i] = m;
+          std::chrono::milliseconds timespan(1000);
+          std::this_thread::sleep_for(timespan);
+
+          if (i == 0) {
+            mean_msg_size = conn->GetMeanMsgSize();
+          }
+          conn->Close();
+          delete conn;
+          return 0;
+        }));
       }
-      auto bandwidth = stat.value();
-      std::cerr << "## Bandwidth (MB/s)" << std::endl;
-      std::cout << (double)bandwidth/(1024*1024) << std::endl;
+      for (int i = 0; i<workers.size(); i++){
+        workers[i].join();
+      }
     }
+    if (singlercv) {
+      set_core_affinity(1);
+      if (bw) {
+        std::vector<float> *m = new std::vector<float>();
+        auto bw_s = test_bw_recv(recvrs, count, size);
+        if (!bw_s.ok()){
+          int cpu_num = sched_getcpu();
+          std::cerr << "[CPU: " << cpu_num << "] Error running benchmark: " << bw_s.status() << std::endl;
+          return 1;
+        }
+        m->push_back(bw_s.value());
+        measurements[0] = m;
+      }
+    }
+
     
-    conn->Close();
-    delete conn;
     ln->Close();
     delete ln;
   }
@@ -223,59 +173,107 @@ int main(int argc, char* argv[]) {
   if(client){
     std::chrono::milliseconds timespan(1000); // Make sure we received all acks
     std::this_thread::sleep_for(timespan);
-      
-    auto conn_s = kym::connection::DialBufferedRead(ip, 9999);
-    if (!conn_s.ok()){
-      std::cerr << "Error Dialing  " << conn_s.status() << std::endl;
-      return 1;
-    }
-    kym::connection::BufferedReadConnection *conn = conn_s.value();
-    if (pingpong) {
-      auto stat = test_lat_ping(conn, count, size, &measurements);
-      if (!stat.ok()){
-        std::cerr << "Error running benchmark: " << stat << std::endl;
-        return 1;
-      }
-    }
-    if (bw) {
-      auto stat = test_bw_send(conn, count, size);
-      if (!stat.ok()){
-        std::cerr << "Error running benchmark: " << stat.status() << std::endl;
-        return 1;
-      }
-    }
-    std::this_thread::sleep_for(timespan);
-    std::this_thread::sleep_for(timespan);
-    
-        
-    conn->Close();
-    delete conn;
-  }
+    std::vector<std::thread> workers;
+    std::vector<kym::connection::BufferedReadConnection*> conns;
 
-  if (pingpong) {
+      
+    for (int i = 0; i<conn_count; i++){
+      auto conn_s = kym::connection::DialBufferedRead(ip, 9999);
+      if (!conn_s.ok()){
+        std::cerr << "Error Dialing  " << conn_s.status() << std::endl;
+        return 1;
+      }
+      kym::connection::BufferedReadConnection *conn = conn_s.value();
+      conns.push_back(conn);
+    }
+    for (int i = 0; i<conn_count; i++){
+      auto conn = conns[i];
+      workers.push_back(std::thread([i, bw, pingpong, conn, count, size, unack, &measurements](){
+        set_core_affinity(i+2);
+        std::vector<float> *m = new std::vector<float>();
+        if (pingpong){
+          auto stat = test_lat_ping(conn, conn, count, size, m);
+          if (!stat.ok()){
+            std::cerr << "Error running benchmark: " << stat << std::endl;
+            return 1;
+          }
+        }
+
+        if (bw) {
+          auto bw_s = test_bw_send(conn, count, size, unack);
+          if (!bw_s.ok()){
+            std::cerr << "Error running benchmark: " << bw_s.status() << std::endl;
+            return 1;
+          }
+          m->push_back(bw_s.value());
+        }
+        measurements[i] = m;
+        std::chrono::milliseconds timespan(1000); // Make sure receiver read everything
+        std::this_thread::sleep_for(3*timespan);
+        conn->Close();
+        delete conn;
+        return 0;
+      }));
+      
+    }
+    for (int i = 0; i<workers.size(); i++){
+      workers[i].join();
+    }
+    
+    
+  }
+  if ( pingpong) {
     // Handle Latency distribution
+    std::vector<float> joined;
+    for (auto m : measurements){
+      if (m != nullptr) {
+        joined.reserve(m->size());
+        joined.insert(joined.end(), m->begin(), m->end());
+      }
+    }
     if (!filename.empty()){
       std::ofstream file(filename);
-      for (float f : measurements){
+      for (float f : joined){
         file << f << "\n";
       }
       file.close();
     }
 
-    if (measurements.size() > 0) {
+    if (joined.size() > 0) {
       std::cout << "\tPingPong Latency";
-      auto n = measurements.size();
+      auto n = joined.size();
       std::cout << std::endl;
       std::cout << "N: " << n << std::endl;
       
-      std::sort (measurements.begin(), measurements.end());
+      std::sort (joined.begin(), joined.end());
       int q025 = (int)(n*0.025);
       int q500 = (int)(n*0.5);
       int q975 = (int)(n*0.975);
       std::cout << "q025" << "\t" << "q50" << "\t" << "q975" << std::endl;
-      std::cout << measurements[q025] << "\t" << measurements[q500] << "\t" << measurements[q975] << std::endl;
+      std::cout << joined[q025] << "\t" << joined[q500] << "\t" << joined[q975] << std::endl;
     }
   }
+
+  if (bw) {
+    uint64_t bandwidth = 0;
+    for (auto m : measurements){
+      if (m != nullptr) {
+        bandwidth += m->at(0);
+      }
+    }
+    std::cerr << "## Bandwidth (MB/s)" << std::endl;
+    std::cout << (double)bandwidth/(1024*1024) << std::endl;
+
+    std::cerr << "Mean Msg Size" << std::endl;
+    std::cout << mean_msg_size << std::endl;
+    if (!filename.empty()){
+      std::ofstream file(filename, std::ios_base::app);
+      file << conn_count <<  " " << size << " " << unack << " " << mean_msg_size << " " <<  bandwidth << "\n";
+      file.close();
+    }
+  }
+
+  
   return 0;
 }
  

@@ -405,6 +405,7 @@ kym::StatusOr<uint64_t> test_bw_recv(kym::connection::Receiver *rcv, int count, 
   }
 
   auto start = std::chrono::high_resolution_clock::now();
+  auto begin = start;
   int i = 0;
   int j = 0;
   while(i<count){
@@ -428,6 +429,9 @@ kym::StatusOr<uint64_t> test_bw_recv(kym::connection::Receiver *rcv, int count, 
       start = now;
     }
   }
+  auto end = std::chrono::high_resolution_clock::now();
+  double dur = std::chrono::duration_cast<std::chrono::nanoseconds>(end-begin).count();
+
 
   /*for (auto m : measurements) {
     std::cout << m << std::endl;
@@ -436,6 +440,7 @@ kym::StatusOr<uint64_t> test_bw_recv(kym::connection::Receiver *rcv, int count, 
   std::sort (measurements.begin(), measurements.end());
   int median = (int)(measurements.size()*0.5);
 
+  return (double)size*((double)count/(dur/1e9));
   return measurements[median];
 }
 

@@ -68,6 +68,13 @@ namespace {
 
 }
 
+uint64_t BufferedReadConnection::GetMeanMsgSize() {
+  if (this->d_sent_msgs_ == 0) {
+    return 0;
+  }
+  return this->d_sent_bytes_/this->d_sent_msgs_;
+}
+
   
 StatusOr<ReceiveRegion> BufferedReadConnection::Receive(){
   if (*this->remote_tail_ == this->read_ptr_){
@@ -92,6 +99,8 @@ StatusOr<ReceiveRegion> BufferedReadConnection::Receive(){
     if (!wc_s.ok()){
       return wc_s.status().Wrap("error polling send cq to move data");
     }
+    this->d_sent_msgs_++;
+    this->d_sent_bytes_ += wc_s.value().byte_len;
   }
 
   debug(stderr, "Got new data [tail: %d, read_ptr %d]\n", *this->remote_tail_, this->read_ptr_);
@@ -192,6 +201,29 @@ Status BufferedReadConnection::Close(){
 BufferedReadConnection::~BufferedReadConnection(){
   delete this->ep_;
 }
+
+
+StatusOr<SendRegion> BufferedReadConnection::GetMemoryRegion(size_t size) {
+  struct SendRegion reg = {0};
+  reg.addr = calloc(1, size);
+  reg.length = size;
+  return reg;
+
+}
+Status BufferedReadConnection::Free(SendRegion region) {
+  free(region.addr);
+  return Status();
+}
+Status BufferedReadConnection::Send(SendRegion region) {
+  return this->Send(region.addr, region.length);
+}
+StatusOr<uint64_t> BufferedReadConnection::SendAsync(SendRegion region) {
+  return this->Send(region.addr, region.length);
+}
+Status BufferedReadConnection::Wait(uint64_t id){
+  return Status();
+}
+
 
 StatusOr<BufferedReadConnection *> DialBufferedRead(std::string ip, int port){
   // Default to port 18515

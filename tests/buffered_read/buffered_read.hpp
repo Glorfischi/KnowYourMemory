@@ -28,7 +28,7 @@
 namespace kym {
 namespace connection {
 
-class BufferedReadConnection {
+class BufferedReadConnection : public Connection {
   public:
     BufferedReadConnection(endpoint::Endpoint *ep,
         struct ibv_mr *meta_data, struct ibv_mr *buffer, uint32_t buf_len,
@@ -52,8 +52,20 @@ class BufferedReadConnection {
 
     Status Close();
 
+
+    // Debug function to get the mean transfer size for the receiver.
+    uint64_t GetMeanMsgSize();
+
     // We will need to copy into anyway
     Status Send(void *buf, uint32_t length);
+
+    // These are just to satisfy the connection requirements so that we can use the standard benchmark functions
+    StatusOr<SendRegion> GetMemoryRegion(size_t size);
+    Status Free(SendRegion region);
+    Status Send(SendRegion region);
+    StatusOr<uint64_t> SendAsync(SendRegion region);
+    Status Wait(uint64_t id);
+
     StatusOr<ReceiveRegion> Receive(); 
     // (Fischi) An Async receive would probably result in an out of order receive. This way we will just periodically "pay" for the transfer
     Status Free(ReceiveRegion);
@@ -81,6 +93,9 @@ class BufferedReadConnection {
     uint32_t remote_buf_rkey_;
     uint64_t remote_buf_addr_;
 
+    // Debug
+    uint64_t d_sent_msgs_ = 0;
+    uint64_t d_sent_bytes_ = 0;
 
     std::list<uint64_t> outstanding_;
 };
