@@ -119,7 +119,8 @@ StatusOr<uint64_t> DirectWriteConnection::SendAsync(SendRegion region){
   } while (!buf->valid);
   uint64_t addr = buf->addr;
   uint32_t rkey = buf->rkey;
-  // We will send the complete buffer everytime.. That might be far too slow
+  // We will send the complete buffer everytime. When having variable size messages this might be very bad
+  this->target_buf_[id%this->nr_buffers_].valid = false; // invalidate buffer
   
   debug(stderr, "Sending: Writing [id: %ld, destaddr: %p, end: %p, size %d]\n", id, (void *)addr, getLengthAddr((void *)addr, this->buf_size_), this->buf_size_);
   auto sendStatus = this->ep_->PostWrite(id, region.lkey, region.addr, this->buf_size_, addr, rkey); 
@@ -127,7 +128,6 @@ StatusOr<uint64_t> DirectWriteConnection::SendAsync(SendRegion region){
     return sendStatus;
   }
 
-  this->target_buf_[id%this->nr_buffers_].valid = false; // invalidate buffer
   return id;
 }
 Status DirectWriteConnection::Wait(uint64_t id){

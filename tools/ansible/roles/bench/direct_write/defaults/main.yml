@@ -1,0 +1,11 @@
+---
+bench_type: pingpong
+bench_count: 1000000
+
+bench_msg_size: 16
+bench_unack: 2
+
+bench_conn: 1
+bench_single_rcv: false
+
+bench_archive: false

@@ -30,7 +30,7 @@
         groups: ault_client
     - name: Allocating resources..
       shell:
-        cmd: "salloc -w {{ intel_hosts[-2:] | join(',') }} -t 30 --no-shell"
+        cmd: "salloc -w {{ intel_hosts[-2:] | join(',') }} -t 15 --no-shell"
       register: job_raw
     - debug:
         var: job_raw
@@ -393,7 +393,8 @@
         - ["bw"]
           #- [16, 512, 8192] 
         - [8192] 
-        - [true, false] 
+          #- [true, false] 
+        - [false] 
         - [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
 
 
@@ -451,6 +452,116 @@
         - ["pingpong"]
         - [16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384] 
         - [true, false] 
+
+- hosts: ault_runner
+  gather_facts: yes
+  tags: run, write-direct, bw, write-direct-bw
+  tasks:
+    - name: "Gather IP of server"
+      set_fact:
+        bench_server_ip: "{{ ansible_default_ipv4.address }}"
+      delegate_to: ault_server
+      run_once: true
+    - debug:
+        verbosity: 1
+        msg: "Server ip: {{ bench_server_ip}}"
+    - name: Write
+      include_role:
+        name: bench/direct_write
+      vars:
+        bench_type: "{{ item[0] }}"
+        bench_unack: "64"
+        bench_msg_size: "{{ item[1] }}"
+        bench_output: "write-direct-bw-single-size-{{ item[1] }}-unack-64"
+        bench_count: 1048576
+      with_nested:
+        - ["bw"]
+        - [16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384] 
+
+- hosts: ault_runner
+  gather_facts: yes
+  tags: run, write-direct, lat, write-direct-lat
+  tasks:
+    - name: "Gather IP of server"
+      set_fact:
+        bench_server_ip: "{{ ansible_default_ipv4.address }}"
+      delegate_to: ault_server
+      run_once: true
+    - debug:
+        verbosity: 1
+        msg: "Server ip: {{ bench_server_ip}}"
+    - name: Write
+      include_role:
+        name: bench/direct_write
+      vars:
+        bench_type: "{{ item[0] }}"
+        bench_unack: "1"
+        bench_msg_size: "{{ item[1] }}"
+        bench_output: "write-direct-lat-single-size-{{ item[1] }}"
+        bench_count: 1048576
+      with_nested:
+        - ["pingpong"]
+        - [16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384] 
+
+- hosts: ault_runner
+  gather_facts: yes
+  tags: run, write-direct, bw, write-direct-bw-thread
+  tasks:
+    - name: "Gather IP of server"
+      set_fact:
+        bench_server_ip: "{{ ansible_default_ipv4.address }}"
+      delegate_to: ault_server
+      run_once: true
+    - debug:
+        verbosity: 1
+        msg: "Server ip: {{ bench_server_ip}}"
+    - name: Write
+      include_role:
+        name: bench/direct_write
+      vars:
+        bench_type: "{{ item[0] }}"
+        bench_unack: "64"
+        bench_msg_size: "{{ item[1] }}"
+        bench_output: "write-direct-bw-conn-{{ item[2] }}-size-{{ item[1] }}-unack-64"
+        bench_count: 1048576
+        bench_conn: "{{ item[2] }}"
+      with_nested:
+        - ["bw"]
+          #- [16, 512, 8192] 
+        - [16, 512] 
+          #- [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+        - [13, 14, 15, 16]
+
+
+- hosts: ault_runner
+  gather_facts: yes
+  tags: run, write-direct, bw, write-direct-bw-n1
+  tasks:
+    - name: "Gather IP of server"
+      set_fact:
+        bench_server_ip: "{{ ansible_default_ipv4.address }}"
+      delegate_to: ault_server
+      run_once: true
+    - debug:
+        verbosity: 1
+        msg: "Server ip: {{ bench_server_ip}}"
+    - name: Write
+      include_role:
+        name: bench/direct_write
+      vars:
+        bench_type: "{{ item[0] }}"
+        bench_unack: "64"
+        bench_msg_size: "{{ item[1] }}"
+        bench_output: "write-direct-bw-single-rcv-conn-{{ item[2] }}-size-{{ item[1] }}-unack-64"
+        bench_count: 1048576
+        bench_conn: "{{ item[2] }}"
+        bench_single_rcv: true
+      with_nested:
+        - ["bw"]
+        - [16, 512, 8192] 
+        - [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+
+
 
 
 - hosts: ault_runner
