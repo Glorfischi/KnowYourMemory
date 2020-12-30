@@ -177,16 +177,19 @@ StatusOr<uint64_t> ReadConnection::SendAsync(SendRegion region){
   req.key = region.lkey;
   req.length = region.length;
 
+  StatusOr<ibv_wc> wc_s = Status();
+  do {
+    wc_s = this->ep_->PollSendCqOnce();
+  } while (wc_s.ok());
+  if (wc_s.status().code() != StatusCode::NotFound) {
+    return wc_s.status().Wrap("error polling send cq while sending");
+  }
+  
   auto sendStatus = this->ep_->PostInline(0, &req, sizeof(req));
   if (!sendStatus.ok()){
     return sendStatus;
   }
-  // ToDO(Fischi) We don't actually need to wait for this, but keeping track of these wr_ids is a little tedious so let's 
-  // add it later
-  auto wcStatus = this->ep_->PollSendCq();
-  if (!wcStatus.ok()){
-    return wcStatus.status();
-  }
+  
   return req.addr-1;
 }
 Status ReadConnection::Wait(uint64_t id){
@@ -223,7 +226,6 @@ Status ReadConnection::DeregisterReceiveRegion(ReceiveRegion reg){
 }
 
 
-// TODO(Fischi) We need some kind of async receive, o/w this will block a long time and we will not utilize nearly enough bw
 StatusOr<ReadRequest> ReadConnection::ReceiveRequest(){
   auto wcStatus = this->ep_->PollRecvCq();
   if (!wcStatus.ok()){

@@ -71,6 +71,13 @@ kym::Status read_test_lat_recv(kym::connection::ReadConnection *rcv, int count, 
     return reg_s.status().Wrap("Error registering receive region");
   }
   kym::connection::ReceiveRegion reg = reg_s.value();
+  for(int i = 0; i<count/4; i++){
+    //std::cout << i << std::endl;
+    auto stat = rcv->Receive(reg);
+    if (!stat.ok()){
+      return stat.status().Wrap("error receiving buffer");
+    }
+  }
 
   for(int i = 0; i<count; i++){
     //std::cout << i << std::endl;
@@ -185,6 +192,14 @@ kym::StatusOr<uint64_t> read_test_bw_recv(kym::connection::ReadConnection *rcv, 
 	    .length = (uint32_t)size,
 	    .lkey = reg.lkey
     });
+  }
+
+  for(int i = 0; i<count/16; i++){
+    //std::cout << i << std::endl;
+    auto stat = rcv->Receive(regs[i%unack]);
+    if (!stat.ok()){
+      return stat.status().Wrap("error receiving buffer");
+    }
   }
 
   for(int i = 0; i<unack; i++){

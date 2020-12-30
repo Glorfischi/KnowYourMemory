@@ -357,8 +357,7 @@ StatusOr<ibv_wc> Endpoint::PollRecvCqOnce(){
       return Status(StatusCode::Internal, "error polling recv cq\n");
     }
     if (!ret){
-      // TODO(Fischi) Map error codes
-      return Status(StatusCode::Internal, "nothing recieved in recv cq");
+      return Status(StatusCode::NotFound, "nothing recieved in recv cq");
     }
     this->current_rcv_wc_ = ret;
   }
