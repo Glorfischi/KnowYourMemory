@@ -30,7 +30,7 @@
         groups: ault_client
     - name: Allocating resources..
       shell:
-        cmd: "salloc -w {{ intel_hosts[-2:] | join(',') }} -t 15 --no-shell"
+        cmd: "salloc -w {{ intel_hosts[-2:] | join(',') }} -t 30 --no-shell"
       register: job_raw
     - debug:
         var: job_raw
@@ -561,8 +561,107 @@
         - [16, 512, 8192] 
         - [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
 
+- hosts: ault_runner
+  gather_facts: yes
+  tags: run, buf-read, lat, buf-read-lat
+  tasks:
+    - name: "Gather IP of server"
+      set_fact:
+        bench_server_ip: "{{ ansible_default_ipv4.address }}"
+      delegate_to: ault_server
+      run_once: true
+    - debug:
+        verbosity: 1
+        msg: "Server ip: {{ bench_server_ip}}"
+    - name: Write
+      include_role:
+        name: bench/buffered_read
+      vars:
+        bench_type: "{{ item[0] }}"
+        bench_msg_size: "{{ item[1] }}"
+        bench_output: "buf-read-lat-single-size-{{ item[1] }}"
+        bench_count: 1048576
+      with_nested:
+        - ["pingpong"]
+        - [16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384] 
+
+- hosts: ault_runner
+  gather_facts: yes
+  tags: run, buf-read, bw, buf-read-bw
+  tasks:
+    - name: "Gather IP of server"
+      set_fact:
+        bench_server_ip: "{{ ansible_default_ipv4.address }}"
+      delegate_to: ault_server
+      run_once: true
+    - debug:
+        verbosity: 1
+        msg: "Server ip: {{ bench_server_ip}}"
+    - name: Write
+      include_role:
+        name: bench/buffered_read
+      vars:
+        bench_type: "{{ item[0] }}"
+        bench_msg_size: "{{ item[1] }}"
+        bench_output: "buf-read-bw-single-size-{{ item[1] }}"
+        bench_count: 1048576
+      with_nested:
+        - ["bw"]
+        - [16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384] 
 
 
+- hosts: ault_runner
+  gather_facts: yes
+  tags: run, buf-read, bw, buf-read-bw-thread
+  tasks:
+    - name: "Gather IP of server"
+      set_fact:
+        bench_server_ip: "{{ ansible_default_ipv4.address }}"
+      delegate_to: ault_server
+      run_once: true
+    - debug:
+        verbosity: 1
+        msg: "Server ip: {{ bench_server_ip}}"
+    - name: Write
+      include_role:
+        name: bench/buffered_read
+      vars:
+        bench_type: "{{ item[0] }}"
+        bench_msg_size: "{{ item[1] }}"
+        bench_output: "buf-read-bw-conn-{{ item[2] }}-size-{{ item[1] }}"
+        bench_count: 1048576
+        bench_conn: "{{ item[2] }}"
+      with_nested:
+        - ["bw"]
+        - [16, 512, 8192] 
+        - [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+
+- hosts: ault_runner
+  gather_facts: yes
+  tags: run, buf-read, bw, buf-read-bw-n1
+  tasks:
+    - name: "Gather IP of server"
+      set_fact:
+        bench_server_ip: "{{ ansible_default_ipv4.address }}"
+      delegate_to: ault_server
+      run_once: true
+    - debug:
+        verbosity: 1
+        msg: "Server ip: {{ bench_server_ip}}"
+    - name: Write
+      include_role:
+        name: bench/buffered_read
+      vars:
+        bench_type: "{{ item[0] }}"
+        bench_msg_size: "{{ item[1] }}"
+        bench_output: "buf-read-bw-single-receiver-conn-{{ item[2] }}-size-{{ item[1] }}"
+        bench_count: 1048576
+        bench_conn: "{{ item[2] }}"
+        bench_single_rcv: true
+      with_nested:
+        - ["bw"]
+        - [16, 512, 8192] 
+        - [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
 
 - hosts: ault_runner
   gather_facts: yes

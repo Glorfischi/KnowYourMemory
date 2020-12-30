@@ -1,0 +1,51 @@
+---
+- name: Create tmp file for output
+  tempfile:
+    state: file
+    prefix: "kym-bench-"
+  register: out
+  when: bench_archive or bench_output is defined
+
+
+- name: "Buffered Read  {{ bench_msg_size }} Conn {{ bench_conn }}"
+  command: 
+    argv:
+      - "{{ project_dir }}/tests/buffered_read/bin/read"
+      - "{{ bench_server | ternary('--server', '--client') }}"
+      - "-i"
+      - "{{ bench_server_ip }}"
+      - "--{{ bench_type }}"
+      - "-n"
+      - "{{ bench_count }}"
+      - "--out"
+      - "{{ out.path }}"
+      - "--size"
+      - "{{ bench_msg_size }}"
+      - "--conn"
+      - "{{ bench_conn }}"
+      - "{{ bench_single_rcv | ternary('--single-receiver', omit) }}"
+  register: run_raw
+
+- debug:
+    verbosity: 1
+    var: run_raw
+
+- name: Archive output
+  copy:
+    src: "{{ out.path }}"
+    dest: "{{ project_dir }}/data/bufread-{{ bench_type }}-size-{{ bench_msg_size }}-{{ bench_server | ternary('server', 'client') }}-{{ ansible_hostname }}-{{ ansible_date_time.iso8601 }}.data"
+    remote_src: yes
+  when: bench_archive 
+
+- name: Fetch output
+  fetch:
+    src: "{{ out.path }}"
+    dest: "{{ bench_output }}-{{ bench_server | ternary('server', 'client') }}"
+    flat: yes
+  when: bench_output is defined
+
+
+
+
+
+ 
