@@ -66,9 +66,10 @@ Endpoint::Endpoint(rdma_cm_id *id) : Endpoint(id, nullptr, 0){
 Endpoint::Endpoint(rdma_cm_id* id, void *private_data, size_t private_data_len) : id_(id), private_data_(private_data), private_data_len_(private_data_len){
   this->max_rcv_wc_ = rcv_wc;
   this->current_rcv_wc_ = 0;
+  this->polled_rcv_wc_ = 0;
   this->recv_wcs_ = (struct ibv_wc *)calloc(this->max_rcv_wc_, sizeof(struct ibv_wc));
-  debug(stderr, "New Endpoint\t[id: %p, pd: %p, qp: %p, qp_num %d, rcv_cq: %p, snd_cp: %p, srq: %p, rcv_cq %p]\n", 
-      id, id->pd, id->qp, id->qp->qp_num, id->recv_cq, id->send_cq, id->srq, this->id_->recv_cq);
+  //debug(stderr, "New Endpoint\t[id: %p, pd: %p, qp: %p, qp_num %d, rcv_cq: %p, snd_cp: %p, srq: %p, rcv_cq %p]\n", 
+    //  id, id->pd, id->qp, id->qp->qp_num, id->recv_cq, id->send_cq, id->srq, this->id_->recv_cq);
 }
 
 Endpoint::~Endpoint() {
@@ -334,15 +335,16 @@ Status Endpoint::PostRecv(uint64_t ctx, uint32_t lkey, void *addr, size_t size){
 }
 
 StatusOr<ibv_wc> Endpoint::PollRecvCq(){
-  while(this->current_rcv_wc_ == 0){
+  while(this->current_rcv_wc_ == this->polled_rcv_wc_ ){
     int ret = ibv_poll_cq(this->id_->qp->recv_cq, this->max_rcv_wc_, this->recv_wcs_);
     if (ret < 0){
       return Status(StatusCode::Internal, "error polling recv cq\n");
     }
-    this->current_rcv_wc_ = ret;
+    this->polled_rcv_wc_ = ret;
+    this->current_rcv_wc_ = 0;
   }
   //debug(stderr, "current wc %d\n", this->current_rcv_wc_);
-  auto wc =  this->recv_wcs_[--this->current_rcv_wc_];
+  auto wc =  this->recv_wcs_[this->current_rcv_wc_++];
   if (wc.status){
     // TODO(Fischi) Map error codes
     return Status(StatusCode::Internal, "error " + std::to_string(wc.status) +  " polling recv cq\n" + std::string(ibv_wc_status_str(wc.status)));
@@ -351,7 +353,7 @@ StatusOr<ibv_wc> Endpoint::PollRecvCq(){
 }
 
 StatusOr<ibv_wc> Endpoint::PollRecvCqOnce(){
-  if(this->current_rcv_wc_ == 0){
+  if(this->current_rcv_wc_ == this->polled_rcv_wc_){
     int ret = ibv_poll_cq(this->id_->qp->recv_cq, this->max_rcv_wc_, this->recv_wcs_);
     if (ret < 0){
       return Status(StatusCode::Internal, "error polling recv cq\n");
@@ -359,9 +361,10 @@ StatusOr<ibv_wc> Endpoint::PollRecvCqOnce(){
     if (!ret){
       return Status(StatusCode::NotFound, "nothing recieved in recv cq");
     }
-    this->current_rcv_wc_ = ret;
+    this->polled_rcv_wc_ = ret;
+    this->current_rcv_wc_ = 0;
   }
-  auto wc =  this->recv_wcs_[--this->current_rcv_wc_];
+  auto wc =  this->recv_wcs_[this->current_rcv_wc_++];
   if (wc.status){
     // TODO(Fischi) Map error codes
     return Status(StatusCode::Internal, "error " + std::to_string(wc.status) +  " polling recv cq\n" + std::string(ibv_wc_status_str(wc.status)));
@@ -489,7 +492,7 @@ StatusOr<Endpoint *> Listener::Accept(Options opts){
   } else { // use RDMA CM for creating a QP
     debug(stderr, "create qp\n");
     ret = rdma_create_qp(conn_id, this->id_->pd, &opts.qp_attr);
-    debug(stderr, "created qp with:\tpd %p | qp %p | srq %p \n", conn_id->pd, conn_id->qp, conn_id->srq);
+    //debug(stderr, "created qp with:\tpd %p | qp %p | srq %p \n", conn_id->pd, conn_id->qp, conn_id->srq);
     if (ret) {
       // TODO(Fischi) Map error codes
       perror("ERROR");
@@ -508,11 +511,11 @@ StatusOr<Endpoint *> Listener::Accept(Options opts){
   conn_id->recv_cq = opts.qp_attr.recv_cq;
 
   
-  debug(stderr, "acceped with qp_num %d\n",conn_id->qp->qp_num);
+  //debug(stderr, "acceped with qp_num %d\n",conn_id->qp->qp_num);
   Endpoint *ep = new Endpoint(conn_id, private_data, private_data_len);
   if(qp) ep->SetQp(qp); // it is not good as we need to destroy it. Endpoint should have fields for self-created objects.
 
-  debug(stderr, "setup id with: pd %p | qp %p | srq %p \n", conn_id->pd, conn_id->qp, conn_id->srq);
+  //debug(stderr, "setup id with: pd %p | qp %p | srq %p \n", conn_id->pd, conn_id->qp, conn_id->srq);
   return ep;
 }
 

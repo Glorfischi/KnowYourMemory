@@ -20,6 +20,8 @@
 #include "conn.hpp"
 #include "bench/bench.hpp"
 
+#include "debug.h"
+
 #include "error.hpp"
 #include "read.hpp"
 
@@ -40,6 +42,8 @@ cxxopts::ParseResult parse(int argc, char* argv[]) {
       ("unack",  "Number of messages that can be unacknowleged. Only relevant for bandwidth benchmark", cxxopts::value<int>()->default_value("100"))
       ("out", "filename to output measurements", cxxopts::value<std::string>()->default_value(""))
       ("autoalloc", "Whether allocate a new receive region on every receive", cxxopts::value<bool>())
+      ("c,conn",  "Number of connections" , cxxopts::value<int>()->default_value("1"))
+      ("single-receiver",  "whether to have single receiver for all connections N:1" , cxxopts::value<bool>()->default_value("false"))
      ;
  
     auto result = options.parse(argc, argv);
@@ -219,6 +223,7 @@ kym::StatusOr<uint64_t> read_test_bw_recv(kym::connection::ReadConnection *rcv, 
       free(rbuf);
       return stat.Wrap("error waiting for buffer to be received");
     }
+    if (*(int *)regs[i%unack].addr != i-unack+1) info(stderr, "ERROR: expected %d, got %d\n", i-unack+1, *(int *)regs[i%unack].addr);
     auto id_s = rcv->ReceiveAsync(regs[i%unack]);
     if (!id_s.ok()){
       rcv->DeregisterReceiveRegion(reg);
@@ -244,6 +249,76 @@ kym::StatusOr<uint64_t> read_test_bw_recv(kym::connection::ReadConnection *rcv, 
 }
 
 
+kym::StatusOr<uint64_t> read_test_bw_recv(std::vector<kym::connection::ReadConnection *>rcvs, int count, int size, int unack){
+  int n = rcvs.size();
+  void *rbuf = calloc(unack, size);
+  // We use a single receiver for all
+  auto reg_s = rcvs[0]->RegisterReceiveRegion(rbuf, unack*size);
+  if (!reg_s.ok()){
+    return reg_s.status().Wrap("Error registering receive region");
+  }
+  kym::connection::ReceiveRegion reg = reg_s.value();
+  std::vector<kym::connection::ReceiveRegion> regs;
+  uint64_t ids[unack];
+  for (int i = 0; i<unack; i++){
+    regs.push_back(kym::connection::ReceiveRegion{
+      .context = (uint64_t)i,
+	    .addr = (void *)((size_t)reg.addr + i*size),
+	    .length = (uint32_t)size,
+	    .lkey = reg.lkey
+    });
+  }
+
+  for(int i = 0; i<count/16; i++){
+    //std::cout << i << std::endl;
+    auto stat = rcvs[i%n]->Receive(regs[i%unack]);
+    if (!stat.ok()){
+      return stat.status().Wrap("error receiving buffer");
+    }
+  }
+
+  for(int i = 0; i<unack; i++){
+    auto id_s = rcvs[i%n]->ReceiveAsync(regs[i]);
+    if (!id_s.ok()){
+      return id_s.status().Wrap("error receiving buffer");
+    }
+    ids[i] = id_s.value();
+  }
+  
+  auto start = std::chrono::high_resolution_clock::now();
+  int i = unack;
+  while(i<count){
+    auto stat = rcvs[i%n]->WaitReceive(ids[i%unack]);
+    if (!stat.ok()){
+      rcvs[i%n]->DeregisterReceiveRegion(reg);
+      free(rbuf);
+      return stat.Wrap("error waiting for buffer to be received");
+    }
+    auto id_s = rcvs[i%n]->ReceiveAsync(regs[i%unack]);
+    if (!id_s.ok()){
+      rcvs[0]->DeregisterReceiveRegion(reg);
+      free(rbuf);
+      return id_s.status().Wrap("error receiving buffer");
+    }
+    ids[i%unack] = id_s.value();
+    i++;
+  }
+  for(int i = 0; i<unack; i++){
+    auto stat = rcvs[i%n]->WaitReceive(ids[i]);
+    if (!stat.ok()){
+      rcvs[0]->DeregisterReceiveRegion(reg);
+      free(rbuf);
+      return stat.Wrap("error waiting for buffer to be received");
+    }
+  }
+  auto end = std::chrono::high_resolution_clock::now();
+  rcvs[0]->DeregisterReceiveRegion(reg);
+  free(rbuf);
+  double dur = std::chrono::duration_cast<std::chrono::nanoseconds>(end-start).count();
+  return (double)size*(double)(count-unack)/(dur/1e9);
+
+}
+
 
 
 int main(int argc, char* argv[]) {
@@ -264,62 +339,86 @@ int main(int argc, char* argv[]) {
   int size = flags["size"].as<int>();  
   int unack = flags["unack"].as<int>();  
 
-
+  int conn_count = flags["conn"].as<int>();  
+  bool singlercv = flags["single-receiver"].as<bool>(); 
 
   bool server = flags["server"].as<bool>();  
   bool client = flags["client"].as<bool>();  
 
-  std::vector<float> latency_m;
 
-  std::vector<float> measurements;
+  std::vector<std::vector<float>*> measurements(conn_count);
   if (server){
+    std::vector<std::thread> workers;
+    std::vector<kym::connection::ReadConnection*> conns;
+
     auto ln_s = kym::connection::ListenRead(ip, 9999);
     if (!ln_s.ok()){
       std::cerr << "Error listening  " << ln_s.status() << std::endl;
       return 1;
     }
     kym::connection::ReadListener *ln = ln_s.value();
-    auto conn_s = ln->Accept(fence);
-    if (!conn_s.ok()){
-      std::cerr << "Error accepting : " << conn_s.status() << std::endl;
-      return 1;
+    for (int i = 0; i<conn_count; i++){
+      auto conn_s = ln->Accept(fence);
+      if (!conn_s.ok()){
+        std::cerr << "Error accepting " << conn_s.status().message() << std::endl;
+        return 1;
+      }
+      auto conn = conn_s.value();
+      conns.push_back(conn);
     }
-    kym::connection::ReadConnection *conn = conn_s.value();
 
-    kym::Status stat;
-    if (lat) {
-      if (autoalloc){
-        stat = test_lat_recv(conn, count);
-      } else {
-        stat = read_test_lat_recv(conn, count, size, &measurements);
+    if (!singlercv) {
+      for (int i = 0; i<conn_count; i++){
+        auto conn = conns[i];
+        workers.push_back(std::thread([i, lat, bw, conn, count, unack, size, &measurements](){
+          set_core_affinity(i+2);
+          std::vector<float> *m = new std::vector<float>();
+          kym::Status stat;
+          if (lat) {
+            stat = read_test_lat_recv(conn, count, size, m);
+          } else if (bw) {
+            kym::StatusOr<uint64_t> bw_s;
+            bw_s = read_test_bw_recv(conn, count, size, unack);
+            if (!bw_s.ok()){
+              std::cerr << "Error running benchmark: " << bw_s.status() << std::endl;
+              return 1;
+            }
+            m->push_back(bw_s.value());
+          } else {
+            stat = read_test_lat_pong(conn, count, size);
+          }
+          if (!stat.ok()){
+            std::cerr << "Error running benchmark: " << stat << std::endl;
+            return 1;
+          }
+          measurements[i] = m;
+          conn->Close();
+          delete conn;
+          return 0;
+        }));
       }
-    } else if (bw) {
+
+      for (int i = 0; i<workers.size(); i++){
+        workers[i].join();
+      }
+
+    } else {
+      set_core_affinity(0);
+      std::vector<float> *m = new std::vector<float>();
       kym::StatusOr<uint64_t> bw_s;
-      if (autoalloc){
-        bw_s = test_bw_recv(conn, count, size);
-      } else {
-        bw_s = read_test_bw_recv(conn, count, size, unack);
-      }
+      bw_s = read_test_bw_recv(conns, conn_count*count, size, conn_count*unack);
       if (!bw_s.ok()){
         std::cerr << "Error running benchmark: " << bw_s.status() << std::endl;
         return 1;
       }
-      measurements.push_back(bw_s.value());
-    } else {
-      if (autoalloc){
-        stat = test_lat_pong(conn, conn, count, size);
-      } else {
-        stat = read_test_lat_pong(conn, count, size);
+      m->push_back(bw_s.value());
+      measurements[0] = m;
+      for (auto conn : conns) {
+        conn->Close();
+        delete conn;
       }
-    }
-    if (!stat.ok()){
-      std::cerr << "Error running benchmark: " << stat << std::endl;
-      return 1;
-    }
 
-
-    conn->Close();
-    delete conn;
+    }
     ln->Close();
     delete ln;
   }
@@ -327,78 +426,107 @@ int main(int argc, char* argv[]) {
   if(client){
     std::chrono::milliseconds timespan(1000); // Make sure we received all acks
     std::this_thread::sleep_for(timespan);
-      
-    auto conn_s = kym::connection::DialRead(ip, 9999, fence);
-    if (!conn_s.ok()){
-      std::cerr << "Error Dialing  " << conn_s.status() << std::endl;
-      return 1;
-    }
-    kym::connection::ReadConnection *conn = conn_s.value();
+    std::vector<std::thread> workers;
+    std::vector<kym::connection::ReadConnection*> conns;
 
-    std::this_thread::sleep_for(timespan);
-    kym::Status stat;
-    if (lat) {
-      stat = test_lat_send(conn, count, size, &measurements);
-      std::cerr << "## Latency Sender" << std::endl;
-    } else if (bw) {
-      auto bw_s = test_bw_send(conn, count, size, unack);
-      if (!bw_s.ok()){
-        std::cerr << "Error running benchmark: " << bw_s.status() << std::endl;
+    for (int i = 0; i<conn_count; i++){
+      auto conn_s = kym::connection::DialRead(ip, 9999, fence);
+      if (!conn_s.ok()){
+        std::cerr << "Error Dialing  " << conn_s.status() << std::endl;
         return 1;
       }
-      measurements.push_back(bw_s.value());
-    } else {
-      if (autoalloc){
-        stat = test_lat_ping(conn, conn, count, size, &measurements);
-      } else {
-        stat = read_test_lat_ping(conn, count, size, &measurements);
-      }
-      std::cerr << "## Pingpong Sender" << std::endl;
+      kym::connection::ReadConnection *conn = conn_s.value();
+      conns.push_back(conn);
     }
-    if (!stat.ok()){
-      std::cerr << "Error running benchmark: " << stat << std::endl;
-      return 1;
-    } 
-    std::this_thread::sleep_for(timespan);
-    conn->Close();
-    delete conn;
-  }
-  
-  
 
+    std::this_thread::sleep_for(timespan);
+    for (int i = 0; i<conn_count; i++){
+      auto conn = conns[i];
+      workers.push_back(std::thread([i, bw, lat, conn, count, size, unack, &measurements](){
+        set_core_affinity(i+2);
+        std::vector<float> *m = new std::vector<float>();
+
+        kym::Status stat;
+        if (lat) {
+          stat = test_lat_send(conn, count, size, m);
+        } else if (bw) {
+          auto bw_s = test_bw_send(conn, count, size, unack);
+          if (!bw_s.ok()){
+            std::cerr << "Error running benchmark: " << bw_s.status() << std::endl;
+            return 1;
+          }
+          m->push_back(bw_s.value());
+        } else {
+          stat = read_test_lat_ping(conn, count, size, m);
+        }
+        if (!stat.ok()){
+          std::cerr << "Error running benchmark: " << stat << std::endl;
+          return 1;
+        } 
+        std::chrono::milliseconds timespan(1000); // Make sure we received all acks
+        std::this_thread::sleep_for(timespan);
+        measurements[i] = m;
+        conn->Close();
+        delete conn;
+        return 0;
+      }));
+    }
+    for (int i = 0; i<workers.size(); i++){
+      workers[i].join();
+    }
+  }
   if (lat || pingpong) {
-    if (measurements.size() == 0){
-      return 0;
+    // Handle Latency distribution
+    std::vector<float> joined;
+    for (auto m : measurements){
+      if (m != nullptr) {
+        joined.reserve(m->size());
+        joined.insert(joined.end(), m->begin(), m->end());
+      }
     }
     if (!filename.empty()){
       std::ofstream file(filename);
-      for (float f : measurements){
+      for (float f : joined){
         file << f << "\n";
       }
       file.close();
     }
-    auto n = measurements.size();
-    std::sort (measurements.begin(), measurements.end());
-    int q025 = (int)(n*0.025);
-    int q500 = (int)(n*0.5);
-    int q975 = (int)(n*0.975);
-    std::cout << "q025" << "\t" << "q50" << "\t" << "q975" << std::endl;
-    std::cout << measurements[q025] << "\t" << measurements[q500] << "\t" << measurements[q975] << std::endl;
-    return 0;
 
-  }
-  if (bw) {
-    if (measurements.size() == 0){
-      return 0;
+    if (joined.size() > 0) {
+      if (lat) {
+        std::cout << "\tLatency";
+      } else if(pingpong)  {
+        std::cout << "\tPingPong Latency";
+      }
+      auto n = joined.size();
+      std::cout << std::endl;
+      std::cout << "N: " << n << std::endl;
+      
+      std::sort (joined.begin(), joined.end());
+      int q025 = (int)(n*0.025);
+      int q500 = (int)(n*0.5);
+      int q975 = (int)(n*0.975);
+      std::cout << "q025" << "\t" << "q50" << "\t" << "q975" << std::endl;
+      std::cout << joined[q025] << "\t" << joined[q500] << "\t" << joined[q975] << std::endl;
     }
-    uint64_t bandwidth = measurements[0];
+  }
+
+  if (bw) {
+    uint64_t bandwidth = 0;
+    for (auto m : measurements){
+      if (m != nullptr) {
+        bandwidth += m->at(0);
+      }
+    }
     std::cerr << "## Bandwidth (MB/s)" << std::endl;
     std::cout << (double)bandwidth/(1024*1024) << std::endl;
     if (!filename.empty()){
       std::ofstream file(filename, std::ios_base::app);
-      file << 1 <<  " " << size << " " << unack << " " << 1 << " " <<  bandwidth << "\n";
+      file << conn_count <<  " " << size << " " << unack << " " << 0 << " " <<  bandwidth << "\n";
       file.close();
     }
   }
+  
+  return 0;
 }
  

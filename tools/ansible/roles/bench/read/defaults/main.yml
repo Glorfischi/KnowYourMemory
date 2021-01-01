@@ -5,8 +5,10 @@ bench_count: 1000000
 bench_fence: false
 
 bench_msg_size: 16
-bench_unack: 25
+bench_unack: 1
+bench_unack_rcv: 1
 
 bench_conn: 1
+bench_single_rcv: false
 
 bench_archive: false

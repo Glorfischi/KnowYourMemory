@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <map>
 
 
 #include <rdma/rdma_cma.h>

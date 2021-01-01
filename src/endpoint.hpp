@@ -93,6 +93,7 @@ class Endpoint {
     size_t private_data_len_;
 
     int current_rcv_wc_;
+    int polled_rcv_wc_;
     int max_rcv_wc_;
     struct ibv_wc *recv_wcs_;
     

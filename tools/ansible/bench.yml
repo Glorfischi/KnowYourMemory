@@ -682,12 +682,13 @@
         bench_type: "{{ item[0] }}"
         bench_fence: "{{ item[1] }}"
         bench_msg_size: "{{ item[2] }}"
-        bench_output: "read-pingpong{{ item[1] | ternary('-fence', '') }}-{{ item[2] }}"
-        bench_count: 1000000
+        bench_output: "read-lat-single{{ item[1] | ternary('-fence', '') }}-size-{{ item[2] }}"
+        bench_count: 1048576
+        bench_unack: "1"
       with_nested:
         - ["pingpong"]
         - [true, false] 
-        - [16, 32, 64, 128] 
+        - [16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384] 
  
 - hosts: ault_runner
   gather_facts: yes
@@ -709,15 +710,77 @@
         bench_fence: "{{ item[1] }}"
         bench_msg_size: "{{ item[2] }}"
         bench_unack: "{{ item[3] }}"
-        bench_output: "read-bw{{ item[1] | ternary('-fence', '') }}-{{ item[2] }}-{{ item[3] }}"
-        bench_count: 1000000
+        bench_unack_rcv: "32"
+        bench_output: "read-bw{{ item[1] | ternary('-fence', '') }}-size-{{ item[2] }}-unack-{{ item[3] }}-unack-rcv-32"
+        bench_count: 1048576
       with_nested:
         - ["bw"]
         - [true, false] 
-        - [16, 32, 64, 128, 1024, 4096, 8192, 16384]
-        - [1, 4, 8, 16, 32, 64, 128]
+        - [16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384] 
+        - [64, 128]
 
 
+- hosts: ault_runner
+  gather_facts: yes
+  tags: run, read, bw, read-bw-thread
+  tasks:
+    - name: "Gather IP of server"
+      set_fact:
+        bench_server_ip: "{{ ansible_default_ipv4.address }}"
+      delegate_to: ault_server
+      run_once: true
+    - debug:
+        verbosity: 1
+        msg: "Server ip: {{ bench_server_ip}}"
+    - name: Read - Bandwith
+      include_role:
+        name: bench/read
+      vars:
+        bench_type: "{{ item[0] }}"
+        bench_fence: "{{ item[1] }}"
+        bench_msg_size: "{{ item[2] }}"
+        bench_unack: "64"
+        bench_unack_rcv: "32"
+        bench_conn: "{{ item[3] }}"
+        bench_output: "read-bw{{ item[1] | ternary('-fence', '') }}-conn-{{ item[3] }}-size-{{ item[2] }}-unack-64-unack-rcv-32"
+        bench_count: 1048576
+      with_nested:
+        - ["bw"]
+        - [true, false] 
+        - [16, 512, 8192] 
+        - [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+
+
+- hosts: ault_runner
+  gather_facts: yes
+  tags: run, read, bw, read-bw-n1
+  tasks:
+    - name: "Gather IP of server"
+      set_fact:
+        bench_server_ip: "{{ ansible_default_ipv4.address }}"
+      delegate_to: ault_server
+      run_once: true
+    - debug:
+        verbosity: 1
+        msg: "Server ip: {{ bench_server_ip}}"
+    - name: Read - Bandwith
+      include_role:
+        name: bench/read
+      vars:
+        bench_type: "{{ item[0] }}"
+        bench_fence: "{{ item[1] }}"
+        bench_msg_size: "{{ item[2] }}"
+        bench_unack: "64"
+        bench_unack_rcv: "32"
+        bench_conn: "{{ item[3] }}"
+        bench_output: "read-bw{{ item[1] | ternary('-fence', '') }}-single-receive-conn-{{ item[3] }}-size-{{ item[2] }}-unack-64-unack-rcv-32"
+        bench_count: 1048576
+        bench_single_rcv: true
+      with_nested:
+        - ["bw"]
+        - [true, false] 
+        - [16, 512, 8192] 
+        - [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
 
 - hosts: ault.cscs.ch
   tags: always

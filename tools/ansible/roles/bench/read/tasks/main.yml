@@ -22,7 +22,10 @@
       - "--size"
       - "{{ bench_msg_size }}"
       - "--unack"
-      - "{{ bench_unack }}"
+      - "{{ bench_server | ternary(bench_unack_rcv, bench_unack) }}"
+      - "--conn"
+      - "{{ bench_conn }}"
+      - "{{ bench_single_rcv | ternary('--single-receiver', omit) }}"
   register: run_raw
 
 - debug:

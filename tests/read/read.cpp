@@ -28,11 +28,13 @@
 #include "mm/dumb_allocator.hpp"
 #include "receive_queue.hpp"
 
+#include "debug.h"
 
 namespace kym {
 namespace connection {
 
 uint32_t inflight = 200;
+uint32_t max_rcv = 512;
 endpoint::Options read_connection_default_opts = {
   .qp_attr = {
     .cap = {
@@ -46,7 +48,7 @@ endpoint::Options read_connection_default_opts = {
   },
   .responder_resources = 16,
   .initiator_depth =  16,
-  .retry_count = 1,  
+  .retry_count = 3,  
   .rnr_retry_count = 0, 
 };
 
@@ -102,7 +104,8 @@ StatusOr<ReadConnection*> ReadListener::Accept(){
   return this->Accept(false);
 }
 StatusOr<ReadConnection*> ReadListener::Accept(bool fence){
-  auto epStatus = this->listener_->Accept(read_connection_default_opts);
+  kym::endpoint::Options opts = read_connection_default_opts;
+  auto epStatus = this->listener_->Accept(opts);
   if (!epStatus.ok()){
     return epStatus.status();
   }
@@ -112,8 +115,8 @@ StatusOr<ReadConnection*> ReadListener::Accept(bool fence){
   if (!rq_status.ok()){
     return rq_status.status();
   }
-  return new ReadConnection(ep, allocator, rq_status.value(), fence);
-
+  auto rq = rq_status.value();
+  return new ReadConnection(ep, allocator, rq, fence);
 }
 
 Status ReadListener::Close() {
@@ -131,8 +134,8 @@ ReadListener::~ReadListener() {
 
 ReadConnection::ReadConnection(endpoint::Endpoint *ep, memory::Allocator *allocator, endpoint::IReceiveQueue *rq, bool fence)
   : ep_(ep), allocator_(allocator), rq_(rq), fence_(fence), ackd_rcv_id_(0), next_rcv_id_(1){
-  this->outstanding_read_sge_.reserve(inflight);
-  this->outstanding_read_wr_.reserve(inflight);
+  this->outstanding_read_sge_.reserve(max_rcv);
+  this->outstanding_read_wr_.reserve(max_rcv);
 }
 Status ReadConnection::Close(){
   auto stat = this->rq_->Close();
@@ -193,7 +196,9 @@ StatusOr<uint64_t> ReadConnection::SendAsync(SendRegion region){
   return req.addr-1;
 }
 Status ReadConnection::Wait(uint64_t id){
-  while (*(volatile char *)id == 0){};
+  volatile char *addr = (volatile char *)id;
+  while (*addr == 0){
+  };
   *(char *)id = 0;
   return Status{};
 }
@@ -257,7 +262,7 @@ Status ReadConnection::WaitReceive(uint64_t id){
   }
   if (!this->fence_) {
     struct ibv_send_wr  *bad;
-    auto stat = this->ep_->PostSendRaw(&this->outstanding_read_wr_[id%inflight], &bad);
+    auto stat = this->ep_->PostSendRaw(&this->outstanding_read_wr_[id%max_rcv], &bad);
     if (!stat.ok()){
       std::cerr << "bad_id " << bad->wr_id << std::endl;
       return stat;
@@ -267,7 +272,7 @@ Status ReadConnection::WaitReceive(uint64_t id){
 }
 
 StatusOr<uint64_t> ReadConnection::ReadInto(void *addr, uint32_t key, ReadRequest req){
-  if (this->next_rcv_id_ > this->ackd_rcv_id_ + inflight){
+  if (this->next_rcv_id_ > this->ackd_rcv_id_ + max_rcv){
     return Status(StatusCode::RateLimit, "Too many outstanding requests");
   }
 
@@ -287,9 +292,9 @@ StatusOr<uint64_t> ReadConnection::ReadInto(void *addr, uint32_t key, ReadReques
   wr_ack.send_flags = this->fence_ ? IBV_SEND_SIGNALED | IBV_SEND_INLINE | IBV_SEND_FENCE : IBV_SEND_INLINE;  
 
   if (!this->fence_){
-    this->outstanding_read_sge_[id%inflight] = sge_ack;
-    wr_ack.sg_list = &this->outstanding_read_sge_[id%inflight];
-    this->outstanding_read_wr_[id%inflight] = wr_ack;
+    this->outstanding_read_sge_[id%max_rcv] = sge_ack;
+    wr_ack.sg_list = &this->outstanding_read_sge_[id%max_rcv];
+    this->outstanding_read_wr_[id%max_rcv] = wr_ack;
   }
   
   struct ibv_sge sge_data;
