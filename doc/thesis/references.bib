@@ -1,0 +1,59 @@
+@Book{gG07,
+author = "Gratzer, George A.",
+title = "More Math Into LaTeX",
+publisher = "Birkhauser",
+address = "Boston",
+year = 2007,
+edition = "4th"
+}
+
+
+@inproceedings{anuj-guide,
+author = {Kalia, Anuj and Kaminsky, Michael and Andersen, David G.},
+title = {Design Guidelines for High Performance RDMA Systems},
+year = {2016},
+isbn = {9781931971300},
+publisher = {USENIX Association},
+address = {USA},
+abstract = {Modern RDMA hardware offers the potential for exceptional performance, but design choices including which RDMA operations to use and how to use them significantly affect observed performance. This paper lays out guidelines that can be used by system designers to navigate the RDMA design space. Our guidelines emphasize paying attention to low-level details such as individual PCIe transactions and NIC architecture. We empirically demonstrate how these guidelines can be used to improve the performance of RDMA-based systems: we design a networked sequencer that outperforms an existing design by 50x, and improve the CPU efficiency of a prior high-performance key-value store by 83%. We also present and evaluate several new RDMA optimizations and pitfalls, and discuss how they affect the design of RDMA systems.},
+booktitle = {Proceedings of the 2016 USENIX Conference on Usenix Annual Technical Conference},
+pages = {437–450},
+numpages = {14},
+location = {Denver, CO, USA},
+series = {USENIX ATC '16}
+}
+
+
+@INPROCEEDINGS{eval-mpp,  author={H. {Huang} and S. {Ghandeharizadeh}},  booktitle={2019 IEEE International Conference on Big Data (Big Data)},   title={An Evaluation of RDMA-based Message Passing Protocols},   year={2019},  volume={},  number={},  pages={3854-3863},  abstract={An enumeration of RDMA messaging verbs (READ, WRITE, SEND/RECEIVE) and queue pair types creates a diverse set of message passing protocols. This paper constructs three abstract communication paradigms to quantify the performance and scalability characteristics of five protocols. With each abstraction, different protocols provide different results and the identity of the protocol that is superior to the others changes. Factors such as the number of queue pairs per node, the size of messages, the number of pending requests per queue pair, and the abstract communication paradigm dictate the superiority of a protocol. These results are important for design and implementation of algorithms and techniques that use the emerging RDMA.},  keywords={Bandwidth;Protocols;Optical wavelength conversion;Computer architecture;Scalability;IP networks;Servers;RDMA;message passing protocols;performance},  doi={10.1109/BigData47090.2019.9005637},  ISSN={},  month={Dec},}
+
+
+@inproceedings{fasst,
+author = {Kalia, Anuj and Kaminsky, Michael and Andersen, David G.},
+title = {FaSST: Fast, Scalable and Simple Distributed Transactions with Two-Sided (RDMA) Datagram RPCs},
+year = {2016},
+isbn = {9781931971331},
+publisher = {USENIX Association},
+address = {USA},
+abstract = {FaSST is an RDMA-based system that provides distributed in-memory transactions with serializability and durability. Existing RDMA-based transaction processing systems use one-sided RDMA primitives for their ability to bypass the remote CPU. This design choice brings several drawbacks. First, the limited flexibility of one-sided RDMA reduces performance and increases software complexity when designing distributed data stores. Second, deep-rooted technical limitations of RDMA hardware limit scalability in large clusters. FaSST eschews one-sided RDMA for fast RPCs using two-sided unreliable datagrams, which we show drop packets extremely rarely on modern RDMA networks. This approach provides better performance, scalability, and simplicity, without requiring expensive reliability mechanisms in software. In comparison with published numbers, FaSST outperforms FaRM on the TATP benchmark by almost 2x while using close to half the hardware resources, and it outperforms DrTM+R on the SmallBank benchmark by around 1.7x without making data locality assumptions.},
+booktitle = {Proceedings of the 12th USENIX Conference on Operating Systems Design and Implementation},
+pages = {185–201},
+numpages = {17},
+location = {Savannah, GA, USA},
+series = {OSDI'16}
+}
+
+
+@INPROCEEDINGS{rpc-vs-rdma,  author={B. A. {Brock} and Y. {Chen} and J. {Yan} and J. {Owens} and A. {Buluç} and K. {Yelick}},  booktitle={2019 IEEE/ACM 9th Workshop on Irregular Applications: Architectures and Algorithms (IA3)},   title={RDMA vs. RPC for Implementing Distributed Data Structures},   year={2019},  volume={},  number={},  pages={17-22},  doi={10.1109/IA349570.2019.00009}}
+
+@article{ziegler2020rdma,
+  title={RDMA Communciation Patterns},
+  author={Ziegler, Tobias and Leis, Viktor and Binnig, Carsten},
+  journal={Datenbank-Spektrum},
+  volume={20},
+  number={3},
+  pages={199--210},
+  year={2020},
+  publisher={Springer}
+}
+
+@INPROCEEDINGS{rdma-fast-dbms,  author={P. {Fent} and A. v. {Renen} and A. {Kipf} and V. {Leis} and T. {Neumann} and A. {Kemper}},  booktitle={2020 IEEE 36th International Conference on Data Engineering (ICDE)},   title={Low-Latency Communication for Fast DBMS Using RDMA and Shared Memory},   year={2020},  volume={},  number={},  pages={1477-1488},  doi={10.1109/ICDE48307.2020.00131}}

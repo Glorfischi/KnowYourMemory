@@ -1,0 +1,34 @@
+\section{Introduction}
+
+Remote Direct Memory Access (RMDA) is a powerful communication mechanism that offers the potential for exceptional performance.
+RDMA allows one machine to directly access the memory of a remote machine across the network without the interaction of the 
+remote CPU. This gives developers a plethora of options to implement communication protocols. However using these options 
+effectively is non trivial and the observed performance can vary greatly for seemingly minor differences. 
+
+Existing research either primarily focus on evaluating very low level verb performance~\cite{anuj-guide} or focus strongly on 
+Remote Procedure Calls (RPCs)~\cite{eval-mpp} often comparing the observed performance to using remote data 
+structures~\cite{fasst, rpc-vs-rdma}. Nearly all of them employ very simply message passing protocols using either 
+send receive or writes with circular buffers~\cite{rdma-fast-dbms} or \emph{mailboxes}~\cite{ziegler2020rdma} and do not take full advantage of 
+features offered by modern RDMA-capable network controllers. Further hardly any work looks into the usage of shared receive
+queues, memory fences, or atomics for resource sharing.
+
+\paragraph{}In this thesis we implement and evaluate various different message passing protocols. We show that there are a 
+lot of ways to implement data exchange connections using less used RDMA features such as \emph{shared receive queues}, \emph{reads}, 
+\emph{memory fences}, and \emph{RDMA atomics}. We also show that even more common connections such as ringbuffer based protocols 
+can be implement in multiple ways giving us different performance characteristics and features.
+
+\begin{itemize}
+  \item We focus on implementing message passing protocols, without limiting us to RPCs. We believe this gives engineers 
+    building blocks to develop more sophisticated protocols without micro-benchmarking basic verbs.
+  \item We define other connection features outside of raw performance which have been relevant for applications such as 
+    efficient resource usage or fairness.
+  \item We implement and evaluate different message passing protocols. We reason why we explicitly implemented these protocols
+    and evaluate them in both single threaded and multi-threaded settings.
+  \item We provide a performance model to better understand the observed performance.
+\end{itemize}
+
+\paragraph{}We hope that this work, with 
+implementations of more unusual communication protocols, inspires system designers to develop 
+new protocols that make more extensive use of modern RNICs.
+
+

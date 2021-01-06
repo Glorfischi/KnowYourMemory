@@ -4,30 +4,6 @@
 
 
 
-
-\begin{figure}[!ht]
-\begin{center}
-\begin{tikzpicture}[node distance=2cm,auto,>=stealth']
-  \seqnode{B_cpu}{RAM};
-  \seqnode[left of=B_cpu]{B_nic}{NIC};
-  \hseqnode[right of=B_cpu, node distance=1.5cm]{B_acpu}{};
-  \seqnode[left of=B_cpu, node distance=7cm]{A_cpu}{CPU / RAM};
-  \seqnode[right of=A_cpu]{A_nic}{NIC};
-  \msg{A_cpu}{A_nic}{.25}{WR MMIO}
-  \msg[below]{A_cpu}{A_nic}{.3}{payload DMA}
-  \msg{A_nic}{B_nic}{.5}{network transfer}
-  \msg{B_nic}{B_cpu}{.65}{payload DMA}
-  \msg[below]{B_nic}{B_cpu}{.7}{WQE DMA}
-  \fetch{B_acpu}{B_cpu}{.8}{poll CQ}
-\end{tikzpicture}
-\end{center}
-\caption{Send Receive sequence}
-\label{fig:seq-sndrcv}
-\end{figure}
-
-
-
-
 \begin{enumerate}
   \item We start a transfer by copying a \emph{Work Request} to the \emph{NIC} using Memory Mapped IO (MMIO). This gives
     us constant overhead $o_{snd}$ independent of the size of the message.

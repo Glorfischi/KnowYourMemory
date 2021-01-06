@@ -11,13 +11,16 @@
 \graphicspath{ {../plots/} }
 \usepackage{tikz}
 \usetikzlibrary{calc,positioning,arrows}
+\usetikzlibrary{shapes.misc, positioning}
 \usepackage{amsmath,amsthm}
 
 
 \iffalse
 \newcommand{\comment}[1]{\textit{\textcolor{blue}{/* #1 */} }}
 \fi
+\usepackage{marginnote}
 \newcommand{\todo}[1]{\textit{\textcolor{red}{// TODO: #1} }}
+\newcommand{\comment}[1]{\textcolor{red}{*}\marginnote{\textit{\textcolor{red}{#1} }}}
 \newcommand{\draft}[1]{\textit{\textcolor{olive}{#1} }}
 \newcommand{\code}[1]{\texttt{#1}}
 
@@ -40,6 +43,7 @@
 \begin{document}
 \iffalse
 \fi
+%% Helper function for squence diagrams
 \newcommand{\seqnode}[3][]{ 
   \node[#1] (#2) {#3};
   \node[below of=#2, node distance=5cm] (#2_g) {};
@@ -56,15 +60,28 @@
   \draw[-] ($(#1)!#3-0.04!(#1_g)$) -- node[above,scale=0.75,midway]{#4} ($(#2)!#3!(#2_g)$);
   \draw[->] ($(#2)!#3!(#2_g)$) -- node[above,scale=0.75,midway]{} ($(#1)!#3+0.04!(#1_g)$);
 }
+%% Helper functions for graphics
+
+\newcommand{\queue}[2][]{ 
+  \draw (#2) -- ++(2cm,0) -- ++(0,-1cm) -- ++(-2cm,0);
+  \foreach \i in {1,...,4} \draw (#2)++(2cm-\i*3mm,0) -- +(0,-1cm);
+  \node[align=center, , xshift = 1cm, yshift = .15cm] at (#2) {#1};
+}
+
+\newcommand{\rqueue}[2][]{ 
+  \draw (#2) -- ++(2cm,0);
+  \draw (#2) -- ++(0,-1cm) -- ++(2cm,0);
+  \foreach \i in {1,...,4} \draw (#2)++(\i*3mm,0) -- +(0,-1cm);
+  \node[align=center, , xshift = 1cm, yshift = .15cm] at (#2) {#1};
+}
+
 
 \tableofcontents
 \pagebreak
-\section{Introduction}
-\todo{What are we doing. Why are we doing this}
+\input{intro.tex}
 
 \pagebreak
-\section{Background}
-\todo{Fairly detailed section on rdma / ibverbs. Explain all verbs.}
+\input{background.tex}
 
 
 \pagebreak
@@ -76,9 +93,11 @@
 Maybe add this after the protocols section?}
 
 \pagebreak
-\input{model.tex}
+\input{protocols.tex}
 
 \pagebreak
+\input{model.tex}
+
 
 \pagebreak
 \input{sendrcv.tex}
@@ -105,16 +124,6 @@ Maybe add this after the protocols section?}
 \pagebreak
 \input{direct_read.tex}
 
-
-\pagebreak
-\section{Comparison}
-\todo{Comparison between connection types. Show which protocols perform better in which sitations.}
-
-\subsection{Point to Point - N:N}
-
-\subsection{Server Model - N:1}
-
-\subsection{Fan Out / Broadcast - 1:N}
 
 \pagebreak
 \section{Conclusion}
