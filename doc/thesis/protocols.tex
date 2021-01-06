@@ -1,4 +1,4 @@
-\section{Protocols}\label{sec:protocols}
+\section{Data Exchange Protocols}\label{sec:protocols}
 The goal of this work is design, implement, and study a comprehensive list of RDMA based protocols for data exchange. 
 However without a clear definition of \emph{data exchange} the number of possible protocols is virtually endless.
 
@@ -11,38 +11,30 @@ features and performance guarantees.
 \comment{need better title}
 \subsection{Definition}\label{sec:proto-def}
 
-Most research focuses on RPCs \cite{herd, guidlines}, remote datastructure access \cite{pilaf, others}, or by replicate 
-socket like interfaces \cite{SocksDirect}. We believe with this more general
-communication model we can give engineers and researchers a better understanding of the building blocks that can be 
-used to build more specific connection protocols, while not only micro-benchmarking RDMA verbs.
+Most research focuses on RPCs \cite{anuj-guide, fasst, herd}, remote datastructure access \cite{pilaf, farm}, or replicate 
+socket like interfaces \cite{socksdirect}. In this thesis we will look at message passing protocols with fairly few guarantees.
+We believe with this more general communication model we can give engineers and researchers a better understanding of the 
+building blocks that can be  used to build more specific connection protocols, like RPCs, while not only 
+micro-benchmarking RDMA verbs.
 
 
-
-Informally a protocol for data exchange is an algorithm for moving data residing in memory of one server, i.e. the sender, to 
-a memory location at another server, i.e. the receiver.
 
 \begin{defn}
-Let $A$ and $B$ be nodes connected by an RDMA enabled link. Let $buf_A$ be a memory region on host $A$ and let $buf_B$ 
-be a memory region on host $B$. We define protocol for data exchange $P$ as an algorithm for copying the
-data in $buf_A$ to $buf_B$, which is initiated by $A$. Both $A$ and $B$ need to be able to notice when the data transfer
-is complete and when their respective buffer is usable again.
+We define a message passing protocol $P$ as an algorithm for moving a message $m$ that resides in the memory of
+node $N_a$ to another node $N_b$. The transfer must be initiated by $N_a$. After the transfer, $N_b$ must know that the 
+message was fully received and $N_a$ must know that it can reuse $m$.
 \end{defn}
 
-\begin{rem}
-  We assume that all memory regions are potentially registered to an RDMA device and can be accessed through RDMA verbs.
-\end{rem}
+We explicitly have no synchronisation requirements, so the sender does not need to know whether the receiver has actually 
+received the message.
 
-\begin{rem}
-  We assume that there is no out of band communication between the sender and receiver.
-\end{rem}
+\paragraph{}\todo{Add more details. Maybe show interface?}
 
-
-\todo{example}
-
+\pagebreak
 
 \subsection{Features}
 
-There is more to data exchange protocol than raw throughput or latency. Oftentimes it is more important for an application
+There is more to data exchange protocols than raw throughput or latency. Oftentimes it is more important for an application
 that the connection is \emph{fair} or that the memory requirements do not grow too large, even if that protocol wastes
 a few microseconds.
 
@@ -50,7 +42,7 @@ To be able to better compare our presented protocols we define a few traits that
 analyse which protocols provide these traits
 
 \paragraph{True Zero-Copy} Whether the protocol can be employed to receive directly to the destination buffer. While RDMA 
-claims to be zero-copy, most protocols are not truly zero-copy. Protocols using ringbuffers~\cite{} or mailboxes~\cite{} are
+claims to be zero-copy, most protocols are not truly zero-copy. Protocols using ringbuffers or mailboxes are
 strictly speaking not zero copy, as the receiver will always have to copy the data from this buffer to its actual destination.
 This is can be especially important when transferring a large amount of data that does not have to be further processed.
 
@@ -82,96 +74,75 @@ connections.\comment{We need something else.}
 \subsection{Design Space}
 
 Even with the more limited definition of \emph{data exchange} in Section~\ref{sec:proto-def} there are countless numbers
-of non trivial ways to implement such a protocol using RDMA features. 
+of non trivial ways to implement such a protocol using RDMA features. In this section we will take a look at the design 
+space of data exchange protocols, we will show different approaches and point out sepecific protocols that we implemented
+as a datapoint for other developers to design their own protocols.
 
-However with some reasonable assumptions on which protocols are useful we can split the design space 
-in a number of distinct groups and we will analyse one implementation for each of these groups.
 
 
-\paragraph{} The first obvious way to split all possible exchange protocols is by the verbs they use to transfer the actual data. 
-This would be:
-\begin{itemize}
-  \item Send
-  \item Read
-  \item Write
-\end{itemize}
-We ignore the atomic verbs as well as mixture of verbs. We did not see any advantages in splitting the actual data transfer 
-into multiple verbs, as this only seems to add overhead and complexity. And while it would theoretically be possible to use
-\emph{Compare and Swap} for generic data transfer, but the expected performance is far too low to get a viable protocol.
+\paragraph{} The first obvious way to split all possible exchange protocols is by the verbs they use to transfer the actual 
+data, and we will look at each of these verbs separately, as these all work in different ways and have different requirements
 
+We did not see any advantages in splitting the actual data transfer into multiple verbs, as this only seems to add overhead 
+and complexity. And while it would theoretically be possible to use \emph{Compare and Swap} for generic data transfer,
+the expected performance is far too low to get a viable protocol. So we will not look into these options but focus on the 
+following verbs.
+
+\paragraph{} We want to point out that this is in no way an exhausting list of protocols, but should rather show that the 
+design space is very large and that there are a lot of interesting protocols that can still be explored.
 
 \subsubsection{Send}
+The \emph{Send} verb basically fulfills our requirements for a \emph{data exchange protocol} out of the box. It is sender
+initiated, the sender can reuse the buffer after the send is complete, and the receiver is notified of a new message by
+a completion event.
 
-\todo{This is straight forward}
+There are however sill multiple ways to tweak and tune a send receive based protocol by batching, inline sending, or 
+sharing receive buffers between multiple connections using a \emph{Shared Receive Queue}. We explore these implementation detail and their performance
+characteristics in Section \ref{sec:conn:send}.
+
 \subsubsection{Write}
-The \emph{Write} verb is a lot less restrictive. It allows the sender, with certain restriction, to write at an arbitrary 
+The \emph{Write} verb is a lot less restrictive. It allows the sender, with certain restrictions, to write at an arbitrary 
 location in the receivers memory, without any interaction of the receivers CPU. This also means we need to solve some of the 
 problems which the \emph{Send} verb solved for us.
 
 \begin{itemize}
   \item For the sender to be able to transfer data, it needs to know where to send it to and if the receiver is ready 
-to receive the data. It needs what we will call the \emph{Target Information}.
+to receive the data.
 
-  \item For the receiver to notice that it received data it needs some kind of way to notified. This is what we will
-call \emph{Transfer Notification}
+  \item For the receiver to notice that it received data it needs some kind of way to notified.
 \end{itemize}
 
-This two problems will always exist when using \emph{Write} as the data transfer verb. 
+This two problems will always exist when using \emph{Write} as the data transfer verb and there are many ways to to solve
+these problems. We looked at and implemented two general approaches, each of them can again be implemented in subtly 
+different ways which can in turn have drastically different performance characteristics.
 
 \paragraph{Buffered Write}
 This is probably one of the most widely used data transfer protocol there is and usually the first protocol people think of
 apart from send-receive. The idea is to have a buffer at the receiver, which is managed by the sender. In most cases this is 
 a ring buffer. 
 
-This reduces the \emph{Target Information} problem to noticing if there is space left in the buffer. This in turn does not 
-have to be done for each data transfer individually, saving us a lot of communication overhead.
+This reduces the problem of where to write to, to noticing if there is space left in the buffer. This in turn does not 
+have to be done for each data transfer individually, saving us a lot of communication overhead. But this can be done in 
+may different ways. The problem of noticing incoming messages also still exits. The receiver needs to notice that new data was 
+written to the buffer and how much was written to the buffer. 
 
-\todo{more info}
-\begin{itemize}
-  \item push
-  \item pull
-\end{itemize}
-
-The problem of \emph{Transfer Notification} still exits. The receiver needs to notice that new data was written to the buffer.
-
-\todo{more info}
-\begin{itemize}
-  \item Receive Queue (WriteImm)
-  \item Metadata (WriteOff)
-  \item Token (WriteRev)
-\end{itemize}
-
-While the \emph{Buffered Write} simplifies a lot of problems when using \emph{Write} as a data transfer verb, there are 
+So while the \emph{Buffered Write} simplifies a lot of problems when using \emph{Write} as a data transfer verb, there are 
 downsides to using a buffer to transfer data. Most importantly the buffer is usually not the place the data should finally 
 end up in, which forces us to copy the received data again.
 
-For a more detailed analysis of \emph{Buffered Write Protocols} and our implementation of one, see section \ref{sec:conn:buf_write}
+For a more detailed analysis of \emph{Buffered Write Protocols} and our implementation of one, 
+see Section \ref{sec:conn:buf_write}. Further in Section \ref{sec:conn:shared_write} we look at a way to share this ring
+buffer between multiple connections using \emph{fetch and add}.
 
 
 \paragraph{Unbuffered Write}
 The idea of an \emph{Unbuffered Write Protocol} is to avoid the additional copy which is usually necessary when using a
-\emph{Bufferd Write Protocol}. 
+\emph{Buffered Write Protocol}. The receiver should be able to decide the target location for each message. That means there
+is a communication overhead for each message, as the sender either need to query the receiver where to write to or the receiver
+needs to preemptively send locations to write to. The problem of notifying the receiver of new messages stays very much the same
 
-This means to be able to transfer data we need to exchange the complete \emph{Target Information} for each message. The basic
-wait of exchanging this information stays the same, and for most use cases this should be batchable.
-
-\todo{more info}
-\begin{itemize}
-  \item push
-  \item pull
-\end{itemize}
-
-The problem of \emph{Transfer Notifications} stays similar to the \emph{Buffer Write Protocol} with some subtle differences.
-
-\todo{more info}
-\begin{itemize}
-  \item Receive Queue (WriteImm)
-  \item Metadata (Some metadata region for posted buffer - could be merged when using pull target information - could be used to share posted buffers with comp and swap)
-  \item Token (Check end of posted buffer)
-\end{itemize}
-
-
-For a more detailed analysis of \emph{Unbuffered Write Protocols} and our implementation of one, see section \ref{sec:conn:direct_write}
+For a more detailed analysis of \emph{Unbuffered Write Protocols} and our implementation of one, 
+see Section \ref{sec:conn:direct_write}
 
 
 \subsubsection{Read}
@@ -181,59 +152,31 @@ any protocol using \emph{Read} as the data transfer verb we need to solve two pr
 
 \begin{itemize}
   \item For the receiver to be able to read the data, it needs to know that new data is ready and where to read it from.
-    We will call that \emph{Read Request}
-
-  \item As the sender is now not directly involved in the data transfer, we need to notify it when the data transfer is 
-over. We will again call this  \emph{Transfer Notification}
+  \item As the sender is now not directly involved in the data transfer, we need to notify it when the data transfer is over.
 \end{itemize}
+
+We again looked at and implemented two general approaches.
+
 
 \paragraph{Buffered Read}
-
-\todo{This should be shareable using atomic verbs, but I'm not quite sure how..}
-
 The buffered read works similarly to the \emph{Buffer Write}. This time the \emph{Sender} has a ring buffer where the 
-\emph{Receiver} can read from. Similarly to the \emph{Buffer Write} this will reduce the communication overhead.
+\emph{Receiver} can read from. Similarly to the \emph{Buffer Write} this will reduce the communication overhead. 
 
-The problem of \emph{Read Requests} is reduced to a notification that new data is available, as the \emph{Receiver} already
-knows where to read the next message from.
+This similarly reduces the problem of where to read from, to noticing if there is a new message in the buffer and we can tell 
+the sender which messages we received by updating an offset.
 
-\todo{more info}
-\begin{itemize}
-  \item push (send message that new message is available)
-  \item pull (write to meta data, receiver polls it with read - sharable?)
-\end{itemize}
-
-
-The problem of \emph{Transfer Notification} boils down to the receiver updating metadata at the sender.
-
-\todo{more info}
-\begin{itemize}
-  \item push (Rcv writes to buffer of sender)
-  \item pull (Sender pulls from metadata at sender)
-\end{itemize}
-
-For a more detailed analysis of \emph{Buffered Read Protocols} and our implementation of one, see section \ref{sec:conn:buf_read}
+For a more detailed analysis of \emph{Buffered Read Protocols} and our implementation of one, see 
+Section \ref{sec:conn:buf_read}. Sharing the ring buffer between multiple connections using atomics should again be possible,
+but was not explored in this thesis.
 
 \paragraph{Unbuffered Read}
 The idea of an \emph{Unbuffered Read Protocol} is again to avoid the additional copy which is usually necessary when using a
-\emph{Bufferd Read Protocol}. 
+\emph{Buffered Read Protocol}. This means the sender will need to notify the receiver when a new message arrives and where to
+read it from. After the read is complete the receiver will then need to notify the sender which specific buffer is ready to 
+be reused. This introduces a large communication overhead but by being truly zero-copy this approach can be efficient, 
+especially for large messages.
 
-This means to be able to transfer data we need to exchange the complete \emph{Read Request} for each message. 
+We present our implementation of an \emph{Unbuffered Read Protocols} in Section \ref{sec:conn:direct_read}
 
-\todo{more info}
-\begin{itemize}
-  \item push (send message that new message is available and where)
-  \item pull (write to meta data, receiver polls it with read - sharable?)
-\end{itemize}
-
-For the \emph{Transfer Notification} we need to inform the sender that a specific buffer is free to be reused.
-
-\todo{more info}
-\begin{itemize}
-  \item push (write token to read buffer)
-  \item pull (write freed buffers to a list?)
-\end{itemize}
-
-For a more detailed analysis of \emph{Unbuffered Read Protocols} and our implementation of one, see section \ref{sec:conn:direct_read}
 
 

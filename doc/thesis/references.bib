@@ -42,6 +42,45 @@ location = {Savannah, GA, USA},
 series = {OSDI'16}
 }
 
+@inproceedings{herd,
+author = {Kalia, Anuj and Kaminsky, Michael and Andersen, David G.},
+title = {Using RDMA Efficiently for Key-Value Services},
+year = {2014},
+isbn = {9781450328364},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+url = {https://doi.org/10.1145/2619239.2626299},
+doi = {10.1145/2619239.2626299},
+abstract = {This paper describes the design and implementation of HERD, a key-value system designed to make the best use of an RDMA network. Unlike prior RDMA-based key-value systems, HERD focuses its design on reducing network round trips while using efficient RDMA primitives; the result is substantially lower latency, and throughput that saturates modern, commodity RDMA hardware.HERD has two unconventional decisions: First, it does not use RDMA reads, despite the allure of operations that bypass the remote CPU entirely. Second, it uses a mix of RDMA and messaging verbs, despite the conventional wisdom that the messaging primitives are slow. A HERD client writes its request into the server's memory; the server computes the reply. This design uses a single round trip for all requests and supports up to 26 million key-value operations per second with 5μs average latency. Notably, for small key-value items, our full system throughput is similar to native RDMA read throughput and is over 2X higher than recent RDMA-based key-value systems. We believe that HERD further serves as an effective template for the construction of RDMA-based datacenter services.},
+booktitle = {Proceedings of the 2014 ACM Conference on SIGCOMM},
+pages = {295–306},
+numpages = {12},
+keywords = {RDMA, ROCE, infiniband, key-value stores},
+location = {Chicago, Illinois, USA},
+series = {SIGCOMM '14}
+}
+
+@article{10.1145/2740070.2626299,
+author = {Kalia, Anuj and Kaminsky, Michael and Andersen, David G.},
+title = {Using RDMA Efficiently for Key-Value Services},
+year = {2014},
+issue_date = {October 2014},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+volume = {44},
+number = {4},
+issn = {0146-4833},
+url = {https://doi.org/10.1145/2740070.2626299},
+doi = {10.1145/2740070.2626299},
+abstract = {This paper describes the design and implementation of HERD, a key-value system designed to make the best use of an RDMA network. Unlike prior RDMA-based key-value systems, HERD focuses its design on reducing network round trips while using efficient RDMA primitives; the result is substantially lower latency, and throughput that saturates modern, commodity RDMA hardware.HERD has two unconventional decisions: First, it does not use RDMA reads, despite the allure of operations that bypass the remote CPU entirely. Second, it uses a mix of RDMA and messaging verbs, despite the conventional wisdom that the messaging primitives are slow. A HERD client writes its request into the server's memory; the server computes the reply. This design uses a single round trip for all requests and supports up to 26 million key-value operations per second with 5μs average latency. Notably, for small key-value items, our full system throughput is similar to native RDMA read throughput and is over 2X higher than recent RDMA-based key-value systems. We believe that HERD further serves as an effective template for the construction of RDMA-based datacenter services.},
+journal = {SIGCOMM Comput. Commun. Rev.},
+month = aug,
+pages = {295–306},
+numpages = {12},
+keywords = {key-value stores, infiniband, ROCE, RDMA}
+}
+
+
 
 @INPROCEEDINGS{rpc-vs-rdma,  author={B. A. {Brock} and Y. {Chen} and J. {Yan} and J. {Owens} and A. {Buluç} and K. {Yelick}},  booktitle={2019 IEEE/ACM 9th Workshop on Irregular Applications: Architectures and Algorithms (IA3)},   title={RDMA vs. RPC for Implementing Distributed Data Structures},   year={2019},  volume={},  number={},  pages={17-22},  doi={10.1109/IA349570.2019.00009}}
 
@@ -57,3 +96,51 @@ series = {OSDI'16}
 }
 
 @INPROCEEDINGS{rdma-fast-dbms,  author={P. {Fent} and A. v. {Renen} and A. {Kipf} and V. {Leis} and T. {Neumann} and A. {Kemper}},  booktitle={2020 IEEE 36th International Conference on Data Engineering (ICDE)},   title={Low-Latency Communication for Fast DBMS Using RDMA and Shared Memory},   year={2020},  volume={},  number={},  pages={1477-1488},  doi={10.1109/ICDE48307.2020.00131}}
+
+
+@inproceedings{pilaf,
+author = {Mitchell, Christopher and Geng, Yifeng and Li, Jinyang},
+title = {Using One-Sided RDMA Reads to Build a Fast, CPU-Efficient Key-Value Store},
+year = {2013},
+publisher = {USENIX Association},
+address = {USA},
+abstract = {Recent technological trends indicate that future datacenter networks will incorporate High Performance Computing network features, such as ultra-low latency and CPU bypassing. How can these features be exploited in datacenter-scale systems infrastructure? In this paper, we explore the design of a distributed in-memory key-value store called Pilaf that takes advantage of Remote Direct Memory Access to achieve high performance with low CPU overhead.In Pilaf, clients directly read from the server's memory via RDMA to perform gets, which commonly dominate key-value store workloads. By contrast, put operations are serviced by the server to simplify the task of synchronizing memory accesses. To detect inconsistent RDMA reads with concurrent CPU memory modifications, we introduce the notion of self-verifying data structures that can detect read-write races without client-server coordination. Our experiments show that Pilaf achieves low latency and high throughput while consuming few CPU resources. Specifically, Pilaf can surpass 1.3 million ops/sec (90% gets) using a single CPU core compared with 55K for Memcached and 59K for Redis.},
+booktitle = {Proceedings of the 2013 USENIX Conference on Annual Technical Conference},
+pages = {103–114},
+numpages = {12},
+location = {San Jose, CA},
+series = {USENIX ATC'13}
+}
+
+@inproceedings{farm,
+author = {Dragojevi\'{c}, Aleksandar and Narayanan, Dushyanth and Hodson, Orion and Castro, Miguel},
+title = {FaRM: Fast Remote Memory},
+year = {2014},
+isbn = {9781931971096},
+publisher = {USENIX Association},
+address = {USA},
+abstract = {We describe the design and implementation of FaRM, a new main memory distributed computing platform that exploits RDMA to improve both latency and throughput by an order of magnitude relative to state of the art main memory systems that use TCP/IP. FaRM exposes the memory of machines in the cluster as a shared address space. Applications can use transactions to allocate, read, write, and free objects in the address space with location transparency. We expect this simple programming model to be sufficient for most application code. FaRM provides two mechanisms to improve performance where required: lock-free reads over RDMA, and support for collocating objects and function shipping to enable the use of efficient single machine transactions. FaRM uses RDMA both to directly access data in the shared address space and for fast messaging and is carefully tuned for the best RDMA performance. We used FaRM to build a key-value store and a graph store similar to Facebook's. They both perform well, for example, a 20-machine cluster can perform 167 million key-value lookups per second with a latency of 31µs.},
+booktitle = {Proceedings of the 11th USENIX Conference on Networked Systems Design and Implementation},
+pages = {401–414},
+numpages = {14},
+location = {Seattle, WA},
+series = {NSDI'14}
+}
+
+@inproceedings{socksdirect,
+author = {Li, Bojie and Cui, Tianyi and Wang, Zibo and Bai, Wei and Zhang, Lintao},
+title = {Socksdirect: Datacenter Sockets Can Be Fast and Compatible},
+year = {2019},
+isbn = {9781450359566},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+url = {https://doi.org/10.1145/3341302.3342071},
+doi = {10.1145/3341302.3342071},
+abstract = {Communication intensive applications in hosts with multi-core CPU and high speed networking hardware often put considerable stress on the native socket system in an OS. Existing socket replacements often leave significant performance on the table, as well have limitations on compatibility and isolation.In this paper, we describe SocksDirect, a user-space high performance socket system. SocksDirect is fully compatible with Linux socket and can be used as a drop-in replacement with no modification to existing applications. To achieve high performance, SocksDirect leverages RDMA and shared memory (SHM) for inter-host and intra-host communication, respectively. To bridge the semantics gap between socket and RDMA / SHM, we optimize for the common cases while maintaining compatibility in general. SocksDirect achieves isolation by employing a trusted monitor daemon to handle control plane operations such as connection establishment and access control. The data plane is peer-to-peer between processes, in which we remove multi-thread synchronization, buffer management, large payload copy and process wakeup overheads in common cases. Experiments show that SocksDirect achieves 7~20x better message throughput and 17~35x better latency than Linux socket, and reduces Nginx HTTP latency to 1/5.5.},
+booktitle = {Proceedings of the ACM Special Interest Group on Data Communication},
+pages = {90–103},
+numpages = {14},
+keywords = {socket, datacenter, RDMA, user-space},
+location = {Beijing, China},
+series = {SIGCOMM '19}
+}
