@@ -1,26 +1,114 @@
 \section{Send Receive} \label{sec:conn:send}\label{sendrcv}
 \subsection{Design} \label{sendrcv-design}
-\todo{Description of the connection}
+The Send Receive based protocol is by far the simplest, as the send and receive verbs basically already provide the 
+message passing interface we want. There are still multiple ways to implement such a protocol and a few pitfalls 
+we need to address to get good performance.
+
+\paragraph{} We presented the basic function of the send verb in Section \ref{sec:bg:send}. It allows the sender to transmit 
+a message to the receiver, without any additional information, as long as the receiver has posted a receiver buffer that is 
+large enough to receive the message. To transform this verb to a fully functioning connection we need two basic things. 
+Some kind of \emph{receive buffer management} that allows the receiver to receive multiple messages at the same time, 
+and to get any reasonable performance we need to be able to send multiple messages asynchronously.
+
+\subsubsection{Sender} 
+The sender assumes that the receiver is always ready to receive the message and has at least one receive buffer posted.
+The Sender has only two essential methods:
+
+\begin{lstlisting}  
+    // Takes a registered region containing the message
+    // Posts a signaled send work request to the QP
+    // Returns the unique wr_id associated with the WR 
+    uint64_t SendAsync(SendRegion reg);
+
+    // Polls the CQ until there is completion event 
+    // associated with the given id.
+    void Wait(uint64_t id);
+
+\end{lstlisting}
+
+This allows us to queue multiple messages before waiting for them to complete. In practice it is very important to keep the
+sending pipeline full to get good performance. This kind of \emph{unacknowledged messages} can increase throughout by a factor
+of 5 or more.
+
+\paragraph{} We are able to wait for a specific work request to complete by issuing monotonically increasing IDs. We store the
+last ID with a matching completion event. If we try to wait on a lower ID we know we already received a matching completion 
+event prior, because of the in order guarantees of RDMA.\comment{Maybe cite something?} If the provided ID is higher then the
+last seen ID, we will poll the completion queue until we receive one with a matching \code{wr\_id}.
+
+This approach will eventually lead to an overflow, but given our observed maximum message rate we do not expect to see this 
+happen in the next 10 thousand years.
 
 
+\paragraph{Batching} As briefly mentioned in Section \ref{sec:bg:send} we can post multiple work request at the same time. 
+This \emph{Doorbell batching} reduces the number of generated MMIOs~\cite{anuj-guide}, reduces the CPU load and can in turn 
+drastically improve bandwidth if the connection is send-side CPU bottleneck. We observed a performance increase by up to 
+a factor of two. It is however questionable if this connection level batching is the right approach when using the 
+\emph{Reliable Connection} that we evaluated. With RC all messages need to end up at the same receiver meaning application 
+level batching should be possible and we observed that sending larger messages will outperform sending small messages in 
+batches.
 
-\begin{enumerate}
-  \item We start a transfer by copying a \emph{Work Request} to the \emph{NIC} using Memory Mapped IO (MMIO). This gives
-    us constant overhead $o_{snd}$ independent of the size of the message.
-  \item Given the information in the \emph{Work Request} the \emph{NIC} then accesses the messages payload using DMA. This 
-    might generate more than one PCIe transaction \cite{atc16-kalia}. The payload is then sent over the network.
-  \item As soon as the receiver receives the first segment it will consume posted receive buffer, write incoming payload 
-    to the receive buffer and generate a \emph{Work Completion Event (WQE)}. We will call the combined overhead of consuming a receive
-    buffer and generating a WQE $o_{rcv}$, which is also independent from $k$.
-  \item At last the receiving CPU will have to poll the \emph{Completion Queue (CQ)}. This will again give us a constant 
-    overhead of $o_{cq}$.
-\end{enumerate}
+\paragraph{Inline Sending} \todo{We should probably add some kind of benchmarks for this.}
 
-\paragraph{Inline Sending}
-\todo{Describe inline sending. How does our performance model change?}
-\todo{What about inline receiving?}
-\paragraph{Shared Receive Queues}
-\todo{Look at srq. Talk about congestion when reposting buffers?}
+\subsubsection{Receiver}
+
+The receiver always needs to have at least one posted receive buffer. We achieve this by having an array of posted receive 
+buffers. When receiving a new message we return the corresponding receive buffer. As soon as the application is done processing
+the message, it will have to mark it as free which will repost the corresponding buffer.
+
+\begin{lstlisting}  
+    // Waits for the next CQE on the receive CQ
+    // Returns the matching receive region
+    ReceiveRegion Receive();
+
+    // Marks the given receive region as free
+    // to be reused and will post a receive
+    // request for this region
+    void Free(ReceiveRegion reg);
+
+\end{lstlisting}
+
+Slow processing of messages can still stall the sender, but by having multiple receive buffer it allows us to have numerous 
+\emph{in-flight messages} which improves performance drastically.
+
+\paragraph{} It is important that we note here that in production systems there needs to be a way for the sender to whether 
+enough receive buffers are ready. If there is no posted receive buffer when a message is received the receiver will generate
+a so called \emph{reader not ready} error. This will either cause a large back off for the sender or even cause the connection
+to break.
+
+We observed this problem specifically for N:1 communication. This can be mitigated to some extend by optimizing receiving and
+reposting buffers through batching.
+
+\paragraph{Batching} As described there are significant penalties if the receiver is not able to keep up and stalls the sender.
+This can be mitigated a little optimizing the receiver. For one instead of polling one receive CQ at a time we poll up to 32
+at a time into a array of CQEs. We observed in microbenchmarks that this can improve the observed throughput by nearly half. By
+batching the receive work requests we can further improve throughput similarly to batching send requests.
+
+\paragraph{Shared Receive Queues} By having an array of $k$ posted receive buffers for each receiver the memory reserved for 
+receiving messages can grow quite large. If a node has an open connection to $N$ other nodes it will need to reserve 
+$N*k*max\_msg\_size$ Bytes, even if the total request volume is quite small (i.e. we expect only burst of $k$ messages but 
+from different nodes at different times).
+
+We can reduce the total memory usage by using \emph{Shared Receive Queues (SRQ)}. As the name already tells us SRQs allow us
+share receive queues between multiple QPs. This means we can reuse a single group of receive queues for multiple connections.
+This means the total memory usage does not grow with $N$.
+
+Its worth noting that the usage of SRQs does not impact completion queues. The completion event for consuming a posted receive
+buffer still ends up in the CQ of the corresponding QP.
+
+One major change with using an SRQ is that we do not submit receive work request to each of the QPs but to the single SRQ. This
+means that we will either have to introduce locking to access the SRQ, which introduces a significant performance penalty or 
+delegate the posting of the receive buffer to a single thread. Instead of reposting the buffer themselves each connection 
+enqueues the id to the to be posted buffer to a queue. The single reposting thread will dequeue it and repost it. This also
+allows us to have central batching for reposting the buffers.
+
+\paragraph{Single Receiver} It is very common to have an N:1 communication pattern where a single server receives messages 
+from multiple clients. This could be achieved by simply round-robin over the $N$ connections. For this connection however 
+we used the fact that we can associate a singe Completion Queue with multiple Queue Pairs. This means if we are in a
+\emph{single receiver mode} all receive completion events will end up in a single CQ. Allowing us to poll a single queue to
+receive a message from $N$ different sender.
+
+Especially if we are not using an SRQ we will have to know by which QP this message was received by as we will need to repost
+the buffer to it. We can get the 32 bit QP number from the Completion Queue Event, which identifies the Queue Pair. 
 
 \subsection{Evaluation}
 

@@ -1,7 +1,5 @@
 \section{RDMA}
 
-  \todo{References: $https://www.mellanox.com/related-docs/prod_software/RDMA_Aware_Programming_user_manual.pdf$}
-
 Remote Direct Memory Access (RDMA) is a network feature that enables direct access to the memory of a remote computer, 
 without any interaction by the remote CPU. The complete bypassing of the hosts kernel and even CPU allows us to achieve 
 very low latency and high bandwidth, while reducing or eliminating CPU utilization.
@@ -15,6 +13,26 @@ While we focus on and will only evaluate RoCE, most of this work should be appli
 
 
 \subsection{Verbs API}
+
+All three technologies RoCE, iWARP, and InfiniBand share a common user API called \emph{Verbs API}. The verbs API gives us a
+userspace library called \emph{libibverbs} which gives developers direct low level access to the device, bypassing the kernel.
+
+\paragraph{}The verbs API is different from traditional socket programming. Applications interact directly with the Network 
+Interface Card (NIC) through so called \emph{Queue Pairs (QP)} and \emph{Completion Queues (CQ)}, allowing it to issue
+so called \emph{Verbs}, different operations that the NIC can perform. The verbs are:
+
+\begin{itemize}
+  \item Send (with Immidiate): Sends a data from the sender memory to a prepared memory region at the receiver
+  \item Receive: Prepares a memory region to receive data through the send verb
+  \item Write (with Immidiate): Copies data from the sender memory to known memory location at the receiver without any 
+    inteaction from the remote CPU.
+  \item Read: Copies data from remote memory to a local buffer without any inteaction from the remote CPU.
+  \item Atomics: Two different atomic operations. Copare and Swap (CAS) and Fetch and Add (FAA). They can access 64-bit 
+    values in the remote memory. 
+\end{itemize}
+
+
+
 \begin{figure}[!ht]
 \begin{center}
 \begin{tikzpicture}[node distance=2cm,auto,>=stealth']
@@ -33,48 +51,79 @@ While we focus on and will only evaluate RoCE, most of this work should be appli
 \end{figure}
 
 
-All three technologies RoCE, iWARP, and InfiniBand share a common user API called \emph{Verbs API}. The verbs API gives us a
-userspace library called \emph{libibverbs} which gives developers direct low level access to the device, bypassing the kernel.
+\paragraph{} A QP consists of two queues that are responsible to schedule work for the NIC. The \emph{Send Queue} and the \emph{Receive 
+Queue}. A Work Request (WR) consists of a \code{opcode} which signifies which verb we want to execute, all necessary 
+information to complete this operations, and contains a user provided Work Request ID \code{wr\_id}. As soon as the NIC has 
+processed and complete the issued work Request it enqueues a Completion Queue Event (CQE) into an other queue called the
+Completion Queue (CQ). The CQE will contain the user provided \code{wr\_id} and allows us to notice when a request was 
+completed.\comment{Say something on in order guarantee?}
 
-\paragraph{}The verbs API is different from traditional socket programming. Applications interact directly with the Network 
-Interface Card (NIC) through so called \emph{Queue Pairs (QP)} and \emph{Completion Queues (CQ)}
 
-A QP consists of two queues that are responsible to schedule work for the NIC. The \emph{Send Queue} and the \emph{Receive 
-Queue}. The Completion Queue is used to notify the application when a \emph{Work Request} placed on one of the queues is 
-completed.
+\paragraph{} It is worth noting that every buffer that is accessed by the NIC needs to be previously registered as a usable
+\emph{Memory Region (MR)}.
 
-All
-
-\todo{Give intro to RDMA programming model / ibverbs}
-
-\todo{Use https://zcopy.wordpress.com/tag/rdma/ as inspiration}
-
-\todo{Explain QP, WRs, CQs. Stick to RC.}
 
 \subsubsection{Send / Receive}
-The \emph{Send} and \emph{Receive} verbs are the most traditional operations.
-
-
+The \emph{Send} and \emph{Receive} verbs are the most traditional operations, which allows us to send a single message to 
+a receiver. Let's walk through sending a message.
 
 \begin{figure}[!ht]
 \begin{center}
 \begin{tikzpicture}[node distance=2cm,auto,>=stealth']
+  \node[align=center] at (-6.4,1) {System A};
+  \draw[rounded corners] (-9, -6) rectangle (-3.8, 1.5) {};
+  \node[align=center] at (-0.6,1) {System B};
+  \draw[rounded corners] (-3.2, -6) rectangle (2, 1.5) {};
   \seqnode{B_cpu}{RAM};
   \seqnode[left of=B_cpu]{B_nic}{NIC};
   \hseqnode[right of=B_cpu, node distance=1.5cm]{B_acpu}{};
   \seqnode[left of=B_cpu, node distance=7cm]{A_cpu}{CPU / RAM};
   \seqnode[right of=A_cpu]{A_nic}{NIC};
+  \node[align=center, circle, draw=black, minimum size=.5mm] at (-1,-0.4) {\small 1};
+  \msg{B_cpu}{B_nic}{.2}{WR MMIO}
+  \node[align=center, circle, draw=black, minimum size=.5mm] at (-5.7,-0.7) {\small 2};
   \msg{A_cpu}{A_nic}{.25}{WR MMIO}
   \msg[below]{A_cpu}{A_nic}{.3}{payload DMA}
   \msg{A_nic}{B_nic}{.5}{network transfer}
+  \node[align=center, circle, draw=black, minimum size=.5mm] at (-4.5,-2) {\small 3};
   \msg{B_nic}{B_cpu}{.65}{payload DMA}
   \msg[below]{B_nic}{B_cpu}{.7}{CQE DMA}
+  \node[align=center, circle, draw=black, minimum size=.5mm] at (-1.3,-2.6) {\small 4};
+  \msg[below]{B_nic}{A_nic}{.71}{Acknowledgement}
+  \node[align=center, circle, draw=black, minimum size=.5mm] at (-4.5,-4.3) {\small 5};
+  \msg[below]{A_nic}{A_cpu}{.76}{DMA CQE}
+  \node[align=center, circle, draw=black, minimum size=.5mm] at (0.5,-4.5) {\small 6};
   \fetch{B_acpu}{B_cpu}{.8}{poll CQ}
 \end{tikzpicture}
 \end{center}
 \caption{Send Receive sequence}
 \label{fig:seq-sndrcv}
 \end{figure}
+
+
+Let's assume that that system A and B have set up a connection. Each of them have setup a QP and associated a Completion 
+Queue to it. Both systems have registered a MR of at least the size of the to be sent message.
+
+\begin{enumerate}
+  \item First system B will have to post a \emph{Receive Buffer}, meaning it has to reserve a buffer for incoming messages.
+    It does this by moving a Work Request into its Receive Queue. This WR will contain a pointer to the MR he prepared. We
+    call this posting a receive buffer. System B will now poll its CQ until it receives a CQE for its issued receive request.
+  \item Now system A will initiate the transfer by posting a \emph{Send Request}. It copies a Work Request to the Send 
+    Queue, which contains the \code{IBV\_WR\_SEND} opcode and a pointer to its local buffer containing the to be send message
+    and its size. It will then also start polling its CQ to notice the completion of the send request.
+  \item The previous step was actually an MMIO operation, writing the Work Request to the NIC, which will now 
+    accesses the messages payload using DMA. This  might generate more than one PCIe transaction \cite{atc16-kalia}. 
+    The payload is then sent over the network.
+  \item As soon as the receiver receives the first segment it will consume the posted receive buffer, write incoming payload 
+    to the receive buffer and generate a \emph{Work Completion Event (WQE)}. 
+  \item The successful writing of the message will generate an acknowledgement, which will be sent back to the sender where 
+    its NIC will generate a CQE for the send request, which the sending CPU will be able to poll.
+  \item At last the receiving CPU will be able to poll its \emph{Completion Queue (CQ)} and the transfer is complete.
+\end{enumerate}
+
+
+\todo{Outro. Maybe say something to Send with Immidiate?}
+
 
 
 
