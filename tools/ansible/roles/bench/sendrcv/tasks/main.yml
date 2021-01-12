@@ -5,7 +5,6 @@
     prefix: "kym-bench-"
   register: out
   when: bench_archive or bench_output is defined
-
 - name: "SendReceive {{ bench_srq | ternary('SRQ', '') }} : {{ bench_type }}"
   command: 
     argv:
@@ -27,6 +26,9 @@
       - "{{ bench_conn }}"
       - "--unack"
       - "{{ bench_unack }}"
+      - "--limit"
+      - "{{ bench_limit }}"
+      - "{{ bench_single_rcv | ternary('--single-receiver', omit) }}"
   register: run_raw
 
 - debug:

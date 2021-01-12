@@ -1,7 +1,7 @@
 set print $data
-conns = "1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16"
+conns = "1 2 3 4 5 6 7 8 9 10 11 12 13 14 15"
 do for [c in conns] {
-  bw = sprintf("data/sendrcv-bw-param/sendRcv-bw-size-16-unack-64-batch-1-conn-%s-server", c )
+  bw = sprintf("data/sendrcv-bw-param/sendRcv-bw-srq-size-16-unack-64-batch-1-conn-%s-server", c )
   stats bw using 5 noout
   print sprintf("%s %f\n", c, STATS_sum*8/1024/1024/1024)
 }
@@ -9,7 +9,7 @@ do for [c in conns] {
 
 set print $data512
 do for [c in conns] {
-  bw = sprintf("data/sendrcv-bw-param/sendRcv-bw-size-512-unack-64-batch-1-conn-%s-server", c )
+  bw = sprintf("data/sendrcv-bw-param/sendRcv-bw-srq-size-512-unack-64-batch-1-conn-%s-server", c )
   stats bw using 5 noout
   print sprintf("%s %f\n", c, STATS_sum*8/1024/1024/1024)
 }
@@ -17,13 +17,13 @@ do for [c in conns] {
 
 set print $data8192
 do for [c in conns] {
-  bw = sprintf("data/sendrcv-bw-param/sendRcv-bw-size-8192-unack-64-batch-1-conn-%s-server", c )
+  bw = sprintf("data/sendrcv-bw-param/sendRcv-bw-srq-size-8192-unack-64-batch-1-conn-%s-server", c )
   stats bw using 5 noout
   print sprintf("%s %f\n", c, STATS_sum*8/1024/1024/1024)
 }
 
 set terminal png small size 960,640 font "Computer Modern,16"
-set output "plots/send-bw-threads.png"
+set output "plots/send-bw-srq-threads.png"
 
 set xlabel "Threads" 
 set ylabel "Bandwith (Gbit/s)" enhanced

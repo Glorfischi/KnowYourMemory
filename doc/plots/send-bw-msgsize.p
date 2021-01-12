@@ -21,14 +21,18 @@ do for [s in msgs] {
   print sprintf("%s %f\n", s, STATS_median*8/1024/1024/1024)
 }
 
-set terminal png small size 960,640 enhanced
+set terminal png small size 960,640 font "Computer Modern,16"
 set output "plots/send-bw-msgsize.png"
 
-set title "Send Receive Bandwidth" 
 set xlabel "Batch size" 
 set ylabel "Bandwith (Gbit/s)" enhanced
 set yrange [0:100]
+set ytics 0, 5, 100
 set xrange [16:20000]
+
+
+set grid ytics lt 0 lw 1 lc rgb "#bbbbbb"
+set grid xtics lt 0 lw 1 lc rgb "#bbbbbb"
 
 set key left top
 
@@ -44,7 +48,8 @@ fit f(x) $databatch using 1:2 via b, o
 fit[:3000] g(x) $data using 1:2 via z
 fit h(x) $dataseq using 1:2 via p
 set xtics 1, 2, 16384
-plot $databatch title "batched", \
-     $data title "unbatched", \
-     $dataseq title "sequential", \
-     f(x) title "Model device bottleneck", g(x) title "Model unbatched bottleneck", h(x) title "Model sequential bottleneck"
+plot $databatch title "batched" pt 5 ps 1.5 , \
+     $data title "unbatched" pt 7 ps 1.5 , \
+     $dataseq title "sequential" pt 9 ps 1.5 
+
+#f(x) title "Model device bottleneck", g(x) title "Model unbatched bottleneck", h(x) title "Model sequential bottleneck"

@@ -12,7 +12,7 @@ While we focus on and will only evaluate RoCE, most of this work should be appli
 
 
 
-\subsection{Verbs API}
+\subsection{Verbs API}\label{sec:bg:verbs}
 
 All three technologies RoCE, iWARP, and InfiniBand share a common user API called \emph{Verbs API}. The verbs API gives us a
 userspace library called \emph{libibverbs} which gives developers direct low level access to the device, bypassing the kernel.
@@ -22,10 +22,10 @@ Interface Card (NIC) through so called \emph{Queue Pairs (QP)} and \emph{Complet
 so called \emph{Verbs}, different operations that the NIC can perform. The verbs are:
 
 \begin{itemize}
-  \item Send (with Immidiate): Sends a data from the sender memory to a prepared memory region at the receiver
+  \item Send (with Immediate): Sends a data from the sender memory to a prepared memory region at the receiver
   \item Receive: Prepares a memory region to receive data through the send verb
-  \item Write (with Immidiate): Copies data from the sender memory to known memory location at the receiver without any 
-    inteaction from the remote CPU.
+  \item Write (with Immediate): Copies data from the sender memory to known memory location at the receiver without any 
+    interaction from the remote CPU.
   \item Read: Copies data from remote memory to a local buffer without any inteaction from the remote CPU.
   \item Atomics: Two different atomic operations. Copare and Swap (CAS) and Fetch and Add (FAA). They can access 64-bit 
     values in the remote memory. 
@@ -61,6 +61,10 @@ completed.\comment{Say something on in order guarantee?}
 
 \paragraph{} It is worth noting that every buffer that is accessed by the NIC needs to be previously registered as a usable
 \emph{Memory Region (MR)}.
+
+\paragraph{} \todo{Maybe present basic API? ibv\_post\_send, ibv\_post\_receive, ibv\_poll\_cq?}
+
+\todo{Talk about unsignaled WRs}
 
 
 \subsubsection{Send / Receive} \label{sec:bg:send}
@@ -121,12 +125,58 @@ Queue to it. Both systems have registered a MR of at least the size of the to be
   \item At last the receiving CPU will be able to poll its \emph{Completion Queue (CQ)} and the transfer is complete.
 \end{enumerate}
 
-
-\todo{Outro. Maybe say something to Send with Immidiate?}
-
-
+So when we get over the rather unusual interface through these three queues and the rather tedious manual management of 
+memory regions, the send and receive verbs are quite simple. They give us a fairly clean message passing notion.
 
 
 \subsubsection{Write} \label{sec:bg:write}
+
+The \emph{RDMA write} verb shows us the potential of RDMA operations. It allows us to write at an arbitrary, but previously 
+by the remote machine registered, memory region, without any interaction of the remote CPU. That also means the remote CPU
+is not notified of the operation and no CQE is generated at the remote. This is the main reason why RDMA writes are generally
+considered to be faster then send and receive~\cite{anuj-guide}.
+
+
+\begin{figure}[!ht]
+\begin{center}
+\begin{tikzpicture}[node distance=2cm,auto,>=stealth']
+  \node[align=center] at (-6.4,1) {System A};
+  \draw[rounded corners] (-9, -6) rectangle (-3.8, 1.5) {};
+  \node[align=center] at (-0.6,1) {System B};
+  \draw[rounded corners] (-3.2, -6) rectangle (2, 1.5) {};
+  \seqnode{B_cpu}{RAM};
+  \seqnode[left of=B_cpu]{B_nic}{NIC};
+  \hseqnode[right of=B_cpu, node distance=1.5cm]{B_acpu}{};
+  \seqnode[left of=B_cpu, node distance=7cm]{A_cpu}{CPU / RAM};
+  \seqnode[right of=A_cpu]{A_nic}{NIC};
+  \node[align=center, circle, draw=black, minimum size=.5mm] at (-5.7,-0.7) {\small 1};
+  \msg{A_cpu}{A_nic}{.25}{WR MMIO}
+  \msg[below]{A_cpu}{A_nic}{.3}{payload DMA}
+  \msg{A_nic}{B_nic}{.5}{network transfer}
+  \node[align=center, circle, draw=black, minimum size=.5mm] at (-4.5,-2) {\small 2};
+  \msg{B_nic}{B_cpu}{.65}{payload DMA}
+  \node[align=center, circle, draw=black, minimum size=.5mm] at (-1.3,-2.6) {\small 3};
+  \msg[below]{B_nic}{A_nic}{.71}{Acknowledgement}
+  \node[align=center, circle, draw=black, minimum size=.5mm] at (-4.5,-4.3) {\small 4};
+  \msg[below]{A_nic}{A_cpu}{.76}{DMA CQE}
+\end{tikzpicture}
+\end{center}
+\caption{RDMA Write sequence}
+\label{fig:seq-wrt}
+\end{figure}
+
+Figure~\ref{fig:seq-wrt} show the operations involved in writing data to the remote using RDMA write. It is generally very
+similar to the send and receive sequence presented in the previous section. The main difference is that the remote system does
+not need to post a receive buffer and there is no generated CQE at the remote. Also obviously we will have to provide the 
+remote address to write to in the Work Request.
+
+\paragraph{} There also exists a related operation called \emph{Write with Immediate}, which works very similar but has two
+differences. We are able to send an additional 4 byte large \emph{Immediate} value that we can add to the Work Request. 
+Further Write with Immediate will also consume a posted receive request, in the same way as the send verb. It will however 
+not write anything in the associated receive buffer, but it will generate a CQE. This CQE will contain the immediate value.
+This allows us to notify the remote that we have written data and to send additional out of band data, but it also negates 
+any performance improvements over the send verb.
+
+
 \subsubsection{Read}
 \subsubsection{Atomics}

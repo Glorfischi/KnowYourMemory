@@ -95,6 +95,7 @@ int main(int argc, char* argv[]) {
 
   int conn_count = flags["conn"].as<int>();  
   bool singlercv = flags["single-receiver"].as<bool>();  
+  limit = limit/conn_count;
 
   bool server = flags["server"].as<bool>();  
   bool client = flags["client"].as<bool>();  

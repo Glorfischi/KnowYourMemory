@@ -24,16 +24,20 @@ do for [b in bat] {
   print sprintf("%s %f\n", b, STATS_median*8/1024/1024/1024)
 }
 
-set terminal png small size 960,640 enhanced
+set terminal png small size 960,640 font "Computer Modern,16"
 set output "plots/send-bw-batch.png"
 
-set title "Send Receive Bandwidth" 
 set xlabel "Batch size" 
 set ylabel "Bandwith (Gbit/s)" enhanced
 
+set grid ytics lt 0 lw 1 lc rgb "#bbbbbb"
 set xtics (1,2,4,8,16,32)
 
-plot $data256 title "256 unack" with linespoints ls 1,  \
-     $data128 title "128 unack"with linespoints ls 2,  \
-     $data64 title "64 unack"with linespoints ls 3,    \
-     $data32 title "32 unack"with linespoints ls 4
+set xrange [0.5:32.5]
+
+set key top right
+
+plot $data256 title "256 unack" pt 5 ps 1.5 ,  \
+     $data128 title "128 unack" pt 7 ps 1.5,  \
+     $data64 title "64 unack" pt 9 ps 1.5,    \
+     $data32 title "32 unack" pt 13 ps 1.5

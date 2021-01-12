@@ -440,7 +440,7 @@ kym::StatusOr<uint64_t> test_bw_recv(kym::connection::Receiver *rcv, int count, 
   std::sort (measurements.begin(), measurements.end());
   int median = (int)(measurements.size()*0.5);
 
-  return (double)size*((double)count/(dur/1e9));
+  //return (double)size*((double)count/(dur/1e9));
   return measurements[median];
 }
 

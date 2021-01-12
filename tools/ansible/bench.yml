@@ -30,7 +30,7 @@
         groups: ault_client
     - name: Allocating resources..
       shell:
-        cmd: "salloc -w {{ intel_hosts[-2:] | join(',') }} -t 30 --no-shell"
+        cmd: "salloc -w {{ intel_hosts[-2:] | join(',') }} -t 15 --no-shell"
       register: job_raw
     - debug:
         var: job_raw
@@ -93,8 +93,10 @@
       with_nested:
         - ["bw"]
         - [16]
-        - [1, 2, 4, 8, 16, 32, 64]
-        - [64, 128, 256]
+          #- [1, 2, 4, 8, 16, 32, 64]
+        - [16]
+          #- [64, 128, 256]
+        - [128]
 
 
 
@@ -206,14 +208,114 @@
         bench_msg_size: "{{ item[1] }}"
         bench_unack: "{{ item[2] }}"
         bench_conn: "{{ item[3] }}"
-        bench_output: "sendRcv-bw{{ item[4] | ternary('-srq', '') }}-batch-size-{{ item[1] }}-unack-{{ item[2] }}-batch-1-conn-{{ item[3] }}"
-        bench_count: 1048576
+        bench_output: "sendRcv-bw{{ item[4] | ternary('-srq', '') }}-size-{{ item[1] }}-unack-{{ item[2] }}-batch-1-conn-{{ item[3] }}"
+        bench_count: 2485760
       with_nested:
         - ["bw"]
-        - [16, 512, 8192] 
+          #- [16, 512, 8192] 
+        - [16] 
         - [64]
-        - [1, 2, 3, 4, 5, 6]
-        - [false, true]
+        - [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+        - [false]
+
+- hosts: ault_runner
+  gather_facts: yes
+  tags: run, send, bw, send-srq-bw-thread-16
+  tasks:
+    - name: "Gather IP of server"
+      set_fact:
+        bench_server_ip: "{{ ansible_default_ipv4.address }}"
+      delegate_to: ault_server
+      run_once: true
+    - debug:
+        verbosity: 1
+        msg: "Server ip: {{ bench_server_ip}}"
+    - name: Write
+      include_role:
+        name: bench/sendrcv
+      vars:
+        bench_type: "{{ item[0] }}"
+        bench_srq: "{{ item[4] }}"
+        bench_batch_size: 1
+        bench_msg_size: "{{ item[1] }}"
+        bench_unack: "{{ item[2] }}"
+        bench_conn: "{{ item[3] }}"
+        bench_output: "sendRcv-bw{{ item[4] | ternary('-srq', '') }}-size-{{ item[1] }}-unack-{{ item[2] }}-batch-1-conn-{{ item[3] }}"
+        bench_count: 1048576
+        bench_limit: 1600000
+      with_nested:
+        - ["bw"]
+        - [16] 
+        - [64]
+        - [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+        - [true]
+
+
+- hosts: ault_runner
+  gather_facts: yes
+  tags: run, send, bw, send-srq-bw-thread
+  tasks:
+    - name: "Gather IP of server"
+      set_fact:
+        bench_server_ip: "{{ ansible_default_ipv4.address }}"
+      delegate_to: ault_server
+      run_once: true
+    - debug:
+        verbosity: 1
+        msg: "Server ip: {{ bench_server_ip}}"
+    - name: Write
+      include_role:
+        name: bench/sendrcv
+      vars:
+        bench_type: "{{ item[0] }}"
+        bench_srq: "{{ item[4] }}"
+        bench_batch_size: 1
+        bench_msg_size: "{{ item[1] }}"
+        bench_unack: "{{ item[2] }}"
+        bench_conn: "{{ item[3] }}"
+        bench_output: "sendRcv-bw{{ item[4] | ternary('-srq', '') }}-size-{{ item[1] }}-unack-{{ item[2] }}-batch-1-conn-{{ item[3] }}"
+        bench_count: 1048576
+        bench_limit: 1700000
+      with_nested:
+        - ["bw"]
+        - [512] 
+        - [64]
+        - [14, 15]
+        - [true]
+
+
+- hosts: ault_runner
+  gather_facts: yes
+  tags: run, send, bw, send-srq-bw-thread
+  tasks:
+    - name: "Gather IP of server"
+      set_fact:
+        bench_server_ip: "{{ ansible_default_ipv4.address }}"
+      delegate_to: ault_server
+      run_once: true
+    - debug:
+        verbosity: 1
+        msg: "Server ip: {{ bench_server_ip}}"
+    - name: Write
+      include_role:
+        name: bench/sendrcv
+      vars:
+        bench_type: "{{ item[0] }}"
+        bench_srq: "{{ item[4] }}"
+        bench_batch_size: 1
+        bench_msg_size: "{{ item[1] }}"
+        bench_unack: "{{ item[2] }}"
+        bench_conn: "{{ item[3] }}"
+        bench_output: "sendRcv-bw{{ item[4] | ternary('-srq', '') }}-size-{{ item[1] }}-unack-{{ item[2] }}-batch-1-conn-{{ item[3] }}"
+        bench_count: 1048576
+        bench_limit: 1800000
+      with_nested:
+        - ["bw"]
+        - [8192] 
+        - [64]
+        - [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+        - [true]
+
 
 - hosts: ault_runner
   gather_facts: yes
@@ -241,6 +343,174 @@
         - ["pingpong"]
         - [true, false] 
         - [16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384] 
+
+- hosts: ault_runner
+  gather_facts: yes
+  tags: run, send, bw, send-bw-srq-n1-16
+  tasks:
+    - name: "Gather IP of server"
+      set_fact:
+        bench_server_ip: "{{ ansible_default_ipv4.address }}"
+      delegate_to: ault_server
+      run_once: true
+    - debug:
+        verbosity: 1
+        msg: "Server ip: {{ bench_server_ip}}"
+    - name: Write
+      include_role:
+        name: bench/sendrcv
+      vars:
+        bench_type: "{{ item[0] }}"
+        bench_srq: "{{ item[4] }}"
+        bench_batch_size: 1
+        bench_msg_size: "{{ item[1] }}"
+        bench_unack: "{{ item[2] }}"
+        bench_conn: "{{ item[3] }}"
+        bench_output: "sendRcv-bw{{ item[4] | ternary('-srq', '') }}-size-{{ item[1] }}-unack-{{ item[2] }}-batch-1-conn-{{ item[3] }}-single-rcv"
+        bench_count: 1048576
+        bench_single_rcv: true
+        bench_limit: 11000000
+      with_nested:
+        - ["bw"]
+        - [16] 
+        - [64]
+        - [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+        - [true]
+ 
+
+- hosts: ault_runner
+  gather_facts: yes
+  tags: run, send, bw, send-bw-srq-n1
+  tasks:
+    - name: "Gather IP of server"
+      set_fact:
+        bench_server_ip: "{{ ansible_default_ipv4.address }}"
+      delegate_to: ault_server
+      run_once: true
+    - debug:
+        verbosity: 1
+        msg: "Server ip: {{ bench_server_ip}}"
+    - name: Write
+      include_role:
+        name: bench/sendrcv
+      vars:
+        bench_type: "{{ item[0] }}"
+        bench_srq: "{{ item[4] }}"
+        bench_batch_size: 1
+        bench_msg_size: "{{ item[1] }}"
+        bench_unack: "{{ item[2] }}"
+        bench_conn: "{{ item[3] }}"
+        bench_output: "sendRcv-bw{{ item[4] | ternary('-srq', '') }}-size-{{ item[1] }}-unack-{{ item[2] }}-batch-1-conn-{{ item[3] }}-single-rcv"
+        bench_count: 1048576
+        bench_single_rcv: true
+      with_nested:
+        - ["bw"]
+        - [512, 8192] 
+        - [64]
+        - [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+        - [true]
+ 
+
+
+- hosts: ault_runner
+  gather_facts: yes
+  tags: run, send, bw, send-bw-n1, send-bw-n1-16
+  tasks:
+    - name: "Gather IP of server"
+      set_fact:
+        bench_server_ip: "{{ ansible_default_ipv4.address }}"
+      delegate_to: ault_server
+      run_once: true
+    - debug:
+        verbosity: 1
+        msg: "Server ip: {{ bench_server_ip}}"
+    - name: Write
+      include_role:
+        name: bench/sendrcv
+      vars:
+        bench_type: "{{ item[0] }}"
+        bench_srq: "{{ item[4] }}"
+        bench_batch_size: 1
+        bench_msg_size: "{{ item[1] }}"
+        bench_unack: "{{ item[2] }}"
+        bench_conn: "{{ item[3] }}"
+        bench_output: "sendRcv-bw{{ item[4] | ternary('-srq', '') }}-size-{{ item[1] }}-unack-{{ item[2] }}-batch-1-conn-{{ item[3] }}-single-rcv"
+        bench_count: 1048576
+        bench_single_rcv: true
+        bench_limit: 9000000
+      with_nested:
+        - ["bw"]
+        - [16] 
+        - [64]
+        - [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+        - [false]
+
+
+- hosts: ault_runner
+  gather_facts: yes
+  tags: run, send, bw, send-bw-n1, send-bw-n1-512
+  tasks:
+    - name: "Gather IP of server"
+      set_fact:
+        bench_server_ip: "{{ ansible_default_ipv4.address }}"
+      delegate_to: ault_server
+      run_once: true
+    - debug:
+        verbosity: 1
+        msg: "Server ip: {{ bench_server_ip}}"
+    - name: Write
+      include_role:
+        name: bench/sendrcv
+      vars:
+        bench_type: "{{ item[0] }}"
+        bench_srq: "{{ item[4] }}"
+        bench_batch_size: 1
+        bench_msg_size: "{{ item[1] }}"
+        bench_unack: "{{ item[2] }}"
+        bench_conn: "{{ item[3] }}"
+        bench_output: "sendRcv-bw{{ item[4] | ternary('-srq', '') }}-size-{{ item[1] }}-unack-{{ item[2] }}-batch-1-conn-{{ item[3] }}-single-rcv"
+        bench_count: 1048576
+        bench_single_rcv: true
+        bench_limit: 13000000
+      with_nested:
+        - ["bw"]
+        - [512] 
+        - [64]
+        - [9, 10, 11, 12, 13, 14, 15, 16]
+        - [false]
+
+
+- hosts: ault_runner
+  gather_facts: yes
+  tags: run, send, bw, send-bw-n1, send-bw-n1-8192
+  tasks:
+    - name: "Gather IP of server"
+      set_fact:
+        bench_server_ip: "{{ ansible_default_ipv4.address }}"
+      delegate_to: ault_server
+      run_once: true
+    - debug:
+        verbosity: 1
+        msg: "Server ip: {{ bench_server_ip}}"
+    - name: Write
+      include_role:
+        name: bench/sendrcv
+      vars:
+        bench_type: "{{ item[0] }}"
+        bench_srq: "{{ item[4] }}"
+        bench_batch_size: 1
+        bench_msg_size: "{{ item[1] }}"
+        bench_unack: "{{ item[2] }}"
+        bench_conn: "{{ item[3] }}"
+        bench_output: "sendRcv-bw{{ item[4] | ternary('-srq', '') }}-size-{{ item[1] }}-unack-{{ item[2] }}-batch-1-conn-{{ item[3] }}-single-rcv"
+        bench_count: 1048576
+        bench_single_rcv: true
+      with_nested:
+        - ["bw"]
+        - [8192] 
+        - [64]
+        - [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+        - [false]
  
 - hosts: ault_runner
   gather_facts: yes
