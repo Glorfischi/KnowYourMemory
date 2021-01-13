@@ -1,6 +1,73 @@
 \section{Shared Write} \label{sec:conn:shared_write}
-\subsection{Protocol}
-\subsection{Device Memory}
+\subsection{Desgin}
+In Section~\ref{sec:conn:buf_write} we presented multiple ways to build up a message passing protocol based on the 
+RDMA write verb and a ring buffer. In this section we present a way to share a single ring buffer for multiple connections.
+
+
+\paragraph{} We present a protocol with two phases
+
+\begin{itemize}
+  \item In the first phase, the sender reserves space in the buffer by modifying a remote counter using 
+    the \emph{Fetch and Add} verb.
+  \item In the second phase the sender makes sure that the reserved space is actually free and writes to it.
+\end{itemize}
+
+We only implement a single variant based on the \emph{Write with Immediate} verb and focus on a N to 1 connection pattern only.
+We point out that there are multiple different approaches that use the same atomics based operation we present below. One
+could use the same \emph{write offset} or \emph{write reverse} approach presented earlier and multiple receivers could
+utilize the same ring buffer when using \emph{Write with Immediate}. A deep dive in all this variations however is out
+of scope of this thesis.
+
+\subsubsection{Reservation}
+To allow for multiple sender to write to a shared ring buffer we need to coordinate them. This boils down to having to
+assign unique destination addresses for each of sender. This translates to implementing a \emph{sequencer} that issues
+increasing addresses based on the message size. This can either be implemented using atomic operations or by using RPCs
+and handling the sequencing at the receives CPU. An RPC based approach is expected to provide us with higher 
+throughput~\cite{anuj-guide}, but introduces more complexity and CPU overhead for the receiver. So we focus on an atomic based 
+implementation.
+
+\paragraph{} In our implementation we have 16 bytes of metadata at the receiver that is accessible to all sender. It consists
+of a 64~bit tail and 64~bit tail. The tail is updated by the receiver and the head represents the end of the last reserved 
+buffer segment of any sender. This does not mean that this message has been written. Both counters are monotonically increasing
+and translate to the actual ring buffer offset by taking the remainder when dividing it by the buffer size.
+
+Now when a sender wants to send a message of size $s$ it will issue a \emph{fetch and add} on the remote tail with the 
+size $s$. It will receive its destination address and can be assured that the next $s$ bytes are reserved. It then needs
+to check whether the buffer segment is actually free to write to by comparing the tail with the head. This might cause one 
+or multiple reads to update the cached head value.
+
+\paragraph{} We could also use \emph{compare and swap} for the reservation phase, but that would introduce another read and
+we expect a lot of contention for high loads.
+
+\subsubsection{Sending}
+After the reservation phase the sender can write to it and needs to signal the incoming message to the receiver. We decided 
+to do this using the \emph{Write with Immediate} verb. This allows us to notify the receiver with completion event. 
+
+One thing we need to note is that this time the completion events do not have to arrive in the same oder as they appear in
+the ring buffer. That means we will need to send the offset of the corresponding buffer segment as immediate data.
+
+
+\subsubsection{Receiving}
+We reuse the same single receiver approach presented in Section~\ref{sec:conn:send} with a single completion queue for multiple
+QPs. We do not use a shared receive queue, as this will actually introduce a bottleneck as the 2~Mops are slower than the 
+peak throughput we can achieve with our sequencer approach.
+
+The out of order freeing of messages can then be solved in very similar way as presented in the last section.
+\comment{Not quite. I actually used a little different approach to be able to support N*1:1 down the line. But this is not 
+a bottleneck and is not really interesting}
+
+
+\subsubsection{Device Memory}
+Fairly recently RDMA enabled NIC provide on device memory that can be accessed using the Verbs API. This device memory can 
+be accessed the same way as regular memory through verbs and is completely transparent for the remote system. It does however
+reduce latency and does not have to make any PCI accesses. From this we especially expect atomic operations to be a lot faster
+when using device memory.
+
+\paragraph{} Quick micro benchmark reaffirm these expectations. In our case maximum throughput of fetch and add operations 
+increased form around 2 MOps to nearly 8 MOps. This means by using device memory for the ring buffer metadata we can increase
+the throughput of our reservation phase by nearly 300\%. We can also achieve a minor speed up for reading the head update after
+reserving a buffer segment.
+
 \subsection{Evaluation}
 \todo{Info on system etc.}
 
