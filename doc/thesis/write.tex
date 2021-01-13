@@ -287,21 +287,22 @@ cache of the tail value.
 
 Figure \ref{fig:plot-write-lat} shows the latency the latency of sending a message of varying sizes using our write protocol
 with all presented sender. All measurements use the \emph{read} acknowledger. There is no significant difference in latency
-when switching to a \emph{send} acknowledger. \todo{do we need a graph for that?}
+when switching to a \emph{send} acknowledger. \comment{do we need a graph for that?}
 We again perform \emph{ping-pong} measurements. We take half of this RTT as our measurement of latency.
 
 
 We can see that the additionally issued write of the \emph{WriteOff} gives us a noticeable increase in latency for all message
 sizes. The overhead however does seem to decrease a little for messages over the MTU of $4096$ Bytes. This is something we are
-not quite able to predict with our model. \todo{Why?}
+not quite able to predict with our model.
 
-The latency characteristics of \emph{WriteRev} and \emph{WriteImm} seem to be very similar. This is in line with what we expect
-..
+The latency characteristics of \emph{WriteRev} and \emph{WriteImm} seem to be very similar. This is in line with what we 
+expect. The consumption of a receive request doe not seem to introduce a significant overhead. \comment{the slight slowdown
+of writeRev might be related to our anomaly}
 
 \subsubsection{Bandwidth}
 
 \begin{figure}[h]
-\includegraphics[width=1\textwidth]{write-bw-unack.png}
+\includegraphics[width=1\textwidth]{write-bw-msgsize.png}
 \caption{Evaluation of the Send Receive latency between two nodes and our performance model}
 \label{fig:plot-write-bw-unack}
 \end{figure}
@@ -312,9 +313,17 @@ Section \ref{sendrcv}, but application level batching is in the end more effecti
 into batching for the remaining protocols. We would however expect similar improvements for the buffered write 
 protocols with batching.
 
+no bw increase over 32 unack so using 64
 
 
 
 
+
+
+\begin{figure}[h]
+\includegraphics[width=1\textwidth]{write-bw-threads.png}
+\caption{Evaluation of the Send Receive latency between two nodes and our performance model}
+\label{fig:plot-write-bw-unack}
+\end{figure}
 
 

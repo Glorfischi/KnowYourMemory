@@ -111,6 +111,8 @@ receive a message from $N$ different sender.
 Especially if we are not using an SRQ we will have to know by which QP this message was received by as we will need to repost
 the buffer to it. We can get the 32 bit QP number from the Completion Queue Event, which identifies the Queue Pair. 
 
+\paragraph{Inline Receive} \todo{We use it below to explain plots. We need to say something about it}
+
 \subsection{Evaluation}
 
 We ran all our evaluations on two machines running CentOS 7 containing two Intel Xeon Gold 6152 and 384 GiB of memory.
@@ -276,7 +278,7 @@ of 512 bytes. We suspect this to be caused by  NIC level optimizations for small
 such as inline receiving~\cite{anuj-guide} which is supported by Mellanox NICs up to about 64 bytes.
 
 This seems to be the total throughput of the receiving NIC. This is significantly higher than our maximum throughput 
-een for a single connection, this can be attributed to the usage of multiple processing units~\cite{anuj-guide}
+seen for a single connection, this can be attributed to the usage of multiple processing units~\cite{anuj-guide}
 
 
 Figure \ref{fig:plot-sndrcv-bw-thread-srq} shows the same data when using a shared receive queue (SRQ) to share memory
@@ -310,19 +312,61 @@ SRQ.
 
 
 One of the most prevalent communication pattern is the N:1 configuration, where a single server handles the messages
-of multiple clients.
+of multiple clients. We described early how we handle such a pattern with a single completion queue.
 
-\paragraph{} w/o SRQ: Needed limiter for both 16 and 512 bytes. Both get slower for more connections. Either cause by ouri
-repost implementation or cache?
+\paragraph{} Figure~\ref{fig:plot-sndrcv-bw-n1} shows the throughput with a single receiver and varying number of senders.
+We again look at three different message sizes. Messages of size 8196 are again limited by the link speed. For smaller messages
+we are limited by the receivers CPU. To prevent RNR errors we limit the sender to a stable sending rate.
+
+For 16 byte messages we seem to be limited at around 11 Mops, while for 512 bytes we limited at around 16 Mops. We expect the
+difference in sustainable message rates to be cause by the inline receives for 16 byte messages, which actually has detrimental
+effects on throughput, as this causes additional overhead for the CPU which is already the bottleneck in this situation.
+\comment{I'm talking out of my ass here a little. Konstantin does this sound reasonable?}
+
+However for both smaller message sizes we see a drop in performance when further increasing the number of sender. We explain 
+this by increased cache misses, caused by having to access more QPs and the linearly growing number of receive buffers.
+
+\paragraph{} Figure~\ref{fig:plot-sndrcv-bw-srq-n1} shows the same plot while using a shared receive queue for all QPs. For
+large messages we are again only limited by the link speed.
+
+For small messages of 32 bytes or lower we see similar throughout
+as without using a shared receive queue. We do however not see any performance drops when using an increasing amount of sender.
+This would fit our explanation of cache misses for receive buffers, as when we are using a SRQ the number of receive buffer
+stays constant. \comment{Or our reposting code without SRQ is slow? But I don't think so}
 
 
-\paragraph{}SRQ: needed limiter for 16 byte. Seems to have same performance as 16 byte without srq. Related to inline receive? Some
-kind of optimization. 512 drops significantly and stays at 2 Mops. 8192 limited by link
+More interesting are message sizes above 32 bytes that are not limited by the link speed. Without the receive optimizations 
+for very small messages we seem to be limited at 2 Mops when using SRQs. Interestingly this effect does not show up when only
+one QP is using the SRQ. We expect this to be some kind of locking or atomic operation of the NIC itself.
 
 
 
 
-\subsection{Result}
 
-SRQ not suited for msgsize between 32 and 6800 bytes. There seem to be optimization below and above we are limite by link
+\subsection{Conclusion}
+
+The Send and Receive verbs are generally regarded as the simplest verbs to work with. In this section we have shown how to
+build a complete data exchange protocol. We have shown that even with this rather simple operations there are multiple tuning
+possibilities and that predicting performance  is not always trivial.
+
+\paragraph{} We have shown that send-receive connections can achieve high performance. They provide our requirements of \emph{fairness},
+gives us convenient \emph{interrupts}, and when using shared receive queues allows us to \emph{share resources} between multiple 
+connections.
+
+We pointed out multiple pitfalls when developing such connections. For production implementations there needs
+to be some kind of acknowledging of messages to prevent stalling the sender, which causes RNR errors and significant 
+performance drops or even failures. Receive buffer management needs to be looked at very carefully to achieve good receive
+side performance.
+
+We evaluated Shared Receive Queue and while SRQs allows us to share resources they also come with significant drawbacks. At
+least in our Melanox NIC there seem to optimization that allows SRQs to match the performance of not shared connections for
+very small messages. We expect this to be related to inline receives. For messages above 32 bytes we where limited to 
+2 Mops at the receiver side. This is nearly 10 times slower than using separate receive queues for each QP. This makes 
+using SRQs unsuitable for any system that sends messages between 32 and about 6800 bytes, at which point we are again limited 
+by the link speed.
+
+
+\paragraph{} In the end working with Send and Receive are still the easiest verbs to work with and when there is some kind of
+acknowledgement system in place they are very reliable. They give us some nice features that other connections cannot provide
+us and SRQs can be good option to save resources if the throughput is good enough for the system.
 

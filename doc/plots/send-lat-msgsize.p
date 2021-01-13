@@ -6,7 +6,7 @@ do for [i in msgs] {
   print sprintf("%s %f\n", i, STATS_median/2)
 }
 
-set terminal png small size 960,640 enhanced
+set terminal png small size 960,640 font "Computer Modern,16" 
 set output "plots/send-lat-msgsize.png"
 
 set title "Send Receive Latency" 
@@ -16,10 +16,12 @@ set yrange [1.5 : 5]
 set ytics 0, 0.5, 6
 
 set xtics 1, 2, 8192
+set xrange [13 : 9500]
 
 set logscale x 2
 f(x)=b*x + o
 b=0.00023;o=2.2
 fit f(x) $median using 1:2 via b, o
-plot $median  with points pt 4 title "SendRcv data", \
-  f(x) title "SendRcv model"
+plot $median  with points  pt 5 ps 1.5 title "SendRcv data"
+
+#f(x) title "SendRcv model"
