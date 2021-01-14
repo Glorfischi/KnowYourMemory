@@ -192,7 +192,7 @@ acknowledged.
 \begin{subfigure}[b]{0.49\textwidth}
   \centering
   \includegraphics[width=1\textwidth]{send-bw-batch.png}
-  \caption{Bandwidth with message size of 16 bytes with varying batch size \todo{redo measurement for 64 unack}}
+  \caption{Bandwidth with message size of 16 bytes with varying batch size}
   \label{fig:plot-sndrcv-bw-batch}
 \end{subfigure}
 \begin{subfigure}[b]{1\textwidth}
@@ -349,9 +349,9 @@ The Send and Receive verbs are generally regarded as the simplest verbs to work 
 build a complete data exchange protocol. We have shown that even with this rather simple operations there are multiple tuning
 possibilities and that predicting performance  is not always trivial.
 
-\paragraph{} We have shown that send-receive connections can achieve high performance. They provide our requirements of \emph{fairness},
-gives us convenient \emph{interrupts}, and when using shared receive queues allows us to \emph{share resources} between multiple 
-connections.
+\paragraph{} We have shown that send-receive connections can achieve high performance. They provide our requirements of
+\emph{fairness}, gives us convenient \emph{interrupts}, and when using shared receive queues allows us to 
+\emph{share resources} between multiple  connections.
 
 We pointed out multiple pitfalls when developing such connections. For production implementations there needs
 to be some kind of acknowledging of messages to prevent stalling the sender, which causes RNR errors and significant 

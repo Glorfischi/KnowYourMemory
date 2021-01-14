@@ -179,4 +179,22 @@ any performance improvements over the send verb.
 
 
 \subsubsection{Read}
+
 \subsubsection{Atomics}
+
+The \emph{Verbs API} also allows us to perform two different atomic operations on remote 64 bit values. These operations also
+do not need any involvement by the remote CPU and the necessary operations to perform these are very similar to the read verb.
+
+
+\begin{itemize}
+  \item \textbf{Fetch and Add} will read a 64 bit value from the remote memory space, add the additionally provided 
+    \code{compare\_add} value, and write the original data before the add to the provided local memory.
+  \item With \textbf{Compare and Swap} will read a 64 bit value from the remote memory space and will compare it to 
+    the \code{compare\_add} value provided in the work request. If they are equal it will write the value \code{swap}
+    which is also provided in the work request. Regardless of success, it will return the original data to the requester.
+\end{itemize}
+
+Atomic operations open up a lot of options for more complex protocols, but they are currently rarely used as they generally
+provide much lower throughput~\cite{anuj-guide}.
+
+

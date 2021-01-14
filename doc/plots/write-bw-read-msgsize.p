@@ -1,10 +1,11 @@
-msgs = "16 32 64 128 256 512 1024 2048 4096 8192 16384"
+msgs = "16 32 64 128 256 512 1024 2048 4080 8160 16120"
 set print $writeRev
 do for [s in msgs] {
   bw = sprintf("data/write-bw/write-bw-single-size-%s-writeRev-ack-read-unack-64-server", s)
   stats bw using 5 noout
   print sprintf("%s %f\n", s, STATS_median*8/1024/1024/1024)
 }
+msgs = "16 32 64 128 256 512 1024 2048 4096 8192 16384"
 set print $writeImm
 do for [s in msgs] {
   bw = sprintf("data/write-bw/write-bw-single-size-%s-writeImm-ack-read-unack-64-server", s)
