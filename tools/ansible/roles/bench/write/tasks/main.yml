@@ -31,6 +31,7 @@
       - "{{ bench_conn }}"
       - "--unack"
       - "{{ bench_unack }}"
+      - "{{ bench_single_rcv | ternary('--single-receiver', omit) }}"
   register: run_raw
 
 - debug:

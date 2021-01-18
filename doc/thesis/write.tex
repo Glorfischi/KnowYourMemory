@@ -351,6 +351,17 @@ sender but will send slightly smaller messages.
 
 \subsubsection{Multithreading}
 
+Very similarly to the send receive connections, for single threaded point to point connections we are almost always limited 
+by our ability to post enough send requests. 
+
+\paragraph{} Now we will evaluate the protocols performance with multiple open connections. We still use two nodes.
+On each node we run $T$ threads, each of which opens a connections with the corresponding thread on the other node.
+Each connections will share the same sending and receiving NIC.
+
+We again evaluated the throughput of three different message sizes: 16 bytes, 512 bytes, and 8192 bytes, with all 
+three different sender implementations. We do not show the results for both acknowledging methods, as the both 
+yield very similar results. In the following plot we use the \emph{send acknowledger}. We allow for 64 unacknowledged
+messages per connection to ensure a full send pipeline.
 
 \begin{figure}[]
   \centering
@@ -373,32 +384,89 @@ sender but will send slightly smaller messages.
   \label{fig:plot-write-bw-thread-8192}
 \end{subfigure}
   \caption{Bandwidth with varying number of threads}
+  \label{fig:plot-write-bw-thread}
 \end{figure}
+
+\paragraph{} Figure \ref{fig:plot-write-bw-thread} shows the total throughput of all sender implementations
+with varying number of connections and the three different message sizes.
+
+We can easily see that for large messages we keep being bottlenecked by the device bandwidth of 100 Gbit/s, regardless of 
+the sender, however the Write Offset sender shows a small overhead and does not quite achieve the same throughput as the 
+other two implementation. 
+
+For smaller messages we  first increases linearly until we hit a bottleneck. There does seem to be a fair amount of noise,
+but for both message sizes the Write Immediate and Write Reverse sender achieve similar performance, while the Write Offset
+implementation is significantly slower. This can again be explained by the additionally issued write, which in this case 
+gives us a more pronounced overhead as we are bottlenecked by the number of operations the NIC can process.
+
+
+
+
 \subsubsection{Single Receiver}
+Finally we will look at the N:1 communication pattern, where a single server handles the messages of multiple clients. 
+We again only use the nodes. On the sending node we have $N$ open threads send to a single receiving thread on the other node,
+which will round robin over the $N$ open connections. 
 
 \begin{figure}[]
   \centering
 \begin{subfigure}[b]{0.49\textwidth}
   \centering
-  \includegraphics[width=1\textwidth]{send-bw-unack.png}
-  \caption{Bandwidth with message size of 16 bytes with varying number of unacknowledged messages}
-  \label{fig:plot-sndrcv-bw-unack}
+  \includegraphics[width=1\textwidth]{write-bw-n1-16.png}
+  \caption{Message size 16 bytes}
+  \label{fig:plot-write-bw-n1-16}
 \end{subfigure}
 \begin{subfigure}[b]{0.49\textwidth}
   \centering
-  \includegraphics[width=1\textwidth]{send-bw-batch.png}
-  \caption{Bandwidth with message size of 16 bytes with varying batch size}
-  \label{fig:plot-sndrcv-bw-batch}
+  \includegraphics[width=1\textwidth]{write-bw-n1-512.png}
+  \caption{Message size 512 bytes}
+  \label{fig:plot-write-bw-n1-512}
 \end{subfigure}
 \begin{subfigure}[b]{0.49\textwidth}
   \centering
-  \includegraphics[width=1\textwidth]{send-bw-msgsize.png}
-  \caption{Evaluation of the Send Receive bandwidth between two nodes and our performance model}
-  \label{fig:plot-sndrcv-bw}
+  \includegraphics[width=1\textwidth]{write-bw-n1-8192.png}
+  \caption{Message size 8192 bytes}
+  \label{fig:plot-write-bw-n1-8192}
 \end{subfigure}
+  \caption{Bandwidth with varying number of threads and a single receiver}
+  \label{fig:plot-write-bw-n1}
 \end{figure}
 
+\paragraph{} Figure~\ref{fig:plot-write-bw-n1} shows the throughput with a single receiver and varying number of senders.
+We again look at three different message sizes. Messages of size 8196 are again limited by the link speed for
+all sender implementations, with the same slight overhead for the Write Offset implementation. For smaller messages
+we are limited by the receivers CPU. For this connections we can avoid any RNR errors for the Write Immediate sender by
+limiting the ring buffer size. This way we did not have to artificially limit the sender as we did in 
+Section~\ref{conn:send:eval}.
+
+For both 16 byte as well as 512 byte messages, the Write Reverse sender is a fair bit faster than the Write Immediate sender,
+which can be explained by the additional receive buffer reposting the receiving CPU needs to perform when using write with
+immediate. Interestingly the Write Offset implementation also seems to be significantly slower and achieves slightly better
+performance then Write Immediate for 16 byte messages and about the same throughput for 512 byte messages.~\comment{ I can't 
+really explain this. We should be completely limited by the receiving CPU and writeOff is not more involved for the CPU}
+
+For both smaller message sizes we see a drop in performance when further increasing the number of sender. We explain 
+this by increased cache misses, caused by having to access more QPs and the linearly growing number of ring buffers.
+
+
 \subsection{Conclusion}
+
+It is generally assumed that the Write verb is significantly faster than using Send and Receive. In this section we have 
+shown that in the end when building a message passing interface using a ring buffer, the difference is not as pronounced.
+
+
+\paragraph{} We have shown that buffered read connections achieve very similar, high performance than send receive connections
+Using this protocol we can provide \emph{variable message size}, which allows transmission to only use the buffer space it 
+actually needs. Depending on the approach we can have convenient \emph{interrupts} but compared to the send receive protocol
+we need to give up some of the \emph{fairness} guarantees, as a single blocked message can halt the complete ring buffer.
+
+\paragraph{} In our benchmarking we encountered some unintuitive results. Most notably the \emph{Write Reverse Anomaly} when 
+sending message of size 4 KB or multiples of it. This again shows that RDMA based connections need to be designed carefully
+and tested thoroughly to achieve the best performance.
+
+\paragraph{} In the end Buffered Read connections give us good performance, work reliably, and utilizes the buffer space more
+efficiently than using send receive verbs. They however give us very similar performance compared to the send receive 
+connections and is significantly more involved to implement.
+
 
 
 

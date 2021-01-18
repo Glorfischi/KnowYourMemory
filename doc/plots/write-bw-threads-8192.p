@@ -28,7 +28,7 @@ set output "plots/write-bw-threads-8192.png"
 
 set xlabel "Threads" 
 set ylabel "Bandwith (Gbit/s)" enhanced
-set yrange [0:120]
+set yrange [0:100]
 set ytics 0, 10, 100
 set xrange [0.5:15.5]
 set xtics 0, 1, 16
@@ -36,7 +36,7 @@ set xtics 0, 1, 16
 set grid ytics lt 0 lw 1 lc rgb "#bbbbbb"
 set grid xtics lt 0 lw 1 lc rgb "#bbbbbb"
 
-set key left top
+set key right center
 plot $writeRev title "WriteRev" pt 5 ps 1.5, \
      $writeImm title "writeImm" pt 7 ps 1.5, \
      $writeOff title "writeOff" pt 9 ps 1.5

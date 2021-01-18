@@ -20,10 +20,9 @@ do for [s in msgs] {
 }
 
 
-set terminal png small size 960,640 enhanced
+set terminal png small size 960,640 font "Computer Modern,16"
 set output "plots/write-bw-msgsize.png"
 
-set title "Write Bandwidth" 
 set xlabel "Message Size" 
 set ylabel "Bandwith (Gbit/s)" enhanced
 set yrange [0:100]
@@ -31,8 +30,11 @@ set xrange [16:20000]
 
 set key left top
 
+set grid ytics lt 0 lw 1 lc rgb "#bbbbbb"
+set grid xtics lt 0 lw 1 lc rgb "#bbbbbb"
+
 set logscale x 2
 set xtics 1, 2, 16384
-plot $writeRev title "WriteRev", \
-     $writeImm title "writeImm", \
-     $writeOff title "writeOff"
+plot $writeRev title "WriteRev" pt 5 ps 1.5, \
+     $writeImm title "writeImm" pt 7 ps 1.5, \
+     $writeOff title "writeOff" pt 9 ps 1.5

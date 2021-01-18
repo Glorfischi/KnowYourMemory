@@ -30,7 +30,7 @@
         groups: ault_client
     - name: Allocating resources..
       shell:
-        cmd: "salloc -w {{ intel_hosts[-2:] | join(',') }} -t 15 --no-shell"
+        cmd: "salloc -w {{ intel_hosts[-2:] | join(',') }} -t 20 --no-shell"
       register: job_raw
     - debug:
         var: job_raw
@@ -636,6 +636,213 @@
         - [16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384] 
         - [64]
 
+
+- hosts: ault_runner
+  gather_facts: yes
+  tags: run, write, bw, write-bw-rev
+  tasks:
+    - name: "Gather IP of server"
+      set_fact:
+        bench_server_ip: "{{ ansible_default_ipv4.address }}"
+      delegate_to: ault_server
+      run_once: true
+    - debug:
+        verbosity: 1
+        msg: "Server ip: {{ bench_server_ip}}"
+    - name: Write - Bandwith
+      include_role:
+        name: bench/write
+      vars:
+        bench_type: "{{ item[0] }}"
+        bench_sender: "{{ item[1] }}"
+        bench_ack: "{{ item[2] }}"
+        bench_batch_size: 1
+        bench_msg_size: "{{ item[3] }}"
+        bench_unack: "{{ item[4] }}"
+        bench_output: "write-bw-single-size-{{item[3] }}-{{ item[1] }}-ack-{{ item[2] }}-unack-{{ item[4] }}"
+        bench_count: 1048576
+      with_nested:
+        - ["bw"]
+        - ["writeRev"]
+        - ["send", "read"]
+        - [16, 32, 64, 128, 256, 512, 1024, 2048, 4080, 8160, 16120] 
+        - [64]
+
+- hosts: ault_runner
+  gather_facts: yes
+  tags: run, write, bw, write-rev-anomaly
+  tasks:
+    - name: "Gather IP of server"
+      set_fact:
+        bench_server_ip: "{{ ansible_default_ipv4.address }}"
+      delegate_to: ault_server
+      run_once: true
+    - debug:
+        verbosity: 1
+        msg: "Server ip: {{ bench_server_ip}}"
+    - name: Write - Bandwith
+      include_role:
+        name: bench/write
+      vars:
+        bench_type: "{{ item[0] }}"
+        bench_sender: "{{ item[1] }}"
+        bench_ack: "{{ item[2] }}"
+        bench_batch_size: 1
+        bench_msg_size: "{{ item[3] }}"
+        bench_unack: "{{ item[4] }}"
+        bench_output: "write-bw-single-size-{{item[3] }}-{{ item[1] }}-ack-{{ item[2] }}-unack-{{ item[4] }}"
+        bench_count: 1048576
+      with_nested:
+        - ["bw"]
+        - ["writeRev"]
+        - ["read"]
+        - [4080, 4090, 4095, 4100, 4110, 4120, 4130, 4140, 4150, 4160, 4170]
+        - [64]
+
+
+
+- hosts: ault_runner
+  gather_facts: yes
+  tags: run, write, bw, write-bw-thread, write-bw-thread-imm-off
+  tasks:
+    - name: "Gather IP of server"
+      set_fact:
+        bench_server_ip: "{{ ansible_default_ipv4.address }}"
+      delegate_to: ault_server
+      run_once: true
+    - debug:
+        verbosity: 1
+        msg: "Server ip: {{ bench_server_ip}}"
+    - name: Write - Bandwith
+      include_role:
+        name: bench/write
+      vars:
+        bench_type: "{{ item[0] }}"
+        bench_sender: "{{ item[1] }}"
+        bench_ack: "{{ item[2] }}"
+        bench_batch_size: "1"
+        bench_msg_size: "{{ item[3] }}"
+        bench_unack: "{{ item[4] }}"
+        bench_output: "write-bw-conn-{{ item[5] }}-size-{{item[3] }}-{{ item[1] }}-ack-{{ item[2] }}-unack-{{ item[4] }}"
+        bench_count: "40485760"
+        bench_conn: "{{ item[5] }}"
+      with_nested:
+        - ["bw"]
+          #- ["writeImm", "writeOff"]
+        - ["writeOff"]
+        - ["send"]
+          #- [512, 8192] 
+        - [512] 
+        - [64]
+        - [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+
+
+- hosts: ault_runner
+  gather_facts: yes
+  tags: run, write, bw, write-bw-thread, write-bw-thread-writerev
+  tasks:
+    - name: "Gather IP of server"
+      set_fact:
+        bench_server_ip: "{{ ansible_default_ipv4.address }}"
+      delegate_to: ault_server
+      run_once: true
+    - debug:
+        verbosity: 1
+        msg: "Server ip: {{ bench_server_ip}}"
+    - name: Write - Bandwith
+      include_role:
+        name: bench/write
+      vars:
+        bench_type: "{{ item[0] }}"
+        bench_sender: "{{ item[1] }}"
+        bench_ack: "{{ item[2] }}"
+        bench_batch_size: 1
+        bench_msg_size: "{{ item[3] }}"
+        bench_unack: "{{ item[4] }}"
+        bench_output: "write-bw-conn-{{ item[5] }}-size-{{item[3] }}-{{ item[1] }}-ack-{{ item[2] }}-unack-{{ item[4] }}"
+        bench_count: 5048576
+        bench_conn: "{{ item[5] }}"
+      with_nested:
+        - ["bw"]
+        - ["writeRev"]
+        - ["send"]
+          #- [16, 512, 8150] 
+        - [512] 
+        - [64]
+        - [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+
+
+
+- hosts: ault_runner
+  gather_facts: yes
+  tags: run, write, bw, write-bw-n1, write-bw-n1-imm
+  tasks:
+    - name: "Gather IP of server"
+      set_fact:
+        bench_server_ip: "{{ ansible_default_ipv4.address }}"
+      delegate_to: ault_server
+      run_once: true
+    - debug:
+        verbosity: 1
+        msg: "Server ip: {{ bench_server_ip}}"
+    - name: Write - Bandwith
+      include_role:
+        name: bench/write
+      vars:
+        bench_type: "{{ item[0] }}"
+        bench_sender: "{{ item[1] }}"
+        bench_ack: "{{ item[2] }}"
+        bench_batch_size: "1"
+        bench_msg_size: "{{ item[3] }}"
+        bench_unack: "{{ item[4] }}"
+        bench_output: "write-bw-conn-{{ item[5] }}-size-{{item[3] }}-{{ item[1] }}-ack-{{ item[2] }}-unack-{{ item[4] }}-single-receive"
+        bench_count: "1048576"
+        bench_conn: "{{ item[5] }}"
+        bench_single_rcv: true
+      with_nested:
+        - ["bw"]
+        - ["writeImm"]
+        - ["send"]
+        - [8120] 
+        - [64]
+        - [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+
+
+- hosts: ault_runner
+  gather_facts: yes
+  tags: run, write, bw, write-bw-n1, write-bw-n1-rev-off
+  tasks:
+    - name: "Gather IP of server"
+      set_fact:
+        bench_server_ip: "{{ ansible_default_ipv4.address }}"
+      delegate_to: ault_server
+      run_once: true
+    - debug:
+        verbosity: 1
+        msg: "Server ip: {{ bench_server_ip}}"
+    - name: Write - Bandwith
+      include_role:
+        name: bench/write
+      vars:
+        bench_type: "{{ item[0] }}"
+        bench_sender: "{{ item[1] }}"
+        bench_ack: "{{ item[2] }}"
+        bench_batch_size: "1"
+        bench_msg_size: "{{ item[3] }}"
+        bench_unack: "{{ item[4] }}"
+        bench_output: "write-bw-conn-{{ item[5] }}-size-{{item[3] }}-{{ item[1] }}-ack-{{ item[2] }}-unack-{{ item[4] }}-single-receive"
+        bench_count: "1048576"
+        bench_conn: "{{ item[5] }}"
+        bench_single_rcv: true
+      with_nested:
+        - ["bw"]
+        - ["writeRev", "writeOff"]
+        - ["send"]
+        - [8120] 
+        - [64]
+        - [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+
+
 - hosts: ault_runner
   gather_facts: yes
   tags: run, write-atomic, bw, write-atomic-bw-thread
@@ -1051,6 +1258,7 @@
         - [true, false] 
         - [16, 512, 8192] 
         - [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+
 
 - hosts: ault.cscs.ch
   tags: always

@@ -2,20 +2,20 @@ set print $data
 conns = "1 2 3 4 5 6 7 8 9 10 11 12 13 14 15"
 set print $writeRev
 do for [c in conns] {
-  bw = sprintf("data/write-bw/write-bw-conn-%s-size-512-writeRev-ack-read-unack-64-server", c);
+  bw = sprintf("data/write-bw/write-bw-conn-%s-size-512-writeRev-ack-send-unack-64-server", c);
   stats bw using 5 noout
   print sprintf("%s %f\n", c, STATS_sum*8/1024/1024/1024)
 }
 msgs = "16 32 64 128 256 512 1024 2048 4096 8192 16384"
 set print $writeImm
 do for [c in conns] {
-  bw = sprintf("data/write-bw/write-bw-conn-%s-size-512-writeImm-ack-read-unack-64-server", c);
+  bw = sprintf("data/write-bw/write-bw-conn-%s-size-512-writeImm-ack-send-unack-64-server", c);
   stats bw using 5 noout
   print sprintf("%s %f\n", c, STATS_sum*8/1024/1024/1024)
 }
 set print $writeOff
 do for [c in conns] {
-  bw = sprintf("data/write-bw/write-bw-conn-%s-size-512-writeOff-ack-read-unack-64-server", c);
+  bw = sprintf("data/write-bw/write-bw-conn-%s-size-512-writeOff-ack-send-unack-64-server", c);
   stats bw using 5 noout
   print sprintf("%s %f\n", c, STATS_sum*8/1024/1024/1024)
 }
@@ -28,7 +28,7 @@ set output "plots/write-bw-threads-512.png"
 
 set xlabel "Threads" 
 set ylabel "Bandwith (Gbit/s)" enhanced
-set yrange [0:120]
+set yrange [0:100]
 set ytics 0, 10, 100
 set xrange [0.5:15.5]
 set xtics 0, 1, 16
