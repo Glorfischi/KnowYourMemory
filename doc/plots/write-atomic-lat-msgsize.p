@@ -12,10 +12,9 @@ do for [i in msgs] {
   print sprintf("%s %f\n", i, STATS_median/2)
 }
 
-set terminal png small size 960,640 enhanced
+set terminal png small size 960,640 font "Computer Modern,16"
 set output "plots/write-atomic-lat-msgsize.png"
 
-set title "Write Atomic Latency" 
 set xlabel "Msg size (bytes)" 
 set ylabel "Latency (us)"
 set yrange [5.5 : 8]
@@ -23,8 +22,11 @@ set ytics 0, 0.5, 20
 
 set xtics 1, 2, 8192
 
+set grid ytics lt 0 lw 1 lc rgb "#bbbbbb"
+set grid xtics lt 0 lw 1 lc rgb "#bbbbbb"
+
 set logscale x 2
-plot $median  with points pt 4 title "metadata in RAM", \
-    $mediandm with points pt 5 title "metadata in DM"
+plot $median  with points pt 5 ps 1.5 title "metadata in RAM", \
+    $mediandm with points pt 7 ps 1.5 title "metadata in DM"
 
      
