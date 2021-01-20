@@ -22,6 +22,6 @@ set logscale x 2
 f(x)=b*x + o
 b=0.00023;o=2.2
 fit f(x) $median using 1:2 via b, o
-plot $median  with points  pt 5 ps 1.5 title "SendRcv data"
+plot $median  with points  pt 5 ps 1.5 notitle
 
 #f(x) title "SendRcv model"

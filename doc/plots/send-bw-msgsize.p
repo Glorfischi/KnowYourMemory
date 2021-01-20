@@ -24,7 +24,7 @@ do for [s in msgs] {
 set terminal png small size 960,640 font "Computer Modern,16"
 set output "plots/send-bw-msgsize.png"
 
-set xlabel "Batch size" 
+set xlabel "Message size (bytes)" 
 set ylabel "Bandwith (Gbit/s)" enhanced
 set yrange [0:100]
 set ytics 0, 5, 100

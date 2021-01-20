@@ -112,27 +112,118 @@ similar local queue to keep track of the oder of posted buffers.
 to one when the transmission is completed. We are again using the fact that RDMA updates memory in increasing memory order, 
 for any modern systems~\cite{herd, farm}.
 
-
-\begin{figure}[htp]
-\includegraphics[width=1\textwidth]{write-direct-lat-msgsize.png}
-\label{fig:plot-wdir-lat}
-\end{figure}
+\subsection{Evaluation}
 
 
 \begin{figure}[htp]
-\includegraphics[width=1\textwidth]{write-direct-bw-msgsize.png}
-\label{fig:plot-wdir-bw}
+  \centering
+\begin{subfigure}[b]{0.49\textwidth}
+  \centering
+  \includegraphics[width=1\textwidth]{write-direct-lat-msgsize.png}
+  \label{fig:plot-wdir-lat}
+  \caption{Latency}
+\end{subfigure}
+\begin{subfigure}[b]{0.49\textwidth}
+  \centering
+  \includegraphics[width=1\textwidth]{write-direct-bw-msgsize.png}
+  \caption{Bandwidth}
+  \label{fig:plot-wdir-bw}
+\end{subfigure}
+\caption{Measurements between two nodes with varying message size}
+\end{figure}
+\subsubsection{Latency}
+
+Figure~\ref{fig:plot-wdir-lat} shows the latency of our direct write connections with varying message size. We
+also plot the Send Receive latency for reference. We see that latency wise both approaches yield very similar results.
+
+\paragraph{} There seems to be a constant overhead of about $2.25 \mu s$ and then a linear increase in latency with 
+increasing message size. This in line with what we observed for previous connections and aligns with our model.
+
+\subsubsection{Bandwidth}
+
+Figure~\ref{fig:plot-wdir-bw} shows the point to point throughput for different message sizes. Again for reference we also
+plot the Send Receive bandwidth. We allowed for $64$ unacknowledged messages for both connections to ensure a full pipline.
+We do not see any performance improvements with an increased number of unacknowledged messages.
+
+\paragraph{} We see the same linearly increase in bandwidth we observed in nearly every connection, indicating that we limited
+by a per message overhead until we hit the maximum link speed for large messages. Interestingly, compared to the Send Receive
+connection, we achieve significantly lower throughput for medium sized messages. 
+
+\paragraph{} We ensured that we are not limited by the receiver, so this still is a sender side limitation. It seems we are
+actually limited by the sending NIC or possibly by the PCIe bus, as the CPU needs to wait for the operation to be completed 
+and we are not limited by our ability to issue work requests like we are for the Send Receive connection.
+
+We suspect that the large amount of returning writes interferes with outgoing writes and increases the per message overhead
+for the NIC. \comment{I'm in no way sure if this is correct. I made some quick hacks to check that we actually routinely need
+  to wait multiple polls to receive a completion event, so I believe that this is a NIC bottleneck, but I don't know whether
+this explanation is reasonable}
+  
+
+\subsubsection{Multithreading}
+
+Figure~\ref{fig:plot-wdir-bw-threads} shows the protocols performance with multiple open connections. We still use two nodes,
+but each nodes spawns $T$ threads, which each open a separate connection. Each connections will share the same sending and 
+receiving NIC.
+
+\paragraph{} We again evaluated the throughput of three different message sizes: 16 bytes, 512 bytes, and 8192 bytes. We can see that 
+although we are already limited by the NIC throughput for a single connection, we still see linear performance improvements 
+for smaller messages. This can be explained by the more efficient usage of NIC processing units by using multiple 
+QPs~\cite{anuj-guide}.
+
+\paragraph{} When using 8192 byte messages, we are again quickly limited by the maximum link speed. However when using 
+512 byte messages we seem to bottleneck at around 70 Gbit/s, which is less then the 80 Gbit/s maximum we saw for both the
+Send Receive connection as well as the Buffer Read connection. This is more or less then same performance we saw for the
+Write Offset connections in Figure~\ref{fig:plot-write-bw-thread-512}. This reinforces our assumption that the returning write
+for each message is impacting our throughput, as the Write Offset connection also needs to issue two writes per message.
+
+\begin{figure}[ht]
+  \begin{subfigure}[b]{0.48\textwidth}
+  \centering
+  \includegraphics[width=1\textwidth]{write-direct-bw-threads.png}
+  \label{fig:plot-wdir-bw-threads}
+  \caption{Using $N$ receivers}
+  \end{subfigure}
+  \begin{subfigure}[b]{0.48\textwidth}
+  \centering
+  \includegraphics[width=1\textwidth]{write-direct-bw-n1.png}
+  \label{fig:plot-wdir-bw-n1}
+  \caption{Using a single receiver}
+  \end{subfigure}
+  \caption{Bandwidth with varying number of connections $N$}
 \end{figure}
 
+\subsubsection{Single Receiver}
+
+Figure~\ref{fig:plot-write-bw-n1} shows the protocols throughput with a single receiver and varying number of senders.
+We again look at three different message sizes. 
+
+\paragraph{} In this situation we are almost always very quickly limited by the receiving CPU. Very large messages achieve the maximum 
+line rate,  while smaller messages seem to be limited by the reposting speed of the receiver at around 4 MOp/s, which is 
+already a bottleneck with two open connections.
+
+\paragraph{} This bottleneck gives us a performance caps for 512 byte messages at around 15 Gbit/s and at 0.5 Gbit/s for 16 byte messages.
+There seems to be a very slight reduction in throughput when further increasing the number of open connections, which we 
+attribute to increased cache misses.
+
+\subsection{Conclusion}
+
+With our Direct Write connection we essentially rebuilt the Send and Receive verbs using only RDMA Writes. This gives us more
+control over the protocol, which could allow us to extend it for specific systems.
+
+\paragraph{} By adding metadata when posting a buffer this could enable \emph{True Zero Copy} capabilities for certain 
+applications and with a more sophisticated buffer management one could more effectively utilizes the available memory by 
+posting different size messages. The protocol also keeps the \emph{fairness} guarantees from the Send Receive connection. 
+This gives us a very versatile protocol that can be adapted when necessary.
+
+\paragraph{} But our benchmarking also showed that it is not trivial to achieve the same performance we got using the Send
+and Receive verb. The general wisdom of RDMA writes being faster was not confirmed in our case. Our protocol can 
+definitely be further optimized, by reposting buffers in batches or by redesigning this reposting entirely to reduce
+the number of returning writes. But it showed that achieving good performance with such a protocol requires significant 
+optimization work.
 
 
-\begin{figure}[htp]
-\includegraphics[width=1\textwidth]{write-direct-bw-threads.png}
-\label{fig:plot-wdir-bw-threads}
-\end{figure}
 
 
-\begin{figure}[htp]
-\includegraphics[width=1\textwidth]{write-direct-bw-n1.png}
-\label{fig:plot-wdir-bw-n1}
-\end{figure}
+
+
+
