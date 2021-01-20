@@ -2,63 +2,136 @@
 \section{Buffered Read}\label{sec:conn:buf_read}
 \subsection{Design}
 
+The idea of a buffered read protocol is to have a ring buffer at the sender from which the receiver fetches the messages using
+RDMA reads. There are multiple different ways to implement such a protocol, with the main variations being in, how to notify
+the receiver of new messages, where to transfer them to, and how to acknowledge to the sender that a message has been processed.
+
+\paragraph{} We decided to focus on an implementation which gives us a \emph{Passive Sender} and allows for 
+\emph{Variable Message Sizes}. We decided to stick with the basic interface defined in Section~\ref{sec:protocols}. This 
+results in a system with two ring buffers, illustrated in Figure~\ref{fig:buf_read_struct}.
+
 \begin{figure}[!ht]
-\begin{center}
-\begin{tikzpicture}[node distance=2cm,auto,>=stealth']
-  \seqnode{B_cpu}{RAM};
-  \seqnode[left of=B_cpu]{B_nic}{NIC};
-  \hseqnode[right of=B_cpu, node distance=1.5cm]{B_acpu}{};
-  \seqnode[left of=B_cpu, node distance=7cm]{A_cpu}{CPU / RAM};
-  \seqnode[right of=A_cpu]{A_nic}{NIC};
-  %
-  \msg{B_acpu}{B_nic}{.15}{read WR MMIO}
-  \msg{B_nic}{A_nic}{.2}{transfer read request}
-  \msg{A_cpu}{A_nic}{.3}{meta DMA}
-  \msg{A_nic}{B_nic}{.35}{transfer meta}
-  \msg{B_nic}{B_cpu}{.4}{meta DMA}
-  \msg[below]{B_nic}{B_cpu}{.45}{WQE DMA}
-  \fetch{B_acpu}{B_cpu}{.5}{poll CQ}
+\centering
+\begin{subfigure}[b]{0.49\textwidth}
+\begin{tikzpicture}[>=latex,font=\sffamily,semithick,scale=1]
+    \draw[rounded corners] (-2.5, -2) rectangle (2.5, 2.5) {};
+    \node[align=center] at (0, 2) {\large Sender};
 
-  \msg{B_acpu}{B_nic}{.6}{read WR MMIO}
-  \msg{B_nic}{A_nic}{.65}{transfer read request}
-  \msg{A_cpu}{A_nic}{.75}{payload DMA}
-  \msg{A_nic}{B_nic}{.8}{transfer payload}
-  \msg{B_nic}{B_cpu}{.9}{payload DMA}
-  \msg[below]{B_nic}{B_cpu}{.95}{WQE DMA}
-  \fetch{B_acpu}{B_cpu}{1}{poll CQ}
+    \fill [black!35] (0,0) -- (200:1) arc [end angle=-15, start angle=200, radius=1] -- cycle;
 
-  \end{tikzpicture}
-\end{center}
-\caption{Buffered Read sequence}
-\label{fig:seq-buf-read}
+    \draw [thick] (0,0) circle (1cm);
+
+    \draw[dashed] (90:1) -- (0:0);
+    \draw (200:1) -- (0:0);
+    \draw (-15:1) -- (0:0);
+    \node [circle,thick,fill=white,draw=black,align=center,minimum size=1.5cm] at (0,0) {};
+
+
+    \draw [<-,black] (200:1) -- (200:1.25) -- +(-.1,0)
+      node [black,left,inner xsep=.1cm] (Head) {\small \code{head}};
+    \draw [<-,black] (-15:1) -- (-15:1.25) -- +(.1,0)
+      node [black,right,inner xsep=.1cm] (Tail) {\small \code{tail}};
+\end{tikzpicture}
+\end{subfigure}
+\begin{subfigure}[b]{0.49\textwidth}
+\begin{tikzpicture}[>=latex,font=\sffamily,semithick,scale=1]
+    \draw[rounded corners] (-3, -2) rectangle (3, 2.5) {};
+    \node[align=center] at (0, 2) {\large Receiver};
+
+    \fill [black!35] (0,0) -- (130:1) arc [end angle=55, start angle=130, radius=1] -- cycle;
+
+    \fill [black!20] (0,0) -- (200:1) arc [end angle=160, start angle=200, radius=1] -- cycle;
+    \draw [thick] (0,0) circle (1cm);
+
+    \draw[dashed] (90:1) -- (0:0);
+    \draw (200:1) -- (0:0);
+    \draw (175:1) -- (0:0);
+    \draw (160:1) -- (0:0);
+
+    \draw (130:1) -- (0:0);
+    \draw (75:1) -- (0:0);
+    \draw (55:1) -- (0:0);
+    \node [circle,thick,fill=white,draw=black,align=center,minimum size=1.5cm] at (0,0) {};
+
+
+    \draw [<-,black] (130:1) -- (130:1.25) -- +(-.1,0)
+      node [black,left,inner xsep=.1cm] (rptr) {\small \code{read\_pointer}};
+    \draw [<-,black] (200:1) -- (200:1.25) -- +(-.1,0)
+      node [black,left,inner xsep=.1cm] (Head) {\small \code{head}};
+    \draw [<-,black] (55:1) -- (55:1.25) -- +(.1,0)
+      node [black,right,inner xsep=.1cm] (Tail) {\small \code{remote\_tail}};
+\end{tikzpicture}
+\end{subfigure}
+\caption{Structure of the buffered read connection}
+\label{fig:buf_read_struct}
 \end{figure}
 
+\subsubsection{Sender}
+As mentioned the sender of our buffered read connection is entirely passive, that means after the connection setup the sending
+CPU does not issue any RDMA operations. The only thing it needs to do to send is to check its head if there is enough space
+left to write its the message to its ring buffer and write to its tail if there is. It also prepends the message size when 
+writing. The head is completely managed by the receiver and the tail pointer needs to be accessible to it.
+
+\paragraph{} That means for the sender transmitting a message does only involve copying it to its local memory. This results in
+a very low sending overhead.
+
+\subsubsection{Receiver}
+A completely passive sender means the receiver has to do the heavy lifting. The receiver manages three different pointers: 
+the \code{read\_pointer} which marks the beginning of the next message to receive, the \code{remote\_tail}, which is a cache of
+the senders tail and marks the end of the transmitted buffer section, and the \code{head} which marks the beginning of 
+the earliest not freed message.
+
+\paragraph{} Receiving a message now involves the following. We first check if there are already transmitted messages that 
+we have not received yet. Meaning the \code{read\_pointer} is not equal to the \code{remote\_tail}. If so, we can simply 
+return the next message with the length at the beginning of the buffer and update the \code{read\_pointer}.
+
+If there are no transmitted messages to return, the receiver updates the \code{remote\_tail} with an RDMA read. If the remote
+tail has not updated it retries until it has. With the updated tail the receiver issues a RDMA read for the whole buffer 
+section between the read pointer and the updated tail. It then returns the next message in the newly transmitted section.
+
+This gives us an interesting characteristic of most receives being very cheap, while some are very expensive as the need to 
+perform a large read. We did not implement preemptive issuing of reads which could reduce this effect and improve performance
+significantly.
+
+\paragraph{} To keep track of the freed buffers at the receiver we use the same linked list structure we used in the buffered
+write connection. This allows us to update the \code{head} accordingly when freeing messages out of order and freeing will
+occasionally update the remote head using an RDMA write operation.
+
+\paragraph{} For both ring buffer we use the same \emph{"Magic Buffer"} trick introduced in Section~\ref{sec:conn:buf_write} to 
+allow us to wrap around the end of the buffer.
+
+\subsection{Evaluation}
 \todo{This is actually worse when there is no message ready. If the sender updates the head just at the most inoppertune moment
 we would waste a whole meta read request}
 
-\subsection{Evaluation}
 
 
-\begin{figure}[h]
+\begin{figure}[htp]
 \includegraphics[width=1\textwidth]{buf-read-lat-msgsize.png}
 \label{fig:plot-bufread-lat}
 \end{figure}
 
 
-\begin{figure}[h]
+\begin{figure}[htp]
 \includegraphics[width=1\textwidth]{buf-read-bw-msgsize.png}
 \label{fig:plot-bufread-bw}
 \end{figure}
 
 
 
-\begin{figure}[h]
+\begin{figure}[htp]
 \includegraphics[width=1\textwidth]{buf-read-bw-threads.png}
 \label{fig:plot-bufread-bw-threads}
 \end{figure}
 
 
-\begin{figure}[h]
+\begin{figure}[htp]
 \includegraphics[width=1\textwidth]{buf-read-bw-n1.png}
 \label{fig:plot-bufread-bw-n1}
 \end{figure}
+
+
+\subsection{Conclusion}
+
+\paragraph{} Our design ended up very similar to a \emph{Flow Structure}~\cite{sharma2020design} and by relaxing some of the
+interface requirements, we could potentially solve some performance limitations we encountered.

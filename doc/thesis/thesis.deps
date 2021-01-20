@@ -1,38 +1,48 @@
 #===Dependents, and related info, for thesis.tex:
 thesis.pdf :\
-    ../plots/send-bw-batch.png\
-    ../plots/send-bw-msgsize.png\
-    ../plots/send-bw-unack.png\
-    ../plots/send-lat-msgsize.png\
+    ../plots//dir-read-bw-msgsize.png\
+    ../plots//dir-read-bw-n1.png\
+    ../plots//dir-read-bw-threads.png\
+    ../plots//dir-read-lat-msgsize.png\
+    ../plots//send-bw-batch.png\
+    ../plots//send-bw-msgsize.png\
+    ../plots//send-bw-n1.png\
+    ../plots//send-bw-srq-n1.png\
+    ../plots//send-bw-srq-threads.png\
+    ../plots//send-bw-threads.png\
+    ../plots//send-bw-unack.png\
+    ../plots//send-lat-msgsize.png\
+    ../plots//write-atomic-bw-msgsize.png\
+    ../plots//write-atomic-bw-threads.png\
+    ../plots//write-atomic-lat-msgsize.png\
+    ../plots//write-bw-msgsize.png\
+    ../plots//write-bw-n1-16.png\
+    ../plots//write-bw-n1-512.png\
+    ../plots//write-bw-n1-8192.png\
+    ../plots//write-bw-rev-anom.png\
+    ../plots//write-bw-threads-16.png\
+    ../plots//write-bw-threads-512.png\
+    ../plots//write-bw-threads-8192.png\
+    ../plots//write-direct-bw-msgsize.png\
+    ../plots//write-direct-bw-n1.png\
+    ../plots//write-direct-bw-threads.png\
+    ../plots//write-direct-lat-msgsize.png\
+    ../plots//write-lat-msgsize.png\
     /etc/texmf/web2c/texmf.cnf\
-    /home/fischi/.texlive2020/texmf-var/fonts/pk/ljfour/jknappen/ec/tcrm1000.600pk\
-    /usr/share/texlive/texmf-dist/bibtex/bst/base/unsrt.bst\
     /usr/share/texlive/texmf-dist/fonts/tfm/jknappen/ec/tcrm1000.tfm\
     /usr/share/texlive/texmf-dist/fonts/tfm/public/amsfonts/cmextra/cmex7.tfm\
     /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmbx10.tfm\
     /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmbx12.tfm\
     /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmr12.tfm\
     /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmr9.tfm\
+    /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmss10.tfm\
+    /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmss12.tfm\
+    /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmss17.tfm\
+    /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmss9.tfm\
     /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmti10.tfm\
-    /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmti9.tfm\
     /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmtt10.tfm\
-    /usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx10.pfb\
-    /usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx12.pfb\
-    /usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi10.pfb\
-    /usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi5.pfb\
-    /usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi7.pfb\
-    /usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr10.pfb\
-    /usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr7.pfb\
-    /usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr9.pfb\
-    /usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb\
-    /usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmti10.pfb\
-    /usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmti9.pfb\
-    /usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmtt10.pfb\
     /usr/share/texlive/texmf-dist/tex/context/base/mkii/supp-pdf.mkii\
-    /usr/share/texlive/texmf-dist/tex/generic/atbegshi/atbegshi.sty\
     /usr/share/texlive/texmf-dist/tex/generic/iftex/iftex.sty\
-    /usr/share/texlive/texmf-dist/tex/generic/infwarerr/infwarerr.sty\
-    /usr/share/texlive/texmf-dist/tex/generic/ltxcmds/ltxcmds.sty\
     /usr/share/texlive/texmf-dist/tex/generic/pgf/basiclayer/pgfcore.code.tex\
     /usr/share/texlive/texmf-dist/tex/generic/pgf/basiclayer/pgfcorearrows.code.tex\
     /usr/share/texlive/texmf-dist/tex/generic/pgf/basiclayer/pgfcoreexternal.code.tex\
@@ -53,11 +63,18 @@ thesis.pdf :\
     /usr/share/texlive/texmf-dist/tex/generic/pgf/basiclayer/pgfcoretransparency.code.tex\
     /usr/share/texlive/texmf-dist/tex/generic/pgf/frontendlayer/tikz/libraries/tikzlibraryarrows.code.tex\
     /usr/share/texlive/texmf-dist/tex/generic/pgf/frontendlayer/tikz/libraries/tikzlibrarycalc.code.tex\
+    /usr/share/texlive/texmf-dist/tex/generic/pgf/frontendlayer/tikz/libraries/tikzlibrarydecorations.code.tex\
+    /usr/share/texlive/texmf-dist/tex/generic/pgf/frontendlayer/tikz/libraries/tikzlibrarydecorations.text.code.tex\
+    /usr/share/texlive/texmf-dist/tex/generic/pgf/frontendlayer/tikz/libraries/tikzlibrarypatterns.code.tex\
     /usr/share/texlive/texmf-dist/tex/generic/pgf/frontendlayer/tikz/libraries/tikzlibrarypositioning.code.tex\
+    /usr/share/texlive/texmf-dist/tex/generic/pgf/frontendlayer/tikz/libraries/tikzlibraryshapes.misc.code.tex\
     /usr/share/texlive/texmf-dist/tex/generic/pgf/frontendlayer/tikz/libraries/tikzlibrarytopaths.code.tex\
     /usr/share/texlive/texmf-dist/tex/generic/pgf/frontendlayer/tikz/tikz.code.tex\
+    /usr/share/texlive/texmf-dist/tex/generic/pgf/libraries/decorations/pgflibrarydecorations.text.code.tex\
     /usr/share/texlive/texmf-dist/tex/generic/pgf/libraries/pgflibraryarrows.code.tex\
+    /usr/share/texlive/texmf-dist/tex/generic/pgf/libraries/pgflibrarypatterns.code.tex\
     /usr/share/texlive/texmf-dist/tex/generic/pgf/libraries/pgflibraryplothandlers.code.tex\
+    /usr/share/texlive/texmf-dist/tex/generic/pgf/libraries/shapes/pgflibraryshapes.misc.code.tex\
     /usr/share/texlive/texmf-dist/tex/generic/pgf/math/pgfint.code.tex\
     /usr/share/texlive/texmf-dist/tex/generic/pgf/math/pgfmath.code.tex\
     /usr/share/texlive/texmf-dist/tex/generic/pgf/math/pgfmathcalc.code.tex\
@@ -73,6 +90,7 @@ thesis.pdf :\
     /usr/share/texlive/texmf-dist/tex/generic/pgf/math/pgfmathfunctions.trigonometric.code.tex\
     /usr/share/texlive/texmf-dist/tex/generic/pgf/math/pgfmathparser.code.tex\
     /usr/share/texlive/texmf-dist/tex/generic/pgf/math/pgfmathutil.code.tex\
+    /usr/share/texlive/texmf-dist/tex/generic/pgf/modules/pgfmoduledecorations.code.tex\
     /usr/share/texlive/texmf-dist/tex/generic/pgf/modules/pgfmodulematrix.code.tex\
     /usr/share/texlive/texmf-dist/tex/generic/pgf/modules/pgfmoduleplot.code.tex\
     /usr/share/texlive/texmf-dist/tex/generic/pgf/modules/pgfmoduleshapes.code.tex\
@@ -108,6 +126,7 @@ thesis.pdf :\
     /usr/share/texlive/texmf-dist/tex/latex/graphics-cfg/color.cfg\
     /usr/share/texlive/texmf-dist/tex/latex/graphics-cfg/graphics.cfg\
     /usr/share/texlive/texmf-dist/tex/latex/graphics-def/pdftex.def\
+    /usr/share/texlive/texmf-dist/tex/latex/graphics/color.sty\
     /usr/share/texlive/texmf-dist/tex/latex/graphics/graphics.sty\
     /usr/share/texlive/texmf-dist/tex/latex/graphics/graphicx.sty\
     /usr/share/texlive/texmf-dist/tex/latex/graphics/keyval.sty\
@@ -115,7 +134,10 @@ thesis.pdf :\
     /usr/share/texlive/texmf-dist/tex/latex/graphics/trig.sty\
     /usr/share/texlive/texmf-dist/tex/latex/l3backend/l3backend-pdftex.def\
     /usr/share/texlive/texmf-dist/tex/latex/latexconfig/epstopdf-sys.cfg\
-    /usr/share/texlive/texmf-dist/tex/latex/ms/everyshi.sty\
+    /usr/share/texlive/texmf-dist/tex/latex/listings/listings.cfg\
+    /usr/share/texlive/texmf-dist/tex/latex/listings/listings.sty\
+    /usr/share/texlive/texmf-dist/tex/latex/listings/lstmisc.sty\
+    /usr/share/texlive/texmf-dist/tex/latex/marginnote/marginnote.sty\
     /usr/share/texlive/texmf-dist/tex/latex/pdflscape/pdflscape.sty\
     /usr/share/texlive/texmf-dist/tex/latex/pdfpages/pdfpages.sty\
     /usr/share/texlive/texmf-dist/tex/latex/pdfpages/pppdftex.def\
@@ -137,30 +159,78 @@ thesis.pdf :\
     /usr/share/texmf/web2c/texmf.cnf\
     /var/lib/texmf/fonts/map/pdftex/updmap/pdftex.map\
     /var/lib/texmf/web2c/pdftex/pdflatex.fmt\
+    background.tex\
     buffered_read.tex\
     direct_read.tex\
+    direct_write.tex\
+    intro.tex\
     model.tex\
-    references.bib\
+    protocols.tex\
     sendrcv.tex\
+    shared_write.tex\
     thesis.tex\
     write.tex
 #===End dependents for thesis.tex:
 
 #===Phony rules for thesis.tex:
 
-../plots/send-bw-batch.png :
+../plots//dir-read-bw-msgsize.png :
 
-../plots/send-bw-msgsize.png :
+../plots//dir-read-bw-n1.png :
 
-../plots/send-bw-unack.png :
+../plots//dir-read-bw-threads.png :
 
-../plots/send-lat-msgsize.png :
+../plots//dir-read-lat-msgsize.png :
+
+../plots//send-bw-batch.png :
+
+../plots//send-bw-msgsize.png :
+
+../plots//send-bw-n1.png :
+
+../plots//send-bw-srq-n1.png :
+
+../plots//send-bw-srq-threads.png :
+
+../plots//send-bw-threads.png :
+
+../plots//send-bw-unack.png :
+
+../plots//send-lat-msgsize.png :
+
+../plots//write-atomic-bw-msgsize.png :
+
+../plots//write-atomic-bw-threads.png :
+
+../plots//write-atomic-lat-msgsize.png :
+
+../plots//write-bw-msgsize.png :
+
+../plots//write-bw-n1-16.png :
+
+../plots//write-bw-n1-512.png :
+
+../plots//write-bw-n1-8192.png :
+
+../plots//write-bw-rev-anom.png :
+
+../plots//write-bw-threads-16.png :
+
+../plots//write-bw-threads-512.png :
+
+../plots//write-bw-threads-8192.png :
+
+../plots//write-direct-bw-msgsize.png :
+
+../plots//write-direct-bw-n1.png :
+
+../plots//write-direct-bw-threads.png :
+
+../plots//write-direct-lat-msgsize.png :
+
+../plots//write-lat-msgsize.png :
 
 /etc/texmf/web2c/texmf.cnf :
-
-/home/fischi/.texlive2020/texmf-var/fonts/pk/ljfour/jknappen/ec/tcrm1000.600pk :
-
-/usr/share/texlive/texmf-dist/bibtex/bst/base/unsrt.bst :
 
 /usr/share/texlive/texmf-dist/fonts/tfm/jknappen/ec/tcrm1000.tfm :
 
@@ -174,45 +244,21 @@ thesis.pdf :\
 
 /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmr9.tfm :
 
-/usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmti10.tfm :
+/usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmss10.tfm :
 
-/usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmti9.tfm :
+/usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmss12.tfm :
+
+/usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmss17.tfm :
+
+/usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmss9.tfm :
+
+/usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmti10.tfm :
 
 /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmtt10.tfm :
 
-/usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx10.pfb :
-
-/usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx12.pfb :
-
-/usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi10.pfb :
-
-/usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi5.pfb :
-
-/usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi7.pfb :
-
-/usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr10.pfb :
-
-/usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr7.pfb :
-
-/usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr9.pfb :
-
-/usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb :
-
-/usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmti10.pfb :
-
-/usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmti9.pfb :
-
-/usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmtt10.pfb :
-
 /usr/share/texlive/texmf-dist/tex/context/base/mkii/supp-pdf.mkii :
 
-/usr/share/texlive/texmf-dist/tex/generic/atbegshi/atbegshi.sty :
-
 /usr/share/texlive/texmf-dist/tex/generic/iftex/iftex.sty :
-
-/usr/share/texlive/texmf-dist/tex/generic/infwarerr/infwarerr.sty :
-
-/usr/share/texlive/texmf-dist/tex/generic/ltxcmds/ltxcmds.sty :
 
 /usr/share/texlive/texmf-dist/tex/generic/pgf/basiclayer/pgfcore.code.tex :
 
@@ -254,15 +300,29 @@ thesis.pdf :\
 
 /usr/share/texlive/texmf-dist/tex/generic/pgf/frontendlayer/tikz/libraries/tikzlibrarycalc.code.tex :
 
+/usr/share/texlive/texmf-dist/tex/generic/pgf/frontendlayer/tikz/libraries/tikzlibrarydecorations.code.tex :
+
+/usr/share/texlive/texmf-dist/tex/generic/pgf/frontendlayer/tikz/libraries/tikzlibrarydecorations.text.code.tex :
+
+/usr/share/texlive/texmf-dist/tex/generic/pgf/frontendlayer/tikz/libraries/tikzlibrarypatterns.code.tex :
+
 /usr/share/texlive/texmf-dist/tex/generic/pgf/frontendlayer/tikz/libraries/tikzlibrarypositioning.code.tex :
+
+/usr/share/texlive/texmf-dist/tex/generic/pgf/frontendlayer/tikz/libraries/tikzlibraryshapes.misc.code.tex :
 
 /usr/share/texlive/texmf-dist/tex/generic/pgf/frontendlayer/tikz/libraries/tikzlibrarytopaths.code.tex :
 
 /usr/share/texlive/texmf-dist/tex/generic/pgf/frontendlayer/tikz/tikz.code.tex :
 
+/usr/share/texlive/texmf-dist/tex/generic/pgf/libraries/decorations/pgflibrarydecorations.text.code.tex :
+
 /usr/share/texlive/texmf-dist/tex/generic/pgf/libraries/pgflibraryarrows.code.tex :
 
+/usr/share/texlive/texmf-dist/tex/generic/pgf/libraries/pgflibrarypatterns.code.tex :
+
 /usr/share/texlive/texmf-dist/tex/generic/pgf/libraries/pgflibraryplothandlers.code.tex :
+
+/usr/share/texlive/texmf-dist/tex/generic/pgf/libraries/shapes/pgflibraryshapes.misc.code.tex :
 
 /usr/share/texlive/texmf-dist/tex/generic/pgf/math/pgfint.code.tex :
 
@@ -293,6 +353,8 @@ thesis.pdf :\
 /usr/share/texlive/texmf-dist/tex/generic/pgf/math/pgfmathparser.code.tex :
 
 /usr/share/texlive/texmf-dist/tex/generic/pgf/math/pgfmathutil.code.tex :
+
+/usr/share/texlive/texmf-dist/tex/generic/pgf/modules/pgfmoduledecorations.code.tex :
 
 /usr/share/texlive/texmf-dist/tex/generic/pgf/modules/pgfmodulematrix.code.tex :
 
@@ -364,6 +426,8 @@ thesis.pdf :\
 
 /usr/share/texlive/texmf-dist/tex/latex/graphics-def/pdftex.def :
 
+/usr/share/texlive/texmf-dist/tex/latex/graphics/color.sty :
+
 /usr/share/texlive/texmf-dist/tex/latex/graphics/graphics.sty :
 
 /usr/share/texlive/texmf-dist/tex/latex/graphics/graphicx.sty :
@@ -378,7 +442,13 @@ thesis.pdf :\
 
 /usr/share/texlive/texmf-dist/tex/latex/latexconfig/epstopdf-sys.cfg :
 
-/usr/share/texlive/texmf-dist/tex/latex/ms/everyshi.sty :
+/usr/share/texlive/texmf-dist/tex/latex/listings/listings.cfg :
+
+/usr/share/texlive/texmf-dist/tex/latex/listings/listings.sty :
+
+/usr/share/texlive/texmf-dist/tex/latex/listings/lstmisc.sty :
+
+/usr/share/texlive/texmf-dist/tex/latex/marginnote/marginnote.sty :
 
 /usr/share/texlive/texmf-dist/tex/latex/pdflscape/pdflscape.sty :
 
@@ -422,15 +492,23 @@ thesis.pdf :\
 
 /var/lib/texmf/web2c/pdftex/pdflatex.fmt :
 
+background.tex :
+
 buffered_read.tex :
 
 direct_read.tex :
 
+direct_write.tex :
+
+intro.tex :
+
 model.tex :
 
-references.bib :
+protocols.tex :
 
 sendrcv.tex :
+
+shared_write.tex :
 
 thesis.tex :
 
