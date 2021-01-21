@@ -6,18 +6,17 @@ do for [i in msgs] {
   print sprintf("%s %f\n", i, STATS_median/2)
 }
 
-set terminal png small size 960,640 enhanced
+set terminal png small size 960,640  font "Computer Modern,16" 
 set output "plots/buf-read-lat-msgsize.png"
 
-set title "Buffered Read Latency" 
-set xlabel "Msg size (bytes)" 
+set xlabel "Message size (bytes)" 
 set ylabel "Latency (us)"
-set yrange [0 : 15]
-set ytics 0, 0.5, 20
-
+set yrange [4 : 12]
+set ytics 0, 0.5, 12
+set xrange [15 : 9000]
 set xtics 1, 2, 8192
 
 set logscale x 2
-plot $median  with points pt 4 notitle 
+plot $median  with points pt 5 ps 1.5 notitle 
 
      
