@@ -13,18 +13,22 @@ do for [i in msgs] {
   print sprintf("%s %f\n", i, STATS_median/2)
 }
 
-set terminal png small size 960,640 enhanced
+set terminal png small size 960,640  font "Computer Modern,16" 
 set output "plots/dir-read-lat-msgsize.png"
-
-set title "Direct Read Latency" 
-set xlabel "Msg size (bytes)" 
+set xlabel "Message Size" 
 set ylabel "Latency (us)"
-set yrange [0 : 15]
-set ytics 0, 0.5, 20
+set yrange [4 : 12]
+set ytics 0, 0.5, 12
+set xrange [15 : 9000]
 
-set xtics 1, 2, 8192
+set key left top
+
+set grid ytics lt 0 lw 1 lc rgb "#bbbbbb"
+set grid xtics lt 0 lw 1 lc rgb "#bbbbbb"
 
 set logscale x 2
-plot $median  with points pt 4 title "unsignaled write", \
-     $fence  with points pt 2 title "fenced write"
-     
+set xtics 1, 2, 16384
+
+
+plot $fence with points pt 6 ps 1.5 title "w/  fence", \
+     $median with points pt 5 ps 1.5 title "w/o fence"

@@ -17,7 +17,10 @@ PLOT = $(PLOTDIR)/send-bw-batch.png $(PLOTDIR)/send-bw-unack.png $(PLOTDIR)/send
 			 $(PLOTDIR)/write-atomic-bw-msgsize.png $(PLOTDIR)/write-atomic-bw-threads.png \
 			 $(PLOTDIR)/write-direct-bw-msgsize.png $(PLOTDIR)/write-direct-lat-msgsize.png $(PLOTDIR)/write-direct-bw-threads.png \
 			 $(PLOTDIR)/write-direct-bw-n1.png \
-			 $(PLOTDIR)/buf-read-lat-msgsize.png $(PLOTDIR)/buf-read-bw-msgsize.png $(PLOTDIR)/buf-read-bw-threads.png $(PLOTDIR)/buf-read-bw-n1.png
+			 $(PLOTDIR)/buf-read-lat-msgsize.png $(PLOTDIR)/buf-read-bw-msgsize.png \
+       $(PLOTDIR)/buf-read-bw-threads.png $(PLOTDIR)/buf-read-bw-n1.png \
+			 $(PLOTDIR)/dir-read-lat-msgsize.png $(PLOTDIR)/dir-read-bw-msgsize.png \
+       $(PLOTDIR)/dir-read-bw-threads.png $(PLOTDIR)/dir-read-bw-n1.png 
 
 
 

@@ -120,8 +120,8 @@ for any modern systems~\cite{herd, farm}.
 \begin{subfigure}[b]{0.49\textwidth}
   \centering
   \includegraphics[width=1\textwidth]{write-direct-lat-msgsize.png}
-  \label{fig:plot-wdir-lat}
   \caption{Latency}
+  \label{fig:plot-wdir-lat}
 \end{subfigure}
 \begin{subfigure}[b]{0.49\textwidth}
   \centering
@@ -180,21 +180,21 @@ for each message is impacting our throughput, as the Write Offset connection als
   \begin{subfigure}[b]{0.48\textwidth}
   \centering
   \includegraphics[width=1\textwidth]{write-direct-bw-threads.png}
-  \label{fig:plot-wdir-bw-threads}
   \caption{Using $N$ receivers}
+  \label{fig:plot-wdir-bw-threads}
   \end{subfigure}
   \begin{subfigure}[b]{0.48\textwidth}
   \centering
   \includegraphics[width=1\textwidth]{write-direct-bw-n1.png}
-  \label{fig:plot-wdir-bw-n1}
   \caption{Using a single receiver}
+  \label{fig:plot-wdir-bw-n1}
   \end{subfigure}
   \caption{Bandwidth with varying number of connections $N$}
 \end{figure}
 
 \subsubsection{Single Receiver}
 
-Figure~\ref{fig:plot-write-bw-n1} shows the protocols throughput with a single receiver and varying number of senders.
+Figure~\ref{fig:plot-wdir-bw-n1} shows the protocols throughput with a single receiver and varying number of senders.
 We again look at three different message sizes. 
 
 \paragraph{} In this situation we are almost always very quickly limited by the receiving CPU. Very large messages achieve the maximum 

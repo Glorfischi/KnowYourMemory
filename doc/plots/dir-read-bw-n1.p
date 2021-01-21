@@ -21,13 +21,9 @@ do for [c in conns] {
 }
 
 
-set terminal png small size 960,640 enhanced
+set terminal png small size 960,640 font "Computer Modern,16"
 set output "plots/dir-read-bw-n1.png"
 
-set grid ytics lt 0 lw 1 lc rgb "#bbbbbb"
-set grid xtics lt 0 lw 1 lc rgb "#bbbbbb"
-
-set title "Direct Read Bandwidth (N:1)" 
 set xlabel "Connections" 
 set ylabel "Bandwith (Gbit/s)" enhanced
 set yrange [0:100]
@@ -38,7 +34,6 @@ set xtics 0, 1, 16
 set grid ytics lt 0 lw 1 lc rgb "#bbbbbb"
 set grid xtics lt 0 lw 1 lc rgb "#bbbbbb"
 set key right center
-
 
 plot $data8192 pt 5 ps 1.5 title "8192 bytes", \
      $data512 pt 7 ps 1.5 title "512 bytes", \

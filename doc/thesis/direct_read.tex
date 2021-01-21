@@ -59,33 +59,123 @@ write will be posted as soon as \code{Wait} returns. That way we can avoid the f
 
 \subsection{Evaluation}
 
+\subsubsection{Latency}
 
-\begin{align*}
-  t_{dr} &\geq o_{rr} + o_{rd} + (k-1)G + L  + o_{rcv} + o_{cq}\\
-         &\geq o_{sil} + o_{snd} + 3L  + (k-1)G  + 2o_{rcv} + 2o_{cq}
-\end{align*}
+Figure~\ref{fig:plot-dirread-lat} shows the point to point latency of the Direct Read connection both with and without
+fencing. We can make two key takeaways.
+
+\paragraph{}For one the latency is generally very high and is not as strongly affected by the message size, it remains more or
+less constant up to a message size of 1 KB. This is caused by the large, constant overhead of sending a \emph{Read Request},
+which adds half a round-trip time to each request, and the property of the RDMA read verb that its completion time remains 
+more or less constant up to message size of \todo{1024 bytes}.
+
+The other takeaway is that the fenced version is nearly $3 \mu s$ slower then the implementation without fencing. This is to 
+be expected as the fenced version has the acknowledging of the completed in its critical path, while the fence-less 
+implementation does not.\comment{Is this understandable?} So while fencing reduces the complete request time for the sender
+it increases the actual latency significantly.
 
 
 \begin{figure}[htp]
-\includegraphics[width=1\textwidth]{dir-read-lat-msgsize.png}
-\label{fig:plot-dirread-lat}
-\end{figure}
-
-
-\begin{figure}[htp]
+  \centering
+\begin{subfigure}[b]{0.49\textwidth}
+  \includegraphics[width=1\textwidth]{dir-read-lat-msgsize.png}
+  \caption{Latency}
+  \label{fig:plot-dirread-lat}
+\end{subfigure}
+\begin{subfigure}[b]{0.49\textwidth}
+  \centering
 \includegraphics[width=1\textwidth]{dir-read-bw-msgsize.png}
-\label{fig:plot-dirread-bw}
+  \caption{Bandwidth}
+  \label{fig:plot-dirread-bw}
+\end{subfigure}
+\caption{Measurements between two nodes with varying message size}
 \end{figure}
 
 
+\subsubsection{Bandwidth}
 
-\begin{figure}[htp]
-\includegraphics[width=1\textwidth]{dir-read-bw-threads.png}
-\label{fig:plot-dirread-bw-threads}
+Figure~\ref{fig:plot-dirread-bw} shows the point to point throughput of the Direct Read connection using a single connection.
+We allow for 32 unacknowledged messages for both the sender and receiver. We did not see any performance improvements above
+this.
+
+\paragraph{} The main thing we notice is that the fenced version achieves drastically lower throughput. The fence essentially 
+serializes the reads and prevents the NIC to effectively pipeline operations. This gives us the on a low level linearly 
+increasing bandwidth we observe.
+
+\paragraph{} While the direct read actually works very differently from what we represent in our model the performance 
+characteristics of the unfenced Direct Read connection are very similar to what we observed for previous connections. The
+throughput increases linearly for small messages as we are limited by the number of request we are able to post. For larger
+messages we are limited by the NIC giving us this sub-linear curve we see for almost all connections.
+
+\paragraph{} For all further measurement we only focus on the unfenced implementation as the fenced version is generally unable
+to achieve comparable throughput.
+
+\subsubsection{Multithreading}
+Figure~\ref{fig:plot-dirread-bw-threads} shows the protocols performance with multiple open connections. We still work with 
+32 unacknowledged messages for both the sender and receiver and the throughput is again evaluated for three different message 
+sizes: 16 bytes, 512 bytes, and 8192 bytes. 
+
+\paragraph{} The results look very similar to other connections. There is a linear increase in performance, both by being 
+able to post more work request for smaller messages and being able to utilize more NIC processing units.~\cite{anuj-guide}
+
+When using 8192 byte messages, we are limited by the maximum link speed. When using 512 byte messages we hit a bottleneck at
+around 70 Gbit/s, which is in line with what we observe with other protocols that need to issue two operations per message, 
+like the Direct Write or Write Offset connection.
+
+
+
+\begin{figure}[ht]
+  \begin{subfigure}[b]{0.49\textwidth}
+  \centering
+  \includegraphics[width=1\textwidth]{dir-read-bw-threads.png}
+  \caption{Using $N$ receivers}
+  \label{fig:plot-dirread-bw-threads}
+  \end{subfigure}
+  \begin{subfigure}[b]{0.49\textwidth}
+  \centering
+  \includegraphics[width=1\textwidth]{dir-read-bw-n1.png}
+  \caption{Using a single receiver}
+  \label{fig:plot-dirread-bw-n1}
+  \end{subfigure}
+  \caption{Bandwidth with varying number of connections $N$}
 \end{figure}
 
+\subsubsection{Single Receiver}
 
-\begin{figure}[htp]
-\includegraphics[width=1\textwidth]{dir-read-bw-n1.png}
-\label{fig:plot-dirread-bw-n1}
-\end{figure}
+Figure~\ref{fig:plot-dirread-bw-n1} shows the protocols throughput with a single receiver and varying number of senders.
+We again look at three different message sizes. 
+
+\paragraph{} Even more so than for previous protocols we are very much limited by the receiving CPU in this case, as the 
+receiver already needs to do the heavy lifting for this protocol. 
+
+For smaller messages there is no throughput improvements at all with increasing number of connections as we already have 
+been limited by the ability of the receiving CPU to post work requests. For very large messages there is a small improvement 
+by the ability to use multiple NIC processing units, but these are then quickly limited by the maximum link speed.
+
+\paragraph{} This communication pattern does not seem to be good fit for this protocol as it is always limited at around 
+2.6 MOp/s by the receiving CPU speed. This gives us the 10 Gbit/s and 0.3 Gbit/s bottleneck for the 512 byte and 16 byte size
+messages respectively.
+
+\subsection{Conclusion}
+
+The Direct Read connection is very different approach to a data transfer protocol with the goal of achieving 
+\emph{True Zero Copy} capabilities as the receive itself can read the message to its final place, preventing any additional 
+copying. The protocol also provides us with good \emph{Fairness} guarantees and efficient memory usage though 
+\emph{Variable Message Sizes} and not having any fixed buffers. With that \emph{Resource Sharing} follows as multiple
+connections can reuse the same receive and send buffers. It also allows us to use \emph{Interrupts} form completion events
+giving us low CPU utilization in low load situations as no component needs to constantly poll.
+
+\paragraph{} All these features make this protocol viable, especially when handling large messages. However the very high
+base latency and the impact of the communication overhead on bandwidth makes this not a good fit for transferring small 
+messages. Further as the bulk of the work has to be done by the receiver this protocol is not ideal for N:1 communication
+either.
+
+\paragraph{} We saw that while \emph{fences} can be very powerful to ensure correctness, the can introduce severe performance
+penalties and oftentimes simply waiting for the first operation to complete yields better throughput. So fences need to be
+applied with care.
+
+\paragraph{} The Direct Read protocol is not a good fit for all situations but can be a very good choice when transferring 
+large amounts of data for for 1:N communication, for example when replicating data to other nodes. 
+\comment{Actually saw a paper on distributed FS that uses this. Should we add such references to this section or simply leave
+it in related work?}
+

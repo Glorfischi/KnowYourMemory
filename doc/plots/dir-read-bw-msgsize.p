@@ -16,20 +16,30 @@ do for [s in msgs] {
 
 
 
-
-set terminal png small size 960,640 enhanced
+set terminal png small size 960,640 font "Computer Modern,16" 
 set output "plots/dir-read-bw-msgsize.png"
 
-set title "Direct Read Bandwidth" 
-set xlabel "Message size" 
+set xlabel "Message Size" 
 set ylabel "Bandwith (Gbit/s)" enhanced
 set yrange [0:100]
-set ytics 0, 5, 100 
+set ytics 0, 10, 100
 set xrange [16:20000]
 
 set key left top
 
+set grid ytics lt 0 lw 1 lc rgb "#bbbbbb"
+set grid xtics lt 0 lw 1 lc rgb "#bbbbbb"
+
 set logscale x 2
 set xtics 1, 2, 16384
-plot $data title "unsignaled write", \
-     $dfen title "fenced write"
+
+
+a=0.1;b=3; o=1
+f(x)= a*x # posting overhead
+g(x)=x/(o + (x-1)*b) # device overhead
+fit [:2000]f(x) $data using 1:2 via a
+fit [1000:]g(x) $data using 1:2 via o, b
+
+
+plot $dfen with points pt 6 ps 1.5 title "w/  fence", \
+     $data with points pt 5 ps 1.5 title "w/o fence"
