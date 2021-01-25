@@ -1,33 +1,21 @@
 \section{Performance Model}\label{sec:perf-model} \label{sec:model}
+In this section we introduce a general performance model for data exchange protocol that will allow us to estimate the 
+performance of our protocol implementations. It gives us a better understanding of our evaluation results and helps us 
+to locate bottlenecks.
 
-We looked at what is involved in an RDMA transmission in Figure \ref{fig:seq-sndrcv}.\todo{Figure in RDMA background}
+\paragraph{}We took a fairly detailed look at the operations involved in transmitting a message using RDMA in Section~\ref{sec:rdma}.
 Trying to closely model this however gives us a far too complex model, with a lot of parameters that are hard to assess,
-especially if we start to look at more complex protocols. 
+especially if we start to look at more complex protocols. We introduce a more simplified model inspired by the  
+\emph{LogGP model}~\cite{loggp}, which was developed  to model point to point communication with variable message sizes for 
+traditional IP based networks.
 
-We simplify our model by using a modified \emph{LogGP model}~\cite{}. The LogGP model was designed to model point to point
-communication with variable message sizes. \todo{Intro to LogGP}
+\paragraph{} At its core the LogGP model uses a fixed CPU overhead $o$ per message, the communication latency $L$, and 
+the bandwidth $G$. While this results in a decent model IP based system, it is unable to model the heavy offloading happening
+in RDMA. We extended the LogGP model by splitting the offset $o$ into multiple offsets for each of the components. We also 
+largely ignored the number of processes $P$ and use a slightly different definition for the gap $g$. This leaves 
+us with the following parameters, which are illustrated in Figure~\ref{fig:model-base}.
 
-
-The LogGP model was designed for classical IP based messaging and did not take into account any offloading to the NIC. We 
-can however integrate the heavy offloading happening in RDMA by splitting the offset $o$ into multiple offsets for each
-of the components. This leaves us with the following parameters.
-
-
-\begin{itemize}
-  \item $L$: an upper bound on the Latency, incurred in sending a message from the senders NIC to the receivers NIC
-  \item $G$: the Gap per byte for long messages. For our purposes this is the time of sending a single byte given the 
-    maximum bandwidth of our link.
-  \item $g$: he gap, defined as the minimum time interval between consecutive message transmissions.
-  \item $P$: the number of processes (or servers).
-  \item $o_{snd}$: the \emph{send overhead}, defined as the length of time that a processor is engaged in sending each message.
-  \item $o_{nsnd}$: the \emph{send NIC overhead}, defined as the length of time that a NIC is engaged in sending each message.
-  \item $o_{rcv}$: the \emph{receive overhead}, defined as the length of time that a processor is engaged in receiving each message.
-  \item $o_{nrcv}$: the \emph{receive NIC overhead}, defined as the length of time that a NIC is engaged in receiving each message.
-  \item $g_{rcv}$: the \emph{receive gap}, defined as the time interval between the receiving processor having received a message 
-    and it being ready to process the next message. One example of this gap would be preparing a new receive buffer.
-\end{itemize}
-
-\begin{figure}[!ht]
+\begin{figure}[!htp]
 \begin{center}
 \begin{tikzpicture}[node distance=1cm,auto,>=stealth']
   \node[] (p0) {P0};
@@ -66,6 +54,7 @@ of the components. This leaves us with the following parameters.
 
 
   \draw[very thick] ($(p1_nic)!0.5!(p1_nic_g)$) --node[above,scale=0.75,midway]{$o_{nrcv}$} ($(p1_nic)!0.55!(p1_nic_g)$);
+  \draw[very thick] ($(p1)!0.50!(p1_g)$) --node[above,scale=0.75,midway]{$o_{free}$} ($(p1)!0.545!(p1_g)$);
   \draw[very thick] ($(p1)!0.55!(p1_g)$) --node[above,scale=0.75,midway]{$o_{rcv}$} ($(p1)!0.6!(p1_g)$);
     
   %%%%
@@ -77,34 +66,14 @@ of the components. This leaves us with the following parameters.
   \draw[dotted] ($(p1_nic)!0.5!(p1_nic_g)$) -- ($(p1_nic)!0.5!(p1_nic_g)+(0,-1.5)$);
   \draw[<->] ($(p0_nic)!0.330!(p0_nic_g)+(0,-2.8)$) --node[above,scale=0.75,midway]{$L$} ($(p1_nic)!0.5!(p1_nic_g)+(0,-1.3)$);
 
-  \draw[dotted] ($(p1)!0.6!(p1_g)$) -- ($(p1)!0.6!(p1_g)+(0,-1)$);
-  \draw[dotted] ($(p1)!0.65!(p1_g)$) -- ($(p1)!0.65!(p1_g)+(0,-1)$);
-  \draw[<->] ($(p1)!0.6!(p1_g)+(0,-.8)$) --node[above,scale=0.75,midway]{$g_{rcv}$} ($(p1)!0.65!(p1_g)+(0,-.8)$);
 
   \draw[dotted] ($(p0)!0.15!(p0_g)$) -- ($(p0)!0.15!(p0_g)+(0,.8)$);
-  \draw[dotted] ($(p0)!0.35!(p0_g)$) -- ($(p0)!0.35!(p0_g)+(0,.8)$);
-  \draw[<->] ($(p0)!0.15!(p0_g)+(0,.6)$) --node[above,scale=0.75,midway]{$g$} ($(p0)!0.35!(p0_g)+(0,.6)$);
+  \draw[dotted] ($(p0)!0.65!(p0_g)$) -- ($(p0)!0.65!(p0_g)+(0,.8)$);
+  \draw[<->] ($(p0)!0.15!(p0_g)+(0,.6)$) --node[above,scale=0.75,midway]{$g$} ($(p0)!0.65!(p0_g)+(0,.6)$);
 
   %%%%
 
-  \draw[very thick, lightgray] ($(p0)!0.2!(p0_g)$) --node[above,scale=0.75,midway]{$o_{snd}$} ($(p0)!0.35!(p0_g)$);
-  \draw[very thick, lightgray] ($(p0_nic)!0.35!(p0_nic_g)$) --node[above,scale=0.75,midway]{$o_{nsnd}$} ($(p0_nic)!0.425!(p0_nic_g)$);
-
-  \path[lightgray] ($(p0_nic)!0.425!(p0_nic_g)$) --node[above,scale=0.75,midway]{$G$} ($(p0_nic)!0.45!(p0_nic_g)$);
-  \draw[dotted, ->, lightgray] ($(p0_nic)!0.425!(p0_nic_g)$) -- ($(p1_nic)!0.625!(p1_nic_g)$);
-
-  \path[lightgray] ($(p0_nic)!0.45!(p0_nic_g)$) --node[above,scale=0.75,midway]{$G$} ($(p0_nic)!0.475!(p0_nic_g)$);
-  \draw[dotted, ->, lightgray] ($(p0_nic)!0.45!(p0_nic_g)$) -- ($(p1_nic)!0.65!(p1_nic_g)$);
-
-  \path[lightgray] ($(p0_nic)!0.475!(p0_nic_g)$) --node[above,scale=0.75,midway]{$G$} ($(p0_nic)!0.5!(p0_nic_g)$);
-  \draw[dotted, ->, lightgray] ($(p0_nic)!0.475!(p0_nic_g)$) -- ($(p1_nic)!0.675!(p1_nic_g)$);
-
-  \draw[dotted, ->, lightgray] ($(p0_nic)!0.5!(p0_nic_g)$) -- ($(p1_nic)!0.7!(p1_nic_g)$);
-
-
-  \draw[very thick, lightgray] ($(p1_nic)!0.7!(p1_nic_g)$) --node[above,scale=0.75,midway]{$o_{nrcv}$} ($(p1_nic)!0.75!(p1_nic_g)$);
-  \draw[very thick, lightgray] ($(p1)!0.75!(p1_g)$) --node[above,scale=0.75,midway]{$o_{rcv}$} ($(p1)!0.8!(p1_g)$);
-
+  \draw[dotted, ->, lightgray] ($(p1_nic)!0.56!(p1_nic_g)$) -- ($(p0)!0.65!(p0_g)$);
 
 
 \end{tikzpicture}
@@ -113,6 +82,31 @@ of the components. This leaves us with the following parameters.
 \label{fig:model-base}
 \end{figure}
 
+
+
+
+\begin{itemize}
+  \item $L$: an upper bound on the Latency, incurred in sending a message from the senders NIC to the receivers NIC. This is
+    the pure network latency.
+  \item $G$: the Gap per byte for long messages. For our purposes this is the time of sending a single byte given the 
+    maximum bandwidth of our link.
+  \item $o_{snd}$: the \emph{send overhead}, defined as the length of time that a processor is engaged in sending each message.
+    For some protocols this also includes any preparation an communication overhead necessary to send a message.
+  \item $g$: the \emph{send gap}, defined as the minimum time interval until the sender can reuse the resources involved in 
+    the transmission. (e.g. the send buffer) 
+  \item $o_{nsnd}$: the \emph{send NIC overhead}, defined as the length of time that a NIC is engaged in sending each message.
+  \item $o_{nrcv}$: the \emph{receive NIC overhead}, defined as the length of time that a NIC is engaged in receiving each message.
+  \item $o_{rcv}$: the \emph{receive overhead}, defined as the length of time that a processor is engaged in receiving each message.
+  \item $o_{free}$: the \emph{freeing overhead}, defined as the time that a processor is engaged in preparing a receive buffer
+    to receive into (e.g. post receive)
+\end{itemize}
+
+
+\paragraph{} This still gives us a fairly complex model and evaluating each of these overheads is in practice very hard. 
+Also this model is very much built around send or write based protocols and does not seem to be a very good representation 
+for read based protocols. But as we will see it can still give us a good understanding of the observed performance, even if 
+we cannot evaluate all parameters, and it still gives us a fairly good estimate for read based protocols, even if it was not
+explicitly designed for them.
 
 \paragraph{Latency Estimate}
 
