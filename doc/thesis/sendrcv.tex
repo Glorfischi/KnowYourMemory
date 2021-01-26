@@ -1,121 +1,105 @@
-\section{Send Receive} \label{sec:conn:send}\label{sendrcv}
-\subsection{Design} \label{sendrcv-design}
-The Send Receive based protocol is by far the simplest, as the send and receive verbs basically already provide the 
-message passing interface we want. There are still multiple ways to implement such a protocol and a few pitfalls 
+\section{Send Receive} \label{sec:conn:send}\label{sendrcv}\label{sendrcv-design}
+
+The send-receive protocol is by far the simplest, as the send and receive verbs basically already provide the 
+message passing interface we want. There are still multiple ways to implement and optimize such a protocol and a few pitfalls 
 we need to address to get good performance.
 
 \paragraph{} We presented the basic function of the send verb in Section \ref{sec:bg:send}. It allows the sender to transmit 
 a message to the receiver, without any additional information, as long as the receiver has posted a receiver buffer that is 
-large enough to receive the message. To transform this verb to a fully functioning connection we need two basic things. 
+large enough to receive the message. To transform this verb to a fully functioning connection we add two basic things. 
 Some kind of \emph{receive buffer management} that allows the receiver to receive multiple messages at the same time, 
 and to get any reasonable performance we need to be able to send multiple messages asynchronously.
 
-\subsubsection{Sender} 
-The sender assumes that the receiver is always ready to receive the message and has at least one receive buffer posted. This
-means sending essentially only involves issuing a send work request.
+\subsection{Protocol} 
+To explain the protocol in detail, we will walk through sending and receiving a message.
 
-As we already mentioned earlier it is very important to keep the sending pipeline full to get good performance. 
-This kind of \emph{unacknowledged messages} can increase throughout by a factor of 5 or more.
+\paragraph{} The sender assumes that the receiver is always ready to receive the message and has at least one receive buffer 
+posted. This means sending essentially only involves issuing a send work request. As we already mentioned earlier it is very 
+important to keep the sending pipeline full to get good performance.  This kind of \emph{unacknowledged messages} can increase
+throughout by a factor of 5 or more.
+We use the trick of issuing send requests with monotonically increasing \code{wr\_id}s explained in Section~\ref{sec:protocols}
+to be able to support multiple 
+outstanding messages.
 
-\paragraph{} We are able to wait for a specific work request to complete by issuing monotonically increasing IDs. We store the
-\comment{This section is a general approach used for almost all connections. Maybe move this?}
-last ID with a matching completion event. If we try to wait on a lower ID we know we already received a matching completion 
-event prior, because of the in order guarantees of InfiniBand.\comment{Maybe cite something?} If the provided ID is higher then the
-last seen ID, we  poll the completion queue until we receive one with a matching \code{wr\_id}.
-
-This approach will eventually lead to an overflow, but given our observed maximum message rate we do not expect to see this 
-happen in the next 10 thousand years. 
-
-
-\paragraph{Batching} As briefly mentioned in Section \ref{sec:bg:verbs} \comment{do this..} we can post multiple work request at the same time. 
-This \emph{Doorbell batching} reduces the number of generated MMIOs~\cite{anuj-guide}, reduces the CPU load and can in turn 
-drastically improve bandwidth if the connection is send-side CPU bottleneck. We observed a performance increase by up to 
-a factor of two. It is however questionable if this connection level batching is the right approach when using the 
-\emph{Reliable Connection} that we evaluated. With RC all messages need to end up at the same receiver meaning application 
-level batching should be possible and we observed that sending larger messages will outperform sending small messages in 
-batches.
-
-\paragraph{Inline Sending} The send verb has a slight variation called inline send. Inline sending means that instead of 
-simply referencing the payload in a work request, the sending CPU will directly copy it to the RNIC using MMIO. This prevents
-the NIC from having to issue an addition DMA and can reduce latency for very small messages.~\cite{anuj-guide} It does however
-increase the load for the sending CPU. As we will see the sending CPU is oftentimes the bottleneck so we did not further 
-evaluate inline sending in this section.
-
-\subsubsection{Receiver}
-
-The receiver always needs to have at least one posted receive buffer. We achieve this by having an array of posted receive 
-buffers. When receiving a new message we return the corresponding receive buffer. As soon as the application is done processing
-the message, it will have to mark it as free which will repost the corresponding buffer.
-
-
-Slow processing of messages can still stall the sender, but by having multiple receive buffer it allows us to have numerous 
-\emph{in-flight messages} which improves performance drastically.
+\paragraph{} The receiver always needs to have at least one posted receive buffer. We achieve this by having an array of 
+posted receive buffers, which are initially registered during connection setup. When receiving a new message we return 
+the corresponding receive buffer. We can match completion event to the correct buffer we us the array index of the receive 
+buffer as a \code{wr\_id} when posting the receive request. As soon as the application is done processing the message,
+it marks it as free which will repost the corresponding buffer. By having multiple receive buffer it allows us to have 
+numerous unacknowledged messages which improves performance drastically.
 
 \paragraph{} It is important that we note here that in production systems there needs to be a way for the sender to notice whether 
-enough receive buffers are ready. If there is no posted receive buffer when a message is received the receiver will generate
+enough receive buffers are ready. If there is no posted receive buffer when a message is received the receiver  generates
 a so called \emph{reader not ready} error. This will either cause a large back off for the sender or even cause the connection
 to break.
 
 We observed this problem specifically for N:1 communication. This can be mitigated to some extend by optimizing receiving and
-reposting buffers through batching.
+reposting buffers.
 
-\paragraph{Batching} As described there are significant penalties if the receiver is not able to keep up and stalls the sender.
-This can be mitigated a little optimizing the receiver. For one instead of polling one receive CQ at a time we poll up to 32
-at a time into a array of CQEs. We observed in microbenchmarks that this can improve the observed throughput by nearly half. By
-batching the receive work requests we can further improve throughput similarly to batching send requests.
 
-\paragraph{Shared Receive Queues} By having an array of $k$ posted receive buffers for each receiver the memory reserved for 
-receiving messages can grow quite large. If a node has an open connection to $N$ other nodes it will need to reserve 
-$N*k*max\_msg\_size$ Bytes, even if the total request volume is quite small (i.e. we expect only burst of $k$ messages but 
-from different nodes at different times).
+
+
+\subsection{Extensions}
+
+There are multiple extensions to the described base protocol. The described changes either improve performance, allow us to
+share resources between connections, or enable different kinds of communication patterns.
+
+\subsubsection{Inline Sending}
+The send verb has a slight variation called inline send. Inline sending means that instead of 
+simply referencing the payload in a work request, the sending CPU directly copies it to the RNIC using MMIO. This prevents
+the NIC from having to issue an addition DMA and can reduce latency for very small messages.~\cite{anuj-guide} It does however
+increase the load for the sending CPU. As we will see the sending CPU is oftentimes the bottleneck so we did not further 
+evaluate inline sending in this thesis. It can however be a viable optimization for small messages.
+
+
+\subsubsection{Receive Batching} 
+As described there are significant penalties if the receiver is not able to keep up and stalls the sender.
+This can be mitigated a little by optimizing the receiver. For one instead of polling one receive CQ at a time we poll up to 32
+at a time into a array of CQEs. We observed in microbenchmarks that this can improve the observed throughput by nearly half.
+And by batching the reposting of receive buffers we can also further improve throughput.
+
+\subsubsection{Shared Receive Queues} 
+By having an array of $k$ posted receive buffers for each receiver the memory reserved for receiving messages can grow quite
+large. If a node has an open connection to $N$ other nodes it needs to reserve  $N*k*max\_msg\_size$ bytes, even if 
+the total request volume is quite small (i.e. we expect only burst of $k$ messages but from different nodes at different times).
 
 We can reduce the total memory usage by using \emph{Shared Receive Queues~(SRQ)}. As the name already tells us SRQs allow us
-share receive queues between multiple QPs. This means we can reuse a single group of receive queues for multiple connections.
-This means the total memory usage does not grow with $N$.
+share receive queues between multiple QPs. This means we can reuse a single receive queue for multiple connections, allowing
+multiple receivers to share the same receive buffers. This means the total memory usage does not grow with the number of
+open connections, but stays constant.
 
-Its worth noting that the usage of SRQs does not impact completion queues. The completion event for consuming a posted receive
-buffer still ends up in the CQ of the corresponding QP.
+The usage of SRQs does not impact completion queues. The completion event for consuming a posted receive buffer still ends up 
+in the CQ of the corresponding QP.
 
-One major change with using an SRQ is that we do not submit receive work request to each of the QPs but to the single SRQ. This
-means that we will either have to introduce locking to access the SRQ, which introduces a significant performance penalty or 
+One major change when using an SRQ is that we do not submit receive work request to each of the QPs but to the single SRQ. This
+means that we either have to introduce locking to access the SRQ, which introduces a significant performance penalty or 
 delegate the posting of the receive buffer to a single thread. Instead of reposting the buffer themselves each connection 
-enqueues the id to the to be posted buffer to a queue. The single reposting thread will dequeue it and repost it. This also
-allows us to have central batching for reposting the buffers.
+enqueues the id of the to be posted buffer into a queue. The single reposting thread will dequeue and repost it. This also
+allows us to have central batching for reposting the buffers. We opted to use the latter approach for our SRQ based 
+implementation.
 
-\paragraph{Single Receiver} It is very common to have an N:1 communication pattern where a single server receives messages 
-from multiple clients. This could be achieved by simply round-robin over the $N$ connections. For this connection however 
-we used the fact that we can associate a singe Completion Queue with multiple Queue Pairs. This means if we are in a
-\emph{single receiver mode} all receive completion events will end up in a single CQ. Allowing us to poll a single queue to
-receive a message from $N$ different sender.
-
-Especially if we are not using an SRQ we will have to know by which QP this message was received by as we will need to repost
-the buffer to it. We can get the 32 bit QP number from the Completion Queue Event, which identifies the Queue Pair. 
-
-
-\subsection{Conclusion}
-
-The Send and Receive verbs are generally regarded as the simplest verbs to work with. In this section we have shown how to
-build a complete data exchange protocol. We have shown that even with this rather simple operations there are multiple tuning
-possibilities and that predicting performance  is not always trivial.
-
-\paragraph{} We have shown that send-receive connections can achieve high performance. They provide our requirements of being
-\emph{non-blocking}, gives us convenient \emph{interrupts}, and when using shared receive queues allows us to 
-\emph{share resources} between multiple  connections.
-
-We pointed out multiple pitfalls when developing such connections. For production implementations there needs
-to be some kind of acknowledging of messages to prevent stalling the sender, which causes RNR errors and significant 
-performance drops or even failures. Receive buffer management needs to be looked at very carefully to achieve good receive
-side performance.
-
-We evaluated Shared Receive Queue and while SRQs allows us to share resources they also come with significant drawbacks. At
-least in our Melanox NIC there seem to optimization that allows SRQs to match the performance of not shared connections for
-very small messages. We expect this to be related to inline receives. For messages above 32 bytes we where limited to 
-2 Mops at the receiver side. This is nearly 10 times slower than using separate receive queues for each QP. This makes 
-using SRQs unsuitable for any system that sends messages between 32 and about 6800 bytes, at which point we are again limited 
-by the link speed.
+\subsubsection{Single Receiver} 
+It is very common to have an N:1 communication pattern where a single server receives messages from multiple clients. This
+could be achieved by simply round-robin over the $N$ connections. For this connection however we used the fact that we can 
+associate a singe Completion Queue with multiple Queue Pairs. This means if we are in a \emph{single receiver mode} all 
+receive completion events will end up in a single CQ. Allowing us to poll a single queue to receive a message from $N$ 
+different sender.
 
 
-\paragraph{} In the end working with Send and Receive are still the easiest verbs to work with and when there is some kind of
-acknowledgement system in place they are very reliable. They give us some nice features that other connections cannot provide
-us and SRQs can be good option to save resources if the throughput is good enough for the system.
+\subsection{Features}
+
+The Send and Receive verbs are generally regarded as the simplest verbs to work with and they give us a lot of features
+that make them suitable for many applications. We take a look at the traits we introduced in Section~\ref{sec:features} 
+and see which of them are met by our send-receive protocol.
+
+\paragraph{} The protocol fulfills our requirements for being \emph{non-blocking}, which means if the receiving application does not free a single
+received buffer it does not impact the protocols ability to transmit new messages.
+It also provides us with convenient \emph{interrupts} that allow us to save a lot CPU utilization for certain workloads.
+Finally when using shared receive queues the protocol allows us to \emph{share resources} between multiple connections.
+
+\paragraph{} It does however not allow for \emph{variable message sizes} which can unnecessarily blow up the total memory
+requirements if an application needs to send many small and a few large messages, as each of the small messages will have
+to consume a buffer that is large enough to contain a large message. We also argue that the protocol is not truly 
+\emph{zero copy} as for almost all real world use cases we would need to copy the copy the received message out of the
+receive buffer and into some kind of data structure.
 

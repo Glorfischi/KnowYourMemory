@@ -1,15 +1,12 @@
 \section{Direct Write}\label{sec:conn:direct_write}
 
-\subsection{Design} \label{sendrcv-design}
 The idea of the \emph{Unbuffered} or \emph{Direct Write Protocol} is to avoid unnecessary copying we have when using
 a buffered write connection with a ring buffer. We can achieve this by having the receiver specify specific memory 
 regions for the sender to write to. 
 
-\paragraph{} For this thesis we implemented something very reminiscent of the send receive protocol where the receiver 
-posts receive buffer by sending the corresponding metadata to the sender, which will use these buffers in order. This does
-not really make total use of this protocol as one would still need to copy the received message out of these buffers. This
-could however fairly easily be extended by sending additional information with receive buffer, allowing the sender to write
-the message to the correct buffer.\comment{not sure if this is clear / how to correctly explain this}
+\paragraph{} For this thesis we implemented something very reminiscent of the send receive protocol. The core idea is for
+the receiver to send infomation on prepared receive buffer the sender. The sender will then use these buffers in order. 
+
 
 
 \begin{figure}[!htb]
@@ -81,16 +78,17 @@ Figure~\ref{fig:dirwrite-resources} is a representation of the data structures i
 connection. In the following subsections we will walk tough the steps involved in sending and receiving a message and
 will reference these data structures.
 
-\subsubsection{Sender}
+\subsection{Protocol}
 
-The sender has an array of structs, which we will call \code{BufferInfo}, in local memory. This array is populated by the 
+The sender has an array of structs, which we call \code{BufferInfo} in local memory. This array is populated by the 
 receiver and represent receive buffer to which the sender is allowed to write to. The struct contains three fields: 
 \code{addr}, which is the virtual address of the corresponding buffer in the receivers memory, \code{rkey}, which is the 
-rkey of that buffer, and \code{valid} which indicates whether this entry is actually valid.
+rkey of that buffer, and \code{valid} which indicates whether this entry is actually valid. 
+\comment{I just realized I never covered rkeys.. Is this necessary?}
 
-\paragraph{} This array acts as a ring buffer, so when sending a message, the sender will look at the next field. If it is
-valid it will send the message to the corresponding buffer at the receiver and invalidates it. We will always send the complete
-buffer followed by a signaling byte, which will allow the receiver to poll on this byte to notice incoming messages.
+\paragraph{} This array acts as a ring buffer, so when sending a message, the sender looks at the next field. If it is
+valid it sends the message to the corresponding buffer at the receiver and invalidates it. We always send the complete
+buffer followed by a signaling byte, which allows the receiver to poll on this byte to notice incoming messages.
 
 \paragraph{} Our implementation of the sender is very simple, but it can easily be extended to be more sophisticated by adding
 tags to the \code{BufferInfo} or by having multiple different arrays, which would allows us to \emph{route} the message to the
@@ -98,40 +96,39 @@ correct buffer at the sender and potentially eliminate the need for a further co
 the way of signaling an incoming message by switching to write with immediate or by applying a metadata approach as implemented
 for the buffered write protocol.
 
-\subsubsection{Receiver}
 
-In a way the direct write receiver works in a similar way to the send and receive receiver. It can \code{Receive()} and 
+\paragraph{} In a way the direct write receiver works in a similar way to the send and receive receiver. It can \code{Receive()} and 
 \code{Free()} buffers. 
 
-\paragraph{}\emph{Freeing} a buffer means making it available for the sender to write to. As we established at the sender 
-there is a queue of \code{BufferInfo}. To \emph{free} a buffer we will first set the very last signal byte to 0, then we
-write its address, rkey, and a valid byte of 1 to the next empty or invalidated queue entry. The receiver will keep a very 
-similar local queue to keep track of the oder of posted buffers.
+\emph{Freeing} a buffer means making it available for the sender to write to. As we established  
+there is a queue of \code{BufferInfo} in the senders memory. To \emph{free} a buffer the receiver first sets the very last 
+signal byte of its local buffer to 0, then we write its address, rkey, and a valid byte of 1 to the next empty or 
+invalidated queue entry at the sender. The receiver keeps a very similar local queue to keep track of the oder of 
+posted buffers.
 
-\paragraph{} To \emph{Receive} a buffer the receiver polls on the signal bit of the oldest freed buffer. This will be set
-to one when the transmission is completed. We are again using the fact that RDMA updates memory in increasing memory order, 
-for any modern systems~\cite{herd, farm}.
+To \emph{Receive} a buffer the receiver polls on the signal bit of the oldest freed buffer. This will be set
+to one by the sender when the transmission is completed. We are using the fact that RDMA updates memory in increasing memory 
+order, for any modern systems~\cite{herd, farm}. This guarantees us that the complete message has been written as soon a we
+see an update to the last byte.
 
+\subsection{Features}
 
-\subsection{Conclusion}
+With our Direct Write connection we essentially rebuilt the send and receive verss using only RDMA writes. This gives us more
+similar features but also alows for more control over the protocol. This could potentially allow us to extend it for 
+specific systems.
 
-With our Direct Write connection we essentially rebuilt the Send and Receive verbs using only RDMA Writes. This gives us more
-control over the protocol, which could allow us to extend it for specific systems.
-
-\paragraph{} By adding metadata when posting a buffer this could enable \emph{True Zero Copy} capabilities for certain 
-applications and with a more sophisticated buffer management one could more effectively utilizes the available memory by 
-posting different size messages. The protocol also keeps the \emph{fairness} guarantees from the Send Receive connection. 
-This gives us a very versatile protocol that can be adapted when necessary.
-
-\paragraph{} But our benchmarking also showed that it is not trivial to achieve the same performance we got using the Send
-and Receive verb. The general wisdom of RDMA writes being faster was not confirmed in our case. Our protocol can 
-definitely be further optimized, by reposting buffers in batches or by redesigning this reposting entirely to reduce
-the number of returning writes. But it showed that achieving good performance with such a protocol requires significant 
-optimization work.
+\paragraph{} Our current implementation fulfills our requirements for being \emph{non-blocking}, the same way the send-receive
+protocol does. It however does not provide any \emph{interrupts} and we did not explore and \emph{resource sharing} approaches.
+As it stands it also does not provide \emph{True Zero Copy} capabilities and it also lacks support for 
+\emph{variable message sizes}.
 
 
+\paragraph{} We do however think that this protcol can be adapted to enable more features. By adding metadata when posting a
+buffer we could enable \emph{True Zero Copy} capabilities for certain applications, by performing some routing decisions at
+the sender and being able to directly write to the correct final memory location.
 
-
+With a more sophisticated buffer management one could more effectively utilizes the available memory by supporting 
+\emph{variable message sizes}.
 
 
 

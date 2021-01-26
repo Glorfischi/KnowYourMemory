@@ -76,6 +76,18 @@ class Receiver {
 \paragraph{} From now on when we talk about protocol implementations we are using these interfaces, as long as we do not 
 explicitly say otherwise.
 
+
+
+\paragraph{} We are able to wait for a specific work request to complete by issuing monotonically increasing IDs. We store the
+last ID with a matching completion event. If we try to wait on a lower ID we know we already received a matching completion 
+event prior, because of the in order guarantees of InfiniBand. If the provided ID is higher then the
+last seen ID, we  poll the completion queue until we receive one with a matching \code{wr\_id}.
+
+This approach will eventually lead to an overflow, but given our observed maximum message rate we do not expect to see this 
+happen in the next 10 thousand years. 
+
+
+
 \pagebreak
 
 \subsection{Features}
