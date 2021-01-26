@@ -16,7 +16,7 @@ do for [s in msgs] {
 set terminal png small size 960,640 font "Computer Modern,16" 
 set output "plots/write-direct-bw-msgsize.png"
 
-set xlabel "Message Size" 
+set xlabel "Message Size (bytes)" 
 set ylabel "Bandwith (Gbit/s)" enhanced
 set yrange [0:100]
 set ytics 0, 10, 100
@@ -29,5 +29,5 @@ set grid xtics lt 0 lw 1 lc rgb "#bbbbbb"
 
 set logscale x 2
 set xtics 1, 2, 16384
-plot $data with points pt 5 ps 1.5 title "Direct Write", \
-     $send with points pt 6 ps 1.5 title "Send Receive" 
+plot $data with points pt 5 ps 1.5 title "DW", \
+     $send with points pt 6 ps 1.5 title "SR" 

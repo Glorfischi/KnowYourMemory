@@ -25,7 +25,7 @@ do for [c in conns] {
 set terminal png small size 960,640 font "Computer Modern,16"
 set output "plots/send-bw-srq-n1.png"
 
-set xlabel "Threads" 
+set xlabel "Senders" 
 set ylabel "Bandwith (Gbit/s)" enhanced
 set yrange [0:100]
 set ytics 0, 5, 100

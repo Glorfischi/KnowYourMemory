@@ -40,7 +40,7 @@ do for [c in conns] {
 set terminal png small size 960,640 font "Computer Modern,16"
 set output "plots/write-bw-n1-8192.png"
 
-set xlabel "Threads" 
+set xlabel "Senders" 
 set ylabel "Bandwith (Gbit/s)" enhanced
 set yrange [0:100]
 set ytics 0, 10, 100
@@ -54,5 +54,5 @@ set key right center
 plot $writeRev title "BW-Rev" pt 5 ps 1.5, \
      $writeImm title "BW-Imm" pt 7 ps 1.5, \
      $writeOff title "BW-Off" pt 9 ps 1.5, \
-     $atomicdm title "Sw-DM" pt 10 ps 1.5, \
+     $atomicdm title "SW-DM" pt 10 ps 1.5, \
      $atomic title "SW" pt 5 ps 1.5, \

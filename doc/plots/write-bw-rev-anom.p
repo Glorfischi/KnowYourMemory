@@ -11,7 +11,7 @@ set terminal png small size 960,640 font "Computer Modern,16"
 set output "plots/write-bw-rev-anom.png"
 
 #set title "Write Bandwidth" 
-set xlabel "Message Size" 
+set xlabel "Message Size (bytes)" 
 set ylabel "Bandwith (Gbit/s)" enhanced
 set yrange [0:100]
 set ytics 0, 10, 100

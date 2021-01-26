@@ -27,7 +27,7 @@ set output "plots/write-direct-bw-n1.png"
 set grid ytics lt 0 lw 1 lc rgb "#bbbbbb"
 set grid xtics lt 0 lw 1 lc rgb "#bbbbbb"
 
-set xlabel "Connections" 
+set xlabel "Senders" 
 set ylabel "Bandwith (Gbit/s)" enhanced
 set yrange [0:100]
 set ytics 0, 10, 100
