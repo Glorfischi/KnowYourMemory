@@ -46,6 +46,19 @@
 \newtheorem*{rem}{Remark}
 \newtheorem*{note}{Note}
 
+
+% For tables
+\usepackage{etoolbox}
+\usepackage{array}
+\usepackage{threeparttable}
+\usepackage{colortbl}
+
+\newcolumntype{x}[1]{>{\centering\let\newline\\\arraybackslash}p{#1}}
+ 
+\definecolor{myc}{rgb}{1,0.88,0.88}
+
+
+
 \begin{document}
 \iffalse
 \fi

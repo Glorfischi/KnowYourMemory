@@ -21,7 +21,7 @@ do for [s in msgs] {
   print sprintf("%s %f\n", s, STATS_median*8/1024/1024/1024)
 }
 
-set terminal png small size 960,640 font "Computer Modern,16"
+set terminal pngcairo size 960,640 font "Computer Modern,16" 
 set output "plots/send-bw-msgsize.png"
 
 set xlabel "Message size (bytes)" 
@@ -38,18 +38,35 @@ set key left top
 
 min(a,c) = (a < c) ? a : c
 set logscale x 2
-f(x)=x/(o + (x-1)*b) # device overhead
 b=0.00023;o=2.2
-g(x)=x/z # o_{snd}+g_{snd} when piplined
-z=1
-h(x)=x/(z+p+(x-1)*b) # I realized that the g_{snd} abstraction is not quite correct for this 
-p=1
-fit f(x) $databatch using 1:2 via b, o
-fit[:3000] g(x) $data using 1:2 via z
-fit h(x) $dataseq using 1:2 via p
-set xtics 1, 2, 16384
-plot $databatch title "batched" pt 5 ps 1.5 , \
-     $data title "unbatched" pt 7 ps 1.5 , \
-     $dataseq title "sequential" pt 9 ps 1.5 
 
-#f(x) title "Model device bottleneck", g(x) title "Model unbatched bottleneck", h(x) title "Model sequential bottleneck"
+z=1
+
+
+#piplined
+g(x)=x/osnd*1000*1000*8/1024/1024/1024
+# Sequential
+h(x)=(x/(osnd+g+x*gl))*1000*1000*8/1024/1024/1024
+# Batched
+f(x)=x/(onsnd + (x)*b)*1000*1000*8/1024/1024/1024
+
+
+b=0.000082;
+osnd=0.19;
+orcv=0.19;
+L=1.02;
+onsnd=0.02;
+onrcv=0.02;
+g=5;
+gl=0.02
+
+#fit[2000:] f(x) $databatch using 1:2 via onsnd
+#fit[:3000] g(x) $data using 1:2 via osnd
+fit h(x) $dataseq using 1:2 via g, gl
+set xtics 1, 2, 16384
+plot $databatch title "SR-Bat" pt 5 ps 1.5 , \
+     $data title "SR" pt 7 ps 1.5 , \
+     $dataseq title "SR-Seq" pt 9 ps 1.5, \
+     f(x) title "Device Bottleneck", \
+     g(x) title "CPU Bottleneck", \
+     h(x) title "Round-Trip Bottleneck"
