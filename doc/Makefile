@@ -20,7 +20,9 @@ PLOT = $(PLOTDIR)/send-bw-batch.png $(PLOTDIR)/send-bw-unack.png $(PLOTDIR)/send
 			 $(PLOTDIR)/buf-read-lat-msgsize.png $(PLOTDIR)/buf-read-bw-msgsize.png \
        $(PLOTDIR)/buf-read-bw-threads.png $(PLOTDIR)/buf-read-bw-n1.png \
 			 $(PLOTDIR)/dir-read-lat-msgsize.png $(PLOTDIR)/dir-read-bw-msgsize.png \
-       $(PLOTDIR)/dir-read-bw-threads.png $(PLOTDIR)/dir-read-bw-n1.png 
+       $(PLOTDIR)/dir-read-bw-threads.png $(PLOTDIR)/dir-read-bw-n1.png \
+			 $(PLOTDIR)/lat-msgsize.png
+
 
 
 

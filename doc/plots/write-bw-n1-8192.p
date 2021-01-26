@@ -19,6 +19,21 @@ do for [c in conns] {
   print sprintf("%s %f\n", c, STATS_sum*8/1024/1024/1024)
 }
 
+set print $atomic
+do for [c in conns] {
+  bw = sprintf("data/write-atomic-bw/write-atomic-lat-conn-%s--size-8192-unack-%s-server", c, c);
+  stats bw using 4 noout
+  print sprintf("%s %f\n", c, STATS_sum*8/1024/1024/1024)
+}
+
+set print $atomicdm
+do for [c in conns] {
+  bw = sprintf("data/write-atomic-bw/write-atomic-lat-conn-%s--dm-size-8192-unack-%s-server", c, c);
+  stats bw using 4 noout
+  print sprintf("%s %f\n", c, STATS_sum*8/1024/1024/1024)
+}
+
+
 
 
 
@@ -36,6 +51,8 @@ set grid ytics lt 0 lw 1 lc rgb "#bbbbbb"
 set grid xtics lt 0 lw 1 lc rgb "#bbbbbb"
 
 set key right center
-plot $writeRev title "WriteRev" pt 5 ps 1.5, \
-     $writeImm title "writeImm" pt 7 ps 1.5, \
-     $writeOff title "writeOff" pt 9 ps 1.5
+plot $writeRev title "BW-Rev" pt 5 ps 1.5, \
+     $writeImm title "BW-Imm" pt 7 ps 1.5, \
+     $writeOff title "BW-Off" pt 9 ps 1.5, \
+     $atomicdm title "Sw-DM" pt 10 ps 1.5, \
+     $atomic title "SW" pt 5 ps 1.5, \

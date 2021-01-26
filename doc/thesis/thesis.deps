@@ -3,11 +3,10 @@ thesis.pdf :\
     ../plots//buf-read-bw-msgsize.png\
     ../plots//buf-read-bw-n1.png\
     ../plots//buf-read-bw-threads.png\
-    ../plots//buf-read-lat-msgsize.png\
     ../plots//dir-read-bw-msgsize.png\
     ../plots//dir-read-bw-n1.png\
     ../plots//dir-read-bw-threads.png\
-    ../plots//dir-read-lat-msgsize.png\
+    ../plots//lat-msgsize.png\
     ../plots//send-bw-batch.png\
     ../plots//send-bw-msgsize.png\
     ../plots//send-bw-n1.png\
@@ -15,10 +14,6 @@ thesis.pdf :\
     ../plots//send-bw-srq-threads.png\
     ../plots//send-bw-threads.png\
     ../plots//send-bw-unack.png\
-    ../plots//send-lat-msgsize.png\
-    ../plots//write-atomic-bw-msgsize.png\
-    ../plots//write-atomic-bw-threads.png\
-    ../plots//write-atomic-lat-msgsize.png\
     ../plots//write-bw-msgsize.png\
     ../plots//write-bw-n1-16.png\
     ../plots//write-bw-n1-512.png\
@@ -30,27 +25,19 @@ thesis.pdf :\
     ../plots//write-direct-bw-msgsize.png\
     ../plots//write-direct-bw-n1.png\
     ../plots//write-direct-bw-threads.png\
-    ../plots//write-direct-lat-msgsize.png\
-    ../plots//write-lat-msgsize.png\
     /etc/texmf/web2c/texmf.cnf\
     /home/fischi/.texlive2020/texmf-var/fonts/pk/ljfour/jknappen/ec/tcrm1000.600pk\
     /usr/share/texlive/texmf-dist/bibtex/bst/base/unsrt.bst\
     /usr/share/texlive/texmf-dist/fonts/tfm/jknappen/ec/tcrm1000.tfm\
     /usr/share/texlive/texmf-dist/fonts/tfm/public/amsfonts/cmextra/cmex7.tfm\
-    /usr/share/texlive/texmf-dist/fonts/tfm/public/amsfonts/cmextra/cmex9.tfm\
     /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmbx10.tfm\
     /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmbx12.tfm\
-    /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmmi6.tfm\
-    /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmmi9.tfm\
     /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmr12.tfm\
-    /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmr6.tfm\
     /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmr9.tfm\
     /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmss10.tfm\
     /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmss12.tfm\
     /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmss17.tfm\
     /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmss9.tfm\
-    /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmsy6.tfm\
-    /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmsy9.tfm\
     /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmti10.tfm\
     /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmtt10.tfm\
     /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmtt9.tfm\
@@ -58,7 +45,6 @@ thesis.pdf :\
     /usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx12.pfb\
     /usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi10.pfb\
     /usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi7.pfb\
-    /usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi9.pfb\
     /usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr10.pfb\
     /usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr5.pfb\
     /usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr9.pfb\
@@ -156,6 +142,7 @@ thesis.pdf :\
     /usr/share/texlive/texmf-dist/tex/latex/amsmath/amstext.sty\
     /usr/share/texlive/texmf-dist/tex/latex/base/article.cls\
     /usr/share/texlive/texmf-dist/tex/latex/base/ifthen.sty\
+    /usr/share/texlive/texmf-dist/tex/latex/base/omscmr.fd\
     /usr/share/texlive/texmf-dist/tex/latex/base/size10.clo\
     /usr/share/texlive/texmf-dist/tex/latex/caption/caption.sty\
     /usr/share/texlive/texmf-dist/tex/latex/caption/caption3.sty\
@@ -203,6 +190,7 @@ thesis.pdf :\
     buffered_read.tex\
     direct_read.tex\
     direct_write.tex\
+    evaluation.tex\
     intro.tex\
     model.tex\
     protocols.tex\
@@ -221,15 +209,13 @@ thesis.pdf :\
 
 ../plots//buf-read-bw-threads.png :
 
-../plots//buf-read-lat-msgsize.png :
-
 ../plots//dir-read-bw-msgsize.png :
 
 ../plots//dir-read-bw-n1.png :
 
 ../plots//dir-read-bw-threads.png :
 
-../plots//dir-read-lat-msgsize.png :
+../plots//lat-msgsize.png :
 
 ../plots//send-bw-batch.png :
 
@@ -244,14 +230,6 @@ thesis.pdf :\
 ../plots//send-bw-threads.png :
 
 ../plots//send-bw-unack.png :
-
-../plots//send-lat-msgsize.png :
-
-../plots//write-atomic-bw-msgsize.png :
-
-../plots//write-atomic-bw-threads.png :
-
-../plots//write-atomic-lat-msgsize.png :
 
 ../plots//write-bw-msgsize.png :
 
@@ -275,10 +253,6 @@ thesis.pdf :\
 
 ../plots//write-direct-bw-threads.png :
 
-../plots//write-direct-lat-msgsize.png :
-
-../plots//write-lat-msgsize.png :
-
 /etc/texmf/web2c/texmf.cnf :
 
 /home/fischi/.texlive2020/texmf-var/fonts/pk/ljfour/jknappen/ec/tcrm1000.600pk :
@@ -289,19 +263,11 @@ thesis.pdf :\
 
 /usr/share/texlive/texmf-dist/fonts/tfm/public/amsfonts/cmextra/cmex7.tfm :
 
-/usr/share/texlive/texmf-dist/fonts/tfm/public/amsfonts/cmextra/cmex9.tfm :
-
 /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmbx10.tfm :
 
 /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmbx12.tfm :
 
-/usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmmi6.tfm :
-
-/usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmmi9.tfm :
-
 /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmr12.tfm :
-
-/usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmr6.tfm :
 
 /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmr9.tfm :
 
@@ -312,10 +278,6 @@ thesis.pdf :\
 /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmss17.tfm :
 
 /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmss9.tfm :
-
-/usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmsy6.tfm :
-
-/usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmsy9.tfm :
 
 /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmti10.tfm :
 
@@ -330,8 +292,6 @@ thesis.pdf :\
 /usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi10.pfb :
 
 /usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi7.pfb :
-
-/usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi9.pfb :
 
 /usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr10.pfb :
 
@@ -527,6 +487,8 @@ thesis.pdf :\
 
 /usr/share/texlive/texmf-dist/tex/latex/base/ifthen.sty :
 
+/usr/share/texlive/texmf-dist/tex/latex/base/omscmr.fd :
+
 /usr/share/texlive/texmf-dist/tex/latex/base/size10.clo :
 
 /usr/share/texlive/texmf-dist/tex/latex/caption/caption.sty :
@@ -620,6 +582,8 @@ buffered_read.tex :
 direct_read.tex :
 
 direct_write.tex :
+
+evaluation.tex :
 
 intro.tex :
 
