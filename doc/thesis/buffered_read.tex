@@ -1,6 +1,5 @@
 
 \section{Buffered Read}\label{sec:conn:buf_read}
-\subsection{Design}
 
 The idea of a buffered read protocol is to have a ring buffer at the sender from which the receiver fetches the messages using
 RDMA reads. There are multiple different ways to implement such a protocol, with the main variations being in, how to notify
@@ -66,17 +65,16 @@ results in a system with two ring buffers, illustrated in Figure~\ref{fig:buf_re
 \label{fig:buf_read_struct}
 \end{figure}
 
-\subsubsection{Sender}
+\subsubsection{Protocol}
 As mentioned the sender of our buffered read connection is entirely passive, that means after the connection setup the sending
-CPU does not issue any RDMA operations. The only thing it needs to do to send is to check its head if there is enough space
-left to write its the message to its ring buffer and write to its tail if there is. It also prepends the message size when 
-writing. The head is completely managed by the receiver and the tail pointer needs to be accessible to it.
+CPU does not issue any RDMA operations. The only thing it needs to do to send is to check its head if there is enough space,
+copies the message to its tail, and updates the tail.  It also prepends the message size when  writing. 
 
-\paragraph{} That means for the sender transmitting a message does only involve copying it to its local memory. This results in
+The head is completely managed by the receiver and the tail pointer needs to be accessible to it. That means for the sender 
+transmitting a message does only involve copying it to its local memory. This results in
 a very low sending overhead.
 
-\subsubsection{Receiver}
-A completely passive sender means the receiver has to do the heavy lifting. The receiver manages three different pointers: 
+\paragraph{} A completely passive sender means the receiver has to do the heavy lifting. The receiver manages three different pointers: 
 the \code{read\_pointer} which marks the beginning of the next message to receive, the \code{remote\_tail}, which is a cache of
 the senders tail and marks the end of the transmitted buffer section, and the \code{head} which marks the beginning of 
 the earliest not freed message.
@@ -89,7 +87,7 @@ If there are no transmitted messages to return, the receiver updates the \code{r
 tail has not updated it retries until it has. With the updated tail the receiver issues a RDMA read for the whole buffer 
 section between the read pointer and the updated tail. It then returns the next message in the newly transmitted section.
 
-This gives us an interesting characteristic of most receives being very cheap, while some are very expensive as the need to 
+This gives us an interesting characteristic of most receives being very cheap, while some are very expensive as they need to 
 perform a large read. We did not implement preemptive issuing of reads which could reduce this effect and improve performance
 significantly.
 
@@ -97,24 +95,19 @@ significantly.
 write connection. This allows us to update the \code{head} accordingly when freeing messages out of order and freeing will
 occasionally update the remote head using an RDMA write operation.
 
-\paragraph{} For both ring buffer we use the same \emph{"Magic Buffer"} trick introduced in Section~\ref{sec:conn:buf_write} to 
+\paragraph{} For both ring buffers we use the same \emph{"Magic Buffer"} trick introduced in Section~\ref{sec:conn:buf_write} to 
 allow us to wrap around the end of the buffer.
 
-\subsection{Conclusion}
+\subsection{Features}
 The Buffered Read connection is probably the most different protocol compared to the other connections we evaluate in this
 thesis. Our design ended up very similar to a \emph{Flow Structure}~\cite{sharma2020design}.
 
-The protocol gives us a completely \emph{Passive Sender} and through the inbuilt batching achieves the best throughput for 
-very small messages, but this also results in very high latency.
+\paragraph{} The protocol results in a completely \emph{Passive Sender} and achieves effective memory usage through \emph{Variable Message Sizes}.
+The buffered read protocol does not achieve \emph{True Zero-Copy} capabilities, as the sender always needs to copy the 
+message into the send buffer and the receiver will most likely need to copy the message out of the receive buffer. It also
+has the same \emph{Blocking} behaviour as the buffered write protocol.
 
-\paragraph{} With more optimization work and by relaxing some of the interface requirements, we could potentially solve 
-some of the performance limitations we encountered and we think this could result in near line rate throughput for nearly 
-all message sizes.
 
-For future work it would also be interesting to where multiple threads can write to and receive from a single connection 
-by atomically updating head or tail pointers. There could then be a dedicated thread at the receiver to handle the network
-transfer.
-
-\paragraph{} In the end the Buffered Read protocol has the potential to achieve very hight throughput by sacrificing low 
-latency. Such a protocol could be interesting for high volume systems that do not require extremely low latency, like some
-stream processing systems.
+\paragraph{} For future work it would also be interesting to implement a system where multiple threads can write to and receive 
+from a single  connection by atomically updating head or tail pointers, or we could explore the possibilities to share send or
+receive buffers using atomic operations. The current implementation however does not provide any kind of \emph{Resource Sharing}
