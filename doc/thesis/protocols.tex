@@ -8,7 +8,6 @@ features outside of raw performance that have been relevant for real-world appli
 protocols that all use different RDMA features and design approaches to implement message passing protocols with different 
 features and performance guarantees.
 
-\comment{need better title}
 \subsection{Definition}\label{sec:proto-def}
 
 Most research focuses on RPCs \cite{anuj-guide, fasst, herd}, remote datastructure access \cite{pilaf, farm}, or replicate 
@@ -26,65 +25,6 @@ message was fully received and $N_a$ must know that it can reuse $m$.
 
 We explicitly have no synchronisation requirements, so the sender does not need to know whether the receiver has actually 
 received the message.
-
-\paragraph{} As one of our goals is to be able to compare the different protocols we evaluate, we introduce a programming 
-interface that is implemented by nearly all of the 6 presented connection types.
-
-\paragraph{} Our protocol definition requires that the sender initiates the transfer. To achieve optimal performance it is
-necessary to avoid unnecessary copies and it is very important to not block on a single transfer, but to give a RNIC multiple
-requests to work on and fill up its processing pipeline. 
-
-This results roughly in the interface shown in Listing~\ref{list:sender}. Where we send a message by providing a reference
-to a previously allocated memory region, which asynchronously starts the message transfer. 
-
-\begin{figure}[htp]
-\begin{lstlisting} [caption={Sender interface},captionpos=b, label={list:sender}] 
-class Sender {
-    // Takes a registered region containing the message
-    // and initiates the transfer. Returns an ID 
-    // associated with this request
-    uint64_t SendAsync(SendRegion reg);
-
-    // Blocks until the request with the given ID is
-    // completed
-    void Wait(uint64_t id);
-}
-\end{lstlisting}
-\end{figure}
-
-\paragraph{} Almost all of our implementations of a receiver have fixed regions of memory to receive messages into. For an application 
-receiving means that the protocol returns a reference one of, or a part of, this memory regions. As soon as the application 
-has processed this message it needs to the protocol that it can reuse the corresponding buffer.
-
-This approach again avoid unnecessary copying from the protocols receive buffer to an application buffer if this is not 
-necessary.
-
-\begin{figure}[htp]
-\begin{lstlisting} [caption={My Caption},captionpos=b, label={list:receiver}] 
-class Receiver {
-    // Waits for an incoming message and returns
-    // the buffer containing it
-    ReceiveRegion Receive();
-
-    // Returns the previously received region 
-    // to be reused by the protocol
-    void Free(ReceiveRegion reg);
-}
-\end{lstlisting}
-\end{figure}
-
-\paragraph{} From now on when we talk about protocol implementations we are using these interfaces, as long as we do not 
-explicitly say otherwise.
-
-
-
-\paragraph{} We are able to wait for a specific work request to complete by issuing monotonically increasing IDs. We store the
-last ID with a matching completion event. If we try to wait on a lower ID we know we already received a matching completion 
-event prior, because of the in order guarantees of InfiniBand. If the provided ID is higher then the
-last seen ID, we  poll the completion queue until we receive one with a matching \code{wr\_id}.
-
-This approach will eventually lead to an overflow, but given our observed maximum message rate we do not expect to see this 
-happen in the next 10 thousand years. 
 
 
 
@@ -221,6 +161,76 @@ sender needs to notify the receiver when a new message arrives and where to read
 communication overhead but by being truly zero-copy this approach can be efficient, especially for large messages.
 
 We present our implementation of an \emph{Unbuffered Read Protocol} in Section~\ref{sec:conn:direct_read}
+
+
+\pagebreak
+\subsection{Interface}
+
+One of our goals is to be able to compare the different protocols we evaluate, we introduce a programming 
+interface that is implemented by nearly all of the six presented connection types. In this section we introduce this interface
+and describe a few implementation details that are shared by almost all of our connections.
+
+\subsubsection{Sender}
+
+Our protocol definition requires that the sender initiates the transfer. To achieve optimal performance it is
+necessary to avoid unnecessary copies and it is very important to not block on a single transfer, but to give a RNIC multiple
+requests to work on and fill up its processing pipeline. 
+
+This results roughly in the interface shown in Listing~\ref{list:sender}. Where we send a message by providing a reference
+to a previously allocated memory region, which asynchronously starts the message transfer. This asynchronous approach allows
+us to start multiple concurrent transmissions. Throughout this thesis we will talk about \emph{unacknowledged messages}, which
+are messages that have been sent, but the transfer has not yet been completed. These unacknowledged messages are very 
+important to achieve the best possible performance.
+
+\begin{figure}[htp]
+\begin{lstlisting} [caption={Sender Interface},captionpos=b, label={list:sender}] 
+class Sender {
+    // Takes a registered region containing the message
+    // and initiates the transfer. Returns an ID 
+    // associated with this request
+    uint64_t SendAsync(SendRegion reg);
+
+    // Blocks until the request with the given ID is
+    // completed
+    void Wait(uint64_t id);
+}
+\end{lstlisting}
+\end{figure}
+
+\paragraph{} To allow us to \code{Wait} for a specific work request, most of our implementation use the same process. 
+Initiating a send request returns a monotonically increasing IDs. This ID is also used as a \code{wr\_id} for the issued RDMA
+operation. We store the last ID with a matching completion event. If we try to wait on a lower ID we know we already received 
+a matching completion event prior, because of the in order guarantees of InfiniBand. If the provided ID is higher then the
+last seen ID, we poll the completion queue until we receive one with a matching \code{wr\_id}.
+
+This approach will eventually lead to an overflow, but given our observed  message rates we do not expect to see this 
+happen in the next 10 thousand years. 
+
+\subsubsection{Receiver}
+
+\paragraph{} Almost all of our implementations of a receiver have fixed regions of memory to receive messages into. 
+For an application receiving means that the protocol returns a reference one of, or a part of, this memory regions. 
+
+As soon as the application  has processed this message it needs to the protocol that it can reuse the corresponding buffer.
+We call this \emph{freeing} the receive buffer. This approach avoids unnecessary copying from the protocols receive buffer 
+to an application buffer if this is not necessary.
+
+\begin{figure}[htp]
+\begin{lstlisting} [caption={Receiver Interface},captionpos=b, label={list:receiver}] 
+class Receiver {
+    // Waits for an incoming message and returns
+    // the buffer containing it
+    ReceiveRegion Receive();
+
+    // Returns the previously received region 
+    // to be reused by the protocol
+    void Free(ReceiveRegion reg);
+}
+\end{lstlisting}
+\end{figure}
+
+
+
 
 
 
