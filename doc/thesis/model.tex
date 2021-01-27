@@ -54,7 +54,7 @@ us with the following parameters, which are illustrated in Figure~\ref{fig:model
 
 
   \draw[very thick] ($(p1_nic)!0.5!(p1_nic_g)$) --node[above,scale=0.75,midway]{$o_{nrcv}$} ($(p1_nic)!0.55!(p1_nic_g)$);
-  \draw[very thick] ($(p1)!0.50!(p1_g)$) --node[above,scale=0.75,midway]{$o_{free}$} ($(p1)!0.545!(p1_g)$);
+  \draw[very thick] ($(p1)!0.30!(p1_g)$) --node[above,scale=0.75,midway]{$o_{post}$} ($(p1)!0.345!(p1_g)$);
   \draw[very thick] ($(p1)!0.55!(p1_g)$) --node[above,scale=0.75,midway]{$o_{rcv}$} ($(p1)!0.6!(p1_g)$);
     
   %%%%
@@ -97,61 +97,89 @@ us with the following parameters, which are illustrated in Figure~\ref{fig:model
   \item $o_{nsnd}$: the \emph{send NIC overhead}, defined as the length of time that a NIC is engaged in sending each message.
   \item $o_{nrcv}$: the \emph{receive NIC overhead}, defined as the length of time that a NIC is engaged in receiving each message.
   \item $o_{rcv}$: the \emph{receive overhead}, defined as the length of time that a processor is engaged in receiving each message.
-  \item $o_{free}$: the \emph{freeing overhead}, defined as the time that a processor is engaged in preparing a receive buffer
-    to receive into (e.g. post receive)
+  \item $o_{post}$: the \emph{posting overhead}, defined as the time that a processor is engaged in preparing a receive buffer
+    to receive into (e.g. post receive). This needs to happen sometime before receiving the next message.
 \end{itemize}
 
-\paragraph{} This model completely ignores the PCI bandwidth and latency and essentially integrates it into the network latency
-and bandwidth. It also does not take the MTU into account. While some prior work use a slightly different model when sending 
-messages over the MTU, that span multiple transmission units~\cite{dare}, we found our model to work well enough to understand
+\paragraph{} This model does not take the MTU into account. While some prior work use a slightly different model when sending 
+messages over the MTU, that span multiple transmission units~\cite{dare}, we found our model to works well enough to understand
 most of our results.
 
-\paragraph{} We built this model around send or write based protocols and it does not seem to be a very good representation 
-for read based protocols. But as we will see it can still give us better insight in the observed performance, even if 
-it was not explicitly designed for them.
+\paragraph{} We built this model around send or write based protocols and it was not designed 
+for read based protocols. But as we will see it can still give us better insight in the observed performance.
 
 \paragraph{} Even with these simplifications it still is a fairly complex model and measuring each of these overheads in 
 practice is very hard. We do not try to quantitatively evaluate our model for all presented protocols, but rather use it 
 get a better general understanding of the observed performance characteristics and to understand what is limiting throughput
 or latency in which situations.
 
+\pagebreak
 \subsection{Evaluating the Model}
 
 \paragraph{} We evaluate the model in this section for the send-receive protocol only. Table~\ref{tab:model} shows our model
-parameter estimations.
-
-While we will see that our model is not quite able to accurately predict our bandwidth and latency measurements, it does 
-give us a better understanding of our results and predicts the different bottlenecks we encounter in our evaluation.
+parameter estimations. 
 
 \begin{table}[!ht]
 \setlength\tabcolsep{1.5pt}
 \centering
- \begin{tabular}{|x{2.15cm}|x{2cm}|x{2cm}|} % I specify the sizes of columns. x is for centering and p is  for left
+\caption{Model parameter for send-receive protocol}
+\label{tab:model}
+\begin{threeparttable}[t]
+ \begin{tabular}{|x{3.5cm}|x{3.5cm}|x{3.5cm}|} % I specify the sizes of columns. x is for centering and p is  for left
  \hline
- Parameter    &  seq & batched \\
+ Parameter    &  single & batched \\
   \hline
   \hline
  $o_{snd}$    & $0.12 \mu s$ &  $0.016 \mu s$\\
   \hline
  $o_{rcv}$    &  & $0.007 \mu s$\\
   \hline
- $o_{free}$   &  & \\
+ $o_{post}$   &  & \\
   \hline
- $o_{nsnd}$   & $0.02 \mu s$ &  \cellcolor{black!40} \\
+ $o_{nsnd}$   & $0.02 \mu s$\tnote{a} &  \cellcolor{black!40} \\
   \hline
- $o_{nrcv}$   & $0.02 \mu s$ &  \cellcolor{black!40} \\
+ $o_{nrcv}$   & $0.02 \mu s$\tnote{a} &  \cellcolor{black!40} \\
   \hline
  $L$          & $1.9 \mu s$ &  \cellcolor{black!40}\\
   \hline
- $g$          & $\geq 3.4 \mu s$  & \cellcolor{black!40}\\
+ $g$          & $\geq 3.4 \mu s$\tnote{b}  & \cellcolor{black!40}\\
  \hline
  $G$          & $0.2\mu s / KB$  & $0.084\mu s / KB$\\
 
 \hline
 \end{tabular}
-\caption{Model parameter for send-receive protocol}
-\label{tab:model}
+\begin{tablenotes}
+\item[a] \small The on NIC overheads are expected to be very small and are hard to accurately measure
+\item[b] \small Very protocol dependent. Increases linearly for the send-receive protocol
+\end{tablenotes}
+\end{threeparttable}
 \end{table}
+
+
+\paragraph{} We are able to directly measure $o_{snd}$, $o_{rcv}$, and $o_{post}$. For the send-receive protocol $o_{snd}$ is the cost of 
+posting a single send request. The receiving overhead $o_{rcv}$ is the cost of polling for a receive completion event. And
+$o_{post}$ is the cost for posting a single receive request. For all of these overheads we measure both the cost of a single
+operation, as well as the cost per message when issuing multiple operations in a batch.
+
+\paragraph{} The gap $g$ is also directly measurable. This is the time it takes until the send is completed and has been
+acknowledged. The lower bound for this is at $3.4\mu s$, or a bit less then twice the network latency L. But it increases
+linearly with the size of the message $k$.
+
+It is worth noting here, that our reported network latency $L$ includes both the PCI latency as well as the latency
+of the switch between our two nodes.
+
+\paragraph{} For the network bandwidth G we also report a batched and unbatched estimation. We use the unbatched estimation
+for our latency prediction and the batched estimation for our throughput predictions.
+
+\paragraph{} Evaluating the RNIC overhead is tricky. We make the assumption that $o_{nsnd} = o_{nrcv}$ and use our latency
+and bandwidth measurement to estimate these parameters. This gives us a good enough estimation for a 1:1 communication pattern.
+
+
+
+
+\paragraph{} While we will see that our model is not quite able to accurately predict our bandwidth and latency 
+measurements, it does  give us a better understanding of our results and predicts the different types of bottlenecks 
+we encounter in our evaluation.
 
 \subsubsection{Predicting Latency}
 
@@ -162,12 +190,6 @@ $$
 t \geq o_{snd} + o_{nsnd}  + (k-1)G + L + o_{nrcv} + o_{rcv}
 $$
 
-Both $o_{snd}$ and $o_{rcv}$ can be directly measured. Evaluating the rest of the parameters however is a bit trickier. 
-\comment{How did you evaluate network latency?} With the latency an bandwidth measurements we had and the assumption that
-$o_{nsnd} = o_{nrcv}$ we come up with parameter estimations seen in Table~\ref{tab:model}. 
-The assumption that $o_{nsnd}$ is the same as $o_{nrcv}$ is most likely not correct, but gives us a good enough estimation
-for a 1:1 communication pattern.
-
 
 \begin{figure}[ht]
   \centering
@@ -177,7 +199,7 @@ for a 1:1 communication pattern.
 \end{figure}
 
 \paragraph{} Figure~\ref{fig:model-lat} shows our prediction and the actual latency measurements for the send-receive protocol.
-We can see that we are not quite able to precisely match the actual data, most likely caused by our simplifications. It does
+We can see that we are not quite able to precisely match the actual data. It does
 however confirm our prediction of a mostly linear increase in latency with increased message size.
 
 
@@ -220,18 +242,16 @@ bw \leq \frac{k}{o_{snd}}
 $$
 
 
-
-This happens surprisingly often for smaller messages. The send-receive protocol with a sufficient amount
-of unacknowledged messages (SR) shows this performance characteristic in Figure~\ref{fig:model-bw}. We can see the linearly
+The send-receive protocol (SR) allows for multiple unacknowledged messages and avoid the previous bottleneck. 
+This implementations is limited by a sending CPU bottleneck. In Figure~\ref{fig:model-bw} we can see the linearly
 increasing throughput we predict until we reach a message size of 2 KB where we start to be limited by the NIC.
 
 \paragraph{} We can avoid this bottleneck by introducing batching. The verbs API allows us to post multiple work request at 
 the same time. This \emph{Doorbell batching} reduces the number of generated MMIOs~\cite{anuj-guide} and reduces the CPU load.
-By our measurements batching can reduce the sending CPU overhead $o_{snd}$ by up to a factor of 10. 
+We measured that batching can reduce the sending CPU overhead $o_{snd}$ by up to a factor of 10. 
 
 When introducing doorbell batching to the send-receive protocol we never seem to be bottlenecked by the sending CPU as 
 can be seen for the batched measurement SR-Bat in Figure~\ref{fig:model-bw}.
-
 Although this can drastically improve bandwidth, we will not evaluate other protocols with doorbell batching, as it is
 not directly applicable to some of the protocols and for connected QPs application level batching, i.e. sending larger 
 messages, is a better approach.
@@ -240,7 +260,7 @@ messages, is a better approach.
 This gives us a predicted limit of
 
 $$
-bw \leq \frac{k}{o_{rcv} + o_{free}}
+bw \leq \frac{k}{o_{rcv} + o_{post}}
 $$
 
 This results in a very similar bottleneck which is proportional to the message size. We do not encounter this bottleneck for
@@ -262,5 +282,4 @@ flatten out into the maximum possible goodput of the network link.
 
 Looking at the batched throughput results SR-Bat in Figure~\ref{fig:model-bw}, this is qualitatively what we expect 
 when being only limited by the RNIC. We are however not able to accurately predict the results for smaller messages 
-using our current model. This is a limitation of our model, probably caused by ignoring the PCI interactions or possibly
-by not modeled on NIC batching.
+using our current model. This is a limitation of our model,  possibly caused by not modeled on NIC optimizations.
