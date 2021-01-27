@@ -82,6 +82,35 @@ space of data exchange protocols, we show different approaches and point out spe
 as an inspiration for other developers to design their own protocols.
 
 
+\begin{table}[!ht]
+\renewcommand{\arraystretch}{2}
+\setlength\tabcolsep{1.5pt}
+\centering
+ \begin{tabular}{|x{2.4cm}|x{1.5cm}|x{1.5cm}|x{1.5cm}|x{1.5cm}|x{1.5cm}|x{1.5cm}|} % I specify the sizes of columns. x is for centering and p is  for left
+ \hline
+ Protocol    & Zero Copy & Variable Message Size & Passive Sender / Receiver & Interrupts & Non-Blocking & Resource Sharing\\
+  \hline
+  \hline
+ Send-Receive (SR)   & & & & \checkmark  &  \checkmark & \checkmark\\
+  \hline
+  \hline
+ Direct-Write (DW)   & (\checkmark) & & &  &  \checkmark & \\
+  \hline
+ Buffered-Write (BW)  &  & \checkmark & Receiver & (\checkmark) &   & \\
+  \hline
+ Shared-Write (SW)    &  & \checkmark &  & \checkmark &   & \checkmark \\
+  \hline
+  \hline
+ Direct-Read (DR)    & \checkmark  & \checkmark &  & \checkmark &   \checkmark & \\
+  \hline
+ Buffered-Read (BR)  &  & \checkmark & Sender &  &   & \\
+\hline
+\end{tabular}
+\caption{Protocol Overview}
+\label{tab:model}
+\end{table}
+
+
 \paragraph{} One way to split all possible exchange protocols is by the verbs they use to transfer the actual 
 data, and we look at each of these verbs separately, as these all work in different ways and have different requirements
 
