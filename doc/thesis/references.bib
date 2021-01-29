@@ -196,3 +196,131 @@ keywords = {RDMA, Scalability, Resource Sharing},
 location = {Dresden, Germany},
 series = {EuroSys '19}
 }
+
+@article{ziegler2020rdma,
+  title={RDMA Communciation Patterns},
+  author={Ziegler, Tobias and Leis, Viktor and Binnig, Carsten},
+  journal={Datenbank-Spektrum},
+  volume={20},
+  number={3},
+  pages={199--210},
+  year={2020},
+  publisher={Springer}
+}
+
+@article{Huang2019AnEO,
+  title={An Evaluation of RDMA-based Message Passing Protocols},
+  author={H. Huang and Shahram Ghandeharizadeh},
+  journal={2019 IEEE International Conference on Big Data (Big Data)},
+  year={2019},
+  pages={3340-3349}
+}
+
+@ARTICLE{nessie,  author={B. {Cassell} and T. {Szepesi} and B. {Wong} and T. {Brecht} and J. {Ma} and X. {Liu}},  journal={IEEE Transactions on Parallel and Distributed Systems},   title={Nessie: A Decoupled, Client-Driven Key-Value Store Using RDMA},   year={2017},  volume={28},  number={12},  pages={3537-3552},  doi={10.1109/TPDS.2017.2729545}}
+
+
+@inproceedings{memcached,
+author = {Jose, Jithin and Subramoni, Hari and Luo, Miao and Zhang, Minjia and Huang, Jian and Rahman, Md and Islam, Nusrat and Ouyang, Xiangyong and Wang, Hao and Sur, Sayantan and Panda, D.K.},
+year = {2011},
+month = {10},
+pages = {743 - 752},
+title = {Memcached Design on High Performance RDMA Capable Interconnects},
+doi = {10.1109/ICPP.2011.37}
+}
+
+@inproceedings{dbrackjoin,
+author = {Barthels, Claude and Loesing, Simon and Alonso, Gustavo and Kossmann, Donald},
+title = {Rack-Scale In-Memory Join Processing Using RDMA},
+year = {2015},
+isbn = {9781450327589},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+url = {https://doi.org/10.1145/2723372.2750547},
+doi = {10.1145/2723372.2750547},
+abstract = {Database systems running on a cluster of machines, i.e. rack-scale databases, are a common architecture for many large databases and data appliances. As the data movement across machines is often a significant bottleneck, these systems typically use a low-latency, high-throughput network such as InfiniBand. To achieve the necessary performance, parallel join algorithms must take advantage of the primitives provided by the network to speed up data transfer.In this paper we focus on implementing parallel in-memory joins using Remote Direct Memory Access (RDMA), a communication mechanism to transfer data directly into the memory of a remote machine. The results of this paper are, to our knowledge, the first detailed analysis of parallel hash joins using RDMA. To capture their behavior independently of the network characteristics, we develop an analytical model and test our implementation on two different types of networks. The experimental results show that the model is accurate and the resulting distributed join exhibits good performance.},
+booktitle = {Proceedings of the 2015 ACM SIGMOD International Conference on Management of Data},
+pages = {1463–1475},
+numpages = {13},
+keywords = {rack scale databases, distributed join, distributed query processing, join processing with rdma},
+location = {Melbourne, Victoria, Australia},
+series = {SIGMOD '15}
+}
+
+
+@inproceedings{broker,
+author = {Makait, Hendrik},
+title = {Rethinking Message Brokers on RDMA and NVM},
+year = {2020},
+isbn = {9781450367356},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+url = {https://doi.org/10.1145/3318464.3384403},
+doi = {10.1145/3318464.3384403},
+abstract = {Over the last years, message brokers have become an important part of enterprise systems. As microservice architectures gain popularity and the need to analyze data produced by these services grows, companies increasingly rely on message brokers to orchestrate the flow of events between different applications as well as between data-producing services and streaming engines that analyze the data in real-time.},
+booktitle = {Proceedings of the 2020 ACM SIGMOD International Conference on Management of Data},
+pages = {2833–2835},
+numpages = {3},
+keywords = {messaging, modern hardware, NVRAM, RDMA, distributed, message broker},
+location = {Portland, OR, USA},
+series = {SIGMOD '20}
+}
+
+@INPROCEEDINGS{hbase,  author={J. {Huang} and X. {Ouyang} and J. {Jose} and M. {Wasi-ur-Rahman} and H. {Wang} and M. {Luo} and H. {Subramoni} and C. {Murthy} and D. K. {Panda}},  booktitle={2012 IEEE 26th International Parallel and Distributed Processing Symposium},   title={High-Performance Design of HBase with RDMA over InfiniBand},   year={2012},  volume={},  number={},  pages={774-785},  doi={10.1109/IPDPS.2012.74}}
+
+
+
+@INPROCEEDINGS{hdfs,  author={N. S. {Islam} and M. W. {Rahman} and J. {Jose} and R. {Rajachandrasekar} and H. {Wang} and H. {Subramoni} and C. {Murthy} and D. K. {Panda}},  booktitle={SC '12: Proceedings of the International Conference on High Performance Computing, Networking, Storage and Analysis},   title={High performance RDMA-based design of HDFS over InfiniBand},   year={2012},  volume={},  number={},  pages={1-12},  doi={10.1109/SC.2012.65}}
+
+
+@article{polarfs,
+author = {Cao, Wei and Liu, Zhenjun and Wang, Peng and Chen, Sen and Zhu, Caifeng and Zheng, Song and Wang, Yuhui and Ma, Guoqing},
+title = {PolarFS: An Ultra-Low Latency and Failure Resilient Distributed File System for Shared Storage Cloud Database},
+year = {2018},
+issue_date = {August 2018},
+publisher = {VLDB Endowment},
+volume = {11},
+number = {12},
+issn = {2150-8097},
+url = {https://doi.org/10.14778/3229863.3229872},
+doi = {10.14778/3229863.3229872},
+abstract = {PolarFS is a distributed file system with ultra-low latency and high availability, designed for the POLARDB database service, which is now available on the Alibaba Cloud. PolarFS utilizes a lightweight network stack and I/O stack in user-space, taking full advantage of the emerging techniques like RDMA, NVMe, and SPDK. In this way, the end-to-end latency of PolarFS has been reduced drastically and our experiments show that the write latency of PolarFS is quite close to that of local file system on SSD. To keep replica consistency while maximizing I/O throughput for PolarFS, we develop ParallelRaft, a consensus protocol derived from Raft, which breaks Raft's strict serialization by exploiting the out-of-order I/O completion tolerance capability of databases. ParallelRaft inherits the understand-ability and easy implementation of Raft while providing much better I/O scalability for PolarFS. We also describe the shared storage architecture of PolarFS, which gives a strong support for POLARDB.},
+journal = {Proc. VLDB Endow.},
+month = aug,
+pages = {1849–1862},
+numpages = {14}
+}
+
+@inproceedings{rfp,
+author = {Su, Maomeng and Zhang, Mingxing and Chen, Kang and Guo, Zhenyu and Wu, Yongwei},
+title = {RFP: When RPC is Faster than Server-Bypass with RDMA},
+year = {2017},
+isbn = {9781450349383},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+url = {https://doi.org/10.1145/3064176.3064189},
+doi = {10.1145/3064176.3064189},
+abstract = {Remote Direct Memory Access (RDMA) has been widely deployed in modern data centers. However, existing usages of RDMA lead to a dilemma between performance and redesign cost. They either directly replace socket-based send/receive primitives with the corresponding RDMA counterpart (server-reply), which only achieves moderate performance improvement; or push performance further by using one-sided RDMA operations to totally bypass the server (server-bypass), at the cost of redesigning the software.In this paper, we introduce two interesting observations about RDMA. First, RDMA has asymmetric performance characteristics, which can be used to improve server-reply's performance. Second, the performance of server-bypass is not as good as expected in many cases, because more rounds of RDMA may be needed if the server is totally bypassed. We therefore introduce a new RDMA paradigm called Remote Fetching Paradigm (RFP). Although RFP requires users to set several parameters to achieve the best performance, it supports the legacy RPC interfaces and hence avoids the need of redesigning application-specific data structures. Moreover, with proper parameters, it can achieve even higher IOPS than that of the previous paradigms.We have designed and implemented an in-memory key-value store based on RFP to evaluate its effectiveness. Experimental results show that RFP improves performance by 1.6\texttimes{}~4\texttimes{} compared with both server-reply and server-bypass paradigms.},
+booktitle = {Proceedings of the Twelfth European Conference on Computer Systems},
+pages = {1–15},
+numpages = {15},
+location = {Belgrade, Serbia},
+series = {EuroSys '17}
+}
+
+@inproceedings{scalerpc,
+author = {Chen, Youmin and Lu, Youyou and Shu, Jiwu},
+title = {Scalable RDMA RPC on Reliable Connection with Efficient Resource Sharing},
+year = {2019},
+isbn = {9781450362818},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+url = {https://doi.org/10.1145/3302424.3303968},
+doi = {10.1145/3302424.3303968},
+abstract = {RDMA provides extremely low latency and high bandwidth to distributed systems. Unfortunately, it fails to scale and suffers from performance degradation when transferring data to an increasing number of targets on Reliable Connection (RC). We observe that the above scalability issue has its root in the resource contention in the NIC cache, the CPU cache and the memory of each server. In this paper, we propose ScaleRPC, an efficient RPC primitive using one-sided RDMA verbs on reliable connection to provide scalable performance. To effectively alleviate the resource contention, ScaleRPC introduces 1) connection grouping to organize the network connections into groups, so as to balance the saturation and thrashing of the NIC cache; 2) virtualized mapping to enable a single message pool to be shared by different groups of connections, which reduces CPU cache misses and improve memory utilization. Such scalable connection management provides substantial performance benefits: By deploying ScaleRPC both in a distributed file system and a distributed transactional system, we observe that it achieves high scalability and respectively improves performance by up to 90% and 160% for metadata accessing and SmallBank transaction processing.},
+booktitle = {Proceedings of the Fourteenth EuroSys Conference 2019},
+articleno = {19},
+numpages = {14},
+keywords = {Scalability, Resource Sharing, RDMA},
+location = {Dresden, Germany},
+series = {EuroSys '19}
+}
