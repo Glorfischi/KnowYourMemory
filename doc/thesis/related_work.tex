@@ -1,6 +1,6 @@
 \section{Related Work}
 
-In recent years there has been a lot of work on making effective use of RDMA, and on avoiding pitfalls of designing  
+In recent years there has been a lot of work on making effective use of RDMA and on avoiding pitfalls of designing  
 RDMA enabled protocols. Most of it focuses on either low level verb performance or design and evaluate much higher level
 abstractions that mostly focus on RPC performance or the performance of a whole system.
 
@@ -24,26 +24,24 @@ characteristics. In RPC clients write their request to a request buffer on the s
 and writes the result to a local buffer and the client polls this buffer for the response. Reduces server side load and 
 makes it \emph{passive} from a network interaction standpoint. A feature we also look at in this thesis.
 
-ScaleRPC~\cite{scalerpc} and other work~\cite{fasst, herd, rfp} addresses the scalability of RDMA for RPCs when using 
+ScaleRPC~\cite{scalerpc} and other work~\cite{fasst, rfp, herd} address the scalability of RDMA for RPCs when using 
 \emph{Reliable Connections}. They point out that the main scalability problem of reliable connections stem from limited 
 RNIC and CPU caches, resulting in cache thrashing with a large amount of active QPs. ScaleRPC uses RDMA writes to 
 transmit both requests as well as responses. It addresses scaling problem with temporal slicing.
 
 
 
-\paragraph{} So there has been quite a lot of research into designing fast and scalable RDMA system. This thesis aims to take
+\paragraph{} There has been quite a lot of research into designing fast and scalable RDMA system. This thesis aims to take
 a step back and take a broader look at RDMA based protocols for data exchange. A recent master thesis of the University of 
-Waterloo~\cite{sharma2020design} saw a similar need for a design space analysis. The look at the design space of \emph{flow structures} 
+Waterloo~\cite{sharma2020design} saw a similar need for a design space analysis. They look at the design space of \emph{flow structures} 
 a much narrower protocol definition we are using, but provides a similar analysis of possible protocols and their features.
 
 
 \subsection{RDMA Systems}
 
-There has been an increasing number of distributed systems using RDMA features. \comment{We should add some more systems..}
+There have been a lot of work on designing and evaluating new systems that take full advantage of RDMA features.
 
-\paragraph{} There have been a lot of work on designing and evaluating new systems that take full advantage of RDMA features.
-
-There many papers on optimizing RDMA enabled key-value stores. There are designs like Nessie~\cite{nessie} that is 
+Many papers focus on optimizing RDMA enabled key-value stores. There are designs like Nessie~\cite{nessie} that is 
 client-driven and only relies on one-sided verbs like RDMA read, write, and atomics to issue \code{GET}, \code{PUT}
 or \code{DELETE} operations without server side polling.
 Systems like Pilaf~\cite{pilaf} and FaRM~\cite{farm} also use RDMA reads to perform \code{GET} operations, they both use 

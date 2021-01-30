@@ -10,7 +10,7 @@ especially if we start to look at more complex protocols. We introduce a more si
 traditional IP based networks.
 
 \paragraph{} At its core the LogGP model uses a fixed CPU overhead $o$ per message, the communication latency $L$, and 
-the bandwidth $G$. While this results in a decent model IP based system, it is unable to model the heavy NIC offloading 
+the bandwidth $G$. While this results in a decent model for IP based system, it is unable to model the heavy NIC offloading 
 happening in RDMA. We extended the LogGP model by splitting the offset $o$ into multiple offsets for each of the components.
 We also largely ignored the number of processes $P$ and use a slightly different definition for the gap $g$. This leaves 
 us with the following parameters, which are illustrated in Figure~\ref{fig:model-base}.
@@ -91,7 +91,7 @@ us with the following parameters, which are illustrated in Figure~\ref{fig:model
   \item $G$: the gap per byte for long messages. For our purposes this is the time of sending a single byte given the 
     maximum bandwidth of our link.
   \item $o_{snd}$: the \emph{send overhead}, defined as the length of time that a processor is engaged in sending each message.
-    For some protocols this also includes any preparation an communication overhead necessary to send a message.
+    For some protocols this also includes any preparation and communication overhead necessary to send a message.
   \item $g$: the \emph{send gap}, defined as the minimum time interval until the sender can reuse the resources involved in 
     the transmission. (e.g. the send buffer) 
   \item $o_{nsnd}$: the \emph{send NIC overhead}, defined as the length of time that a NIC is engaged in sending each message.
@@ -106,7 +106,8 @@ messages over the MTU, that span multiple transmission units~\cite{dare}, we fou
 most of our results.
 
 \paragraph{} We built this model around send or write based protocols and it was not designed 
-for read based protocols. But as we will see it can still give us better insight in the observed performance.
+for read based protocols. But as we will see it can still give us better insight in the observed performance of these 
+protocols.
 
 \paragraph{} Even with these simplifications it still is a fairly complex model and measuring each of these overheads in 
 practice is very hard. We do not try to quantitatively evaluate our model for all presented protocols, but rather use it 
@@ -116,8 +117,8 @@ or latency in which situations.
 \pagebreak
 \subsection{Evaluating the Model}
 
-\paragraph{} We evaluate the model in this section for the send-receive protocol only. Table~\ref{tab:model} shows our model
-parameter estimations. 
+\paragraph{} In this section we evaluate the model for the send-receive protocol only. Table~\ref{tab:model} shows our model
+parameter estimates. 
 
 \begin{table}[!ht]
 \setlength\tabcolsep{1.5pt}
@@ -205,7 +206,7 @@ however confirm our prediction of a mostly linear increase in latency with incre
 
 \subsubsection{Predicting Bandwidth}
 Predicting maximum bandwidth is not quite as simple as adding up all parameters. The model predicts three different kinds of
-bottlenecks. We take a look at each of these bottlenecks and illustrate the send-receive protocol in Figure~\ref{fig:model-bw}.
+bottlenecks. We take a look at each of these bottlenecks and illustrate them on the send-receive protocol in Figure~\ref{fig:model-bw}.
 
 \begin{figure}[ht]
   \centering
@@ -282,4 +283,4 @@ flatten out into the maximum possible goodput of the network link.
 
 Looking at the batched throughput results SR-Bat in Figure~\ref{fig:model-bw}, this is qualitatively what we expect 
 when being only limited by the RNIC. We are however not able to accurately predict the results for smaller messages 
-using our current model. This is a limitation of our model,  possibly caused by not modeled on NIC optimizations.
+using our current model. This is a limitation of our model,  possibly caused by not modeled hardware optimizations.

@@ -1,13 +1,13 @@
 
 \section{Buffered Read}\label{sec:conn:buf_read}
 
-The idea of a buffered read protocol is to have a ring buffer at the sender from which the receiver fetches the messages using
+The idea of a buffered read protocol is to have a ring-buffer at the sender from which the receiver fetches the messages using
 RDMA reads. There are multiple different ways to implement such a protocol, with the main variations being in, how to notify
 the receiver of new messages, where to transfer them to, and how to acknowledge to the sender that a message has been processed.
 
 \paragraph{} We decided to focus on an implementation which gives us a \emph{Passive Sender} and allows for 
 \emph{Variable Message Sizes}. We decided to stick with the basic interface defined in Section~\ref{sec:protocols}. This 
-results in a system with two ring buffers, illustrated in Figure~\ref{fig:buf_read_struct}.
+results in a system with two ring-buffers, illustrated in Figure~\ref{fig:buf_read_struct}.
 
 \begin{figure}[!ht]
 \centering
@@ -68,7 +68,7 @@ results in a system with two ring buffers, illustrated in Figure~\ref{fig:buf_re
 \subsubsection{Protocol}
 As mentioned the sender of our buffered read connection is entirely passive, that means after the connection setup the sending
 CPU does not issue any RDMA operations. The only thing it needs to do to send is to check its head if there is enough space,
-copies the message to its tail, and updates the tail.  It also prepends the message size when  writing. 
+copy the message to its tail, and update the tail offset.  It also prepends the message size when  writing. 
 
 The head is completely managed by the receiver and the tail pointer needs to be accessible to it. That means for the sender 
 transmitting a message does only involve copying it to its local memory. This results in
@@ -84,7 +84,7 @@ we have not received yet. Meaning the \code{read\_pointer} is not equal to the \
 return the next message with the length at the beginning of the buffer and update the \code{read\_pointer}.
 
 If there are no transmitted messages to return, the receiver updates the \code{remote\_tail} with an RDMA read. If the remote
-tail has not updated it retries until it has. With the updated tail the receiver issues a RDMA read for the whole buffer 
+tail has not updated it retries until it has. With the updated tail the receiver issues an RDMA read for the whole buffer 
 section between the read pointer and the updated tail. It then returns the next message in the newly transmitted section.
 
 This gives us an interesting characteristic of most receives being very cheap, while some are very expensive as they need to 
@@ -95,7 +95,7 @@ significantly.
 write connection. This allows us to update the \code{head} accordingly when freeing messages out of order and freeing will
 occasionally update the remote head using an RDMA write operation.
 
-\paragraph{} For both ring buffers we use the same \emph{"Magic Buffer"} trick introduced in Section~\ref{sec:conn:buf_write} to 
+\paragraph{} For both ring-buffers we use the same \emph{"Magic Buffer"} trick introduced in Section~\ref{sec:conn:buf_write} to 
 allow us to wrap around the end of the buffer.
 
 \subsection{Features}

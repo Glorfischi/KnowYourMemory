@@ -20,7 +20,7 @@ set output "plots/buf-read-bw-msgsize.png"
 set xlabel "Message size (bytes)" 
 set ylabel "Bandwith (Gbit/s)" enhanced
 set yrange [0:100]
-set ytics 0, 5, 100 nomirror
+set ytics 0, 10, 100 nomirror
 set xrange [16:20000]
 
 

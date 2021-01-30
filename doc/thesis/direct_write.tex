@@ -1,11 +1,11 @@
 \section{Direct Write}\label{sec:conn:direct_write}
 
-The idea of the \emph{Unbuffered} or \emph{Direct Write Protocol} is to avoid unnecessary copying we have when using
-a buffered write connection with a ring buffer. We can achieve this by having the receiver specify specific memory 
+The idea of the \emph{Unbuffered} or \emph{Direct Write Protocol} is to avoid the unnecessary copying we have when using
+a buffered write connection with a ring-buffer. We can achieve this by having the receiver specify  memory 
 regions for the sender to write to. 
 
 \paragraph{} For this thesis we implemented something very reminiscent of the send receive protocol. The core idea is for
-the receiver to send infomation on prepared receive buffer the sender. The sender will then use these buffers in order. 
+the receiver to send information on prepared receive buffers to the sender. The sender will then use these buffers in order. 
 
 
 
@@ -18,31 +18,25 @@ the receiver to send infomation on prepared receive buffer the sender. The sende
   \node[align=center] at (2.5, 2.5) {Receiver};
 
   \node [fill=white] at (-2.5, 1.5) (A) {\tiny addr};
-  \node [anchor=west, fill=white] at (A.east) (A1) {\tiny rkey};
-  \node [anchor=west, minimum width=.25cm, fill=white] at (A1.east) (A2) {\tiny v};
+  \node [anchor=west, minimum width=.25cm, fill=white] at (A.east) (A2) {\tiny v};
 
   \node [anchor=north, fill=black!35] at (A.south) (B) {\tiny a3};
-  \node [anchor=west, fill=black!35] at (B.east) (B1) {\tiny 1};
-  \node [anchor=west, minimum width=.25cm, fill=black!35] at (B1.east) (B2) {\tiny 0};
+  \node [anchor=west, minimum width=.25cm, fill=black!35] at (B.east) (B2) {\tiny 0};
 
   \node [anchor=north, fill=black!35] at (B.south) (C) {\tiny b5};
-  \node [anchor=west, fill=black!35] at (C.east) (C1) {\tiny 1};
-  \node [anchor=west, minimum width=.25cm, fill=black!35] at (C1.east) (C2) {\tiny 0};
+  \node [anchor=west, minimum width=.25cm, fill=black!35] at (C.east) (C2) {\tiny 0};
 
   \node [anchor=north, fill=black!05] at (C.south) (D) {\tiny c8};
-  \node [anchor=west, fill=black!05] at (D.east) (D1) {\tiny 1};
-  \node [anchor=west, minimum width=.25cm, fill=black!05] at (D1.east) (D2) {\tiny 1};
+  \node [anchor=west, minimum width=.25cm, fill=black!05] at (D.east) (D2) {\tiny 1};
   \draw [<-,black!40!blue] (D.west) --  +(-.5,0)
         node [black!40!blue,left,inner xsep=.2, draw=none] (Tail) {\tiny next send};
 
 
   \node [anchor=north, fill=black!05] at (D.south) (E) {\tiny d2};
-  \node [anchor=west, fill=black!05] at (E.east) (E1) {\tiny 1};
-  \node [anchor=west, minimum width=.25cm, fill=black!05] at (E1.east) (E2) {\tiny 1};
+  \node [anchor=west, minimum width=.25cm, fill=black!05] at (E.east) (E2) {\tiny 1};
 
   \node [anchor=north, fill=black!35] at (E.south) (F) {\tiny f3};
-  \node [anchor=west, fill=black!35] at (F.east) (F1) {\tiny 1};
-  \node [anchor=west, minimum width=.25cm, fill=black!35] at (F1.east) (F2) {\tiny 0};
+  \node [anchor=west, minimum width=.25cm, fill=black!35] at (F.east) (F2) {\tiny 0};
   \draw [<-,black!40!green] (F2.east) --  +(.5,0)
         node [black!40!green,right,inner xsep=.2, draw=none] (head) {\tiny next free};
 
@@ -81,12 +75,11 @@ will reference these data structures.
 \subsection{Protocol}
 
 The sender has an array of structs, which we call \code{BufferInfo} in local memory. This array is populated by the 
-receiver and represent receive buffer to which the sender is allowed to write to. The struct contains three fields: 
-\code{addr}, which is the virtual address of the corresponding buffer in the receivers memory, \code{rkey}, which is the 
-rkey of that buffer, and \code{valid} which indicates whether this entry is actually valid. 
-\comment{I just realized I never covered rkeys.. Is this necessary?}
+receiver and represent receive buffers to which the sender is allowed to write to. The struct contains two fields: 
+\code{addr}, which is the virtual address of the corresponding buffer in the receivers memory, and \code{valid} which 
+indicates whether this entry is actually valid. 
 
-\paragraph{} This array acts as a ring buffer, so when sending a message, the sender looks at the next field. If it is
+\paragraph{} This array acts as a ring-buffer, so when sending a message, the sender looks at the next field. If it is
 valid it sends the message to the corresponding buffer at the receiver and invalidates it. We always send the complete
 buffer followed by a signaling byte, which allows the receiver to poll on this byte to notice incoming messages.
 
@@ -102,7 +95,7 @@ for the buffered write protocol.
 
 \emph{Freeing} a buffer means making it available for the sender to write to. As we established  
 there is a queue of \code{BufferInfo} in the senders memory. To \emph{free} a buffer the receiver first sets the very last 
-signal byte of its local buffer to 0, then we write its address, rkey, and a valid byte of 1 to the next empty or 
+signal byte of its local buffer to 0, then we write its address and a valid byte of 1 to the next empty or 
 invalidated queue entry at the sender. The receiver keeps a very similar local queue to keep track of the oder of 
 posted buffers.
 
@@ -111,23 +104,22 @@ to one by the sender when the transmission is completed. We are using the fact t
 order, for any modern systems~\cite{herd, farm}. This guarantees us that the complete message has been written as soon a we
 see an update to the last byte.
 
-\subsection{Features}
+\subsection{Features Analysis}
 
-With our Direct Write connection we essentially rebuilt the send and receive verss using only RDMA writes. This gives us more
-similar features but also alows for more control over the protocol. This could potentially allow us to extend it for 
+With our Direct Write connection we essentially rebuilt the send and receive verbs using only RDMA writes. This gives us 
+similar features but also allows for more control over the protocol. This could potentially allow us to extend it for 
 specific systems.
 
 \paragraph{} Our current implementation fulfills our requirements for being \emph{non-blocking}, the same way the send-receive
-protocol does. It however does not provide any \emph{interrupts} and we did not explore and \emph{resource sharing} approaches.
-As it stands it also does not provide \emph{True Zero Copy} capabilities and it also lacks support for 
+protocol does. It however does not provide any \emph{interrupts} and we did not explore any \emph{resource sharing} approaches.
+As it stands it also does not provide \emph{True Zero Copy} capabilities and it lacks support for 
 \emph{variable message sizes}.
 
 
-\paragraph{} We do however think that this protcol can be adapted to enable more features. By adding metadata when posting a
+\paragraph{} We do however think that this protocol can be adapted to enable more features. By adding metadata when posting a
 buffer we could enable \emph{True Zero Copy} capabilities for certain applications, by performing some routing decisions at
 the sender and being able to directly write to the correct final memory location.
-
-With a more sophisticated buffer management one could more effectively utilizes the available memory by supporting 
+And with a more sophisticated buffer management one could more effectively utilizes the available memory by supporting 
 \emph{variable message sizes}.
 
 

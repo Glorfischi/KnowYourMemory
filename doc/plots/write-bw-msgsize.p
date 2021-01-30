@@ -27,6 +27,7 @@ set xlabel "Message Size (bytes)"
 set ylabel "Bandwith (Gbit/s)" enhanced
 set yrange [0:100]
 set xrange [16:20000]
+set ytics 0, 10, 100
 
 set key left top
 

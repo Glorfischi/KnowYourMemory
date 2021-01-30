@@ -197,16 +197,6 @@ location = {Dresden, Germany},
 series = {EuroSys '19}
 }
 
-@article{ziegler2020rdma,
-  title={RDMA Communciation Patterns},
-  author={Ziegler, Tobias and Leis, Viktor and Binnig, Carsten},
-  journal={Datenbank-Spektrum},
-  volume={20},
-  number={3},
-  pages={199--210},
-  year={2020},
-  publisher={Springer}
-}
 
 @article{Huang2019AnEO,
   title={An Evaluation of RDMA-based Message Passing Protocols},
@@ -307,20 +297,8 @@ location = {Belgrade, Serbia},
 series = {EuroSys '17}
 }
 
-@inproceedings{scalerpc,
-author = {Chen, Youmin and Lu, Youyou and Shu, Jiwu},
-title = {Scalable RDMA RPC on Reliable Connection with Efficient Resource Sharing},
-year = {2019},
-isbn = {9781450362818},
-publisher = {Association for Computing Machinery},
-address = {New York, NY, USA},
-url = {https://doi.org/10.1145/3302424.3303968},
-doi = {10.1145/3302424.3303968},
-abstract = {RDMA provides extremely low latency and high bandwidth to distributed systems. Unfortunately, it fails to scale and suffers from performance degradation when transferring data to an increasing number of targets on Reliable Connection (RC). We observe that the above scalability issue has its root in the resource contention in the NIC cache, the CPU cache and the memory of each server. In this paper, we propose ScaleRPC, an efficient RPC primitive using one-sided RDMA verbs on reliable connection to provide scalable performance. To effectively alleviate the resource contention, ScaleRPC introduces 1) connection grouping to organize the network connections into groups, so as to balance the saturation and thrashing of the NIC cache; 2) virtualized mapping to enable a single message pool to be shared by different groups of connections, which reduces CPU cache misses and improve memory utilization. Such scalable connection management provides substantial performance benefits: By deploying ScaleRPC both in a distributed file system and a distributed transactional system, we observe that it achieves high scalability and respectively improves performance by up to 90% and 160% for metadata accessing and SmallBank transaction processing.},
-booktitle = {Proceedings of the Fourteenth EuroSys Conference 2019},
-articleno = {19},
-numpages = {14},
-keywords = {Scalability, Resource Sharing, RDMA},
-location = {Dresden, Germany},
-series = {EuroSys '19}
+
+@online{rdma-reference,
+    title = "RDMA Aware Networks Programming User Manual",
+    url  = "https://www.mellanox.com/related-docs/prod_software/RDMA_Aware_Programming_user_manual.pdf"
 }
