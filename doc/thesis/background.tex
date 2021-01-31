@@ -1,6 +1,6 @@
 \section{RDMA} \label{sec:rdma}
 
-Remote Direct Memory Access (RDMA) is a network mechanism that allows to move buffers between applications over the network.
+Remote Direct Memory Access (RDMA) is a network mechanism that allows moving buffers between applications over the network.
 The main difference to traditional network protocols like TCP/IP is that it is able to completely bypass the hosts kernel
 and even circumvents the CPU for data transfer. This allows applications using RDMA to achieve latencies as low as 2 $\mu s$
 and throughputs of up to 100 $Gb/s$, all while having a smaller CPU footprint.
@@ -12,7 +12,7 @@ layers and is primarily used in high performance computing, RDMA is also availab
 
 
 \paragraph{} So to be able to use RDMA we need to have a network interface card that implements one of these technologies. 
-From now on we will call such a card an RNIC (RDMA Network Interface Card). A good RNIC implements all logic needed for 
+From now on, we will call such a card an RNIC (RDMA Network Interface Card). A good RNIC implements all logic needed for 
 the RDMA protocol in hardware including flow control, reliability, and segmentation.
 
 
@@ -97,7 +97,7 @@ the RDMA protocol in hardware including flow control, reliability, and segmentat
 multiple times both at the sender as well as the receiver, through multiple layers of abstraction. This makes them far less 
 efficient than RDMA which is designed to completely bypass the OS as well as the CPU and can achieve true zero copy capabilities.
 
-\paragraph{} RDMA gives applications direct access to the RNIC through a usersspace library, completely circumventing the 
+\paragraph{} RDMA gives applications direct access to the RNIC through a user space library, completely circumventing the 
 operating system and any drivers. The RNIC is able to read data directly from the applications memory space through direct 
 memory access (DMA) resulting in a zero copy transfer.
 
@@ -105,19 +105,19 @@ memory access (DMA) resulting in a zero copy transfer.
 \subsection{Verbs API}
 
 All three technologies RoCE, iWARP, and InfiniBand share a common API called \emph{Verbs API}. The Verbs API gives us a
-userspace library called \emph{libibverbs} that gives developers direct low level access to the device, bypassing the kernel.
+user space library called \emph{libibverbs} that gives developers direct low level access to the device, bypassing the kernel.
 
-\paragraph{} The Verbs API is very different from traditional socket programming. Instead of having a simple socket an 
+\paragraph{} The Verbs API is very different from traditional socket programming. Instead of having a simple socket which an 
 application can write to and read from, the Verbs API provides endpoints, called Queue Pairs (QP), to which an application 
-can issue multiple different operations called \emph{Verbs}. These verbs are:
+can issue multiple different operations called \emph{verbs}. These verbs are:
 
 \begin{itemize}
-  \item Send (with Immediate): Transfers data from the senders memory to a prepared memory region at the receiver
-  \item Receive: Prepares a memory region to receive data through the send verb
-  \item Write (with Immediate): Copies data from the senders memory to known memory location at the receiver without any 
+  \item \textbf{Send (with Immediate):} Transfers data from the senders memory to a prepared memory region at the receiver.
+  \item \textbf{Receive:} Prepares a memory region to receive data through the send verb.
+  \item \textbf{Write (with Immediate):} Copies data from the senders memory to known memory location at the receiver without any 
     interaction from the remote CPU.
-  \item Read: Copies data from remote memory to a local buffer without any inteaction from the remote CPU.
-  \item Atomics: Two different atomic operations. Compare and Swap (CAS) and Fetch and Add (FAA). They can access 64-bit 
+  \item \textbf{Read:} Copies data from remote memory to a local buffer without any inteaction from the remote CPU.
+  \item \textbf{Atomics:} Two different atomic operations. Compare and Swap (CAS) and Fetch and Add (FAA). They can access 64-bit 
     values in the remote memory. 
 \end{itemize}
 
@@ -156,15 +156,15 @@ performed, but simply that the RNIC will eventually process this request. To sig
 is an additional type of queue called the \emph{Completion Queue (CQ)}. There needs to be a CQ associated with each Send and 
 Receive Queue. When the RNIC completes a work request it will enqueue a \emph{Completion Queue Entry~(CQE)} to the respective
 CQ. This CQE informs the application whether the request was processed successfully. The application can match CQEs to 
-previously issued work request by the id it provided during issuing. It is also possible to post an \emph{unsignaled} network
+previously issued work requests by the ID it provided during issuing. It is also possible to post an \emph{unsignaled} network
 operation that does not generate a CQE after its completion.
 
 
 \paragraph{}  All locally and remotely accessible memory needs to be previously registered for the RNIC to be able write to
 or read from it. We call these preregistered regions of memory \emph{Memory Regions (MRs)}.  
-Registering memory pins it so that it is not swapped out by the host and the process of registering is generally orders of magnitude slower 
-then data operations like sending or writing. So in general all accessed memory is registered at connection setup and from 
-now on we will assume these memory regions to be registered if not specified otherwise.
+Registering memory pins it so that it is not swapped out by the host. The process of registering is generally orders of magnitude slower 
+then data operations like sending or writing. So in general all accessed memory is registered at connection setup. Henceforth,  
+we will assume these memory regions to be registered if not specified otherwise.
 
 
 
@@ -176,7 +176,7 @@ us to send a single message to  a receiver. The main difference to typical TCP/I
 they are completely asynchronous.
 
 That means both sending and receiving is handled independently by the RNIC. The sending CPU only needs to provide
-the RNIC with message to be sent, which it does through the send verb. And the receiving CPU needs to provide its RNIC with 
+the RNIC with the message to be sent, which it does through the send verb. The receiving CPU needs to provide its RNIC with 
 a receive buffer to write the incoming message to, which it does through the receive verb.
 
 
@@ -217,27 +217,27 @@ a receive buffer to write the incoming message to, which it does through the rec
 
 
 \paragraph{} To better understand this communication model we will walk through the operations involved in sending a single
-message from a system A to another system B. We assume that the two nodes have already setup a connection, in this
+message from a system A to another system B. We assume that the two nodes have already setup a connection. In this
 thesis we will not go into the details of connections setup. Each nodes has prepared a QP and associated a completion 
-queue to it. Both systems have registered a MR of at least the size of the to be sent message.
+queue to it. Both systems have registered a MR of at least the size of the message to be sent.
 
 \begin{enumerate}
-  \item First, the receiving system will have to provide a \emph{Receive Buffer} to its RNIC to write the next incoming message to.
-    Otherwise the receiving NIC cannot process the message which results in a so called \emph{Reader Not Ready (RNR) Error}.
+  \item First, the receiving system provides a \emph{Receive Buffer} to its RNIC to write the next incoming message to.
+    Otherwise, the receiving NIC cannot process the message which results in a so called \emph{Reader Not Ready (RNR) Error}.
     This forces the sending NIC to retry the transfer and will break the connection after a number of retries.
 
-    So to enable its NIC to handle the message it issues a \emph{Receive Request}. It does this by moving a work request into its 
-    Receive Queue. This WR contains a pointer to the MR he prepared. We will often call this posting a receive buffer. 
+    So in order to enable its NIC to handle the message it issues a \emph{Receive Request}. This is done by moving a work request into its 
+    Receive Queue. This WR contains a pointer to the MR it prepared. We will often call this posting a receive buffer. 
 
     System B now polls its CQ until it receives a CQE for its issued receive request.
 
   \item System A can initiate the transfer by posting a \emph{Send Request}. To do this it copies a work request to 
-    the Send Queue. This request contains a pointer to its local memory containing the to be sent message
+    the Send Queue. This request contains a pointer to its local memory containing the  message to be sent
     and its size. This request notifies the NIC to initiate the transfer.
     It also starts polling its CQ to notice the completion of the send request.
 
   \item The previous step was actually an MMIO operation, writing the Work Request to the NIC, which now 
-    accesses the applications send buffer using DMA. The payload is then sent over the network.
+    accesses the application's send buffer using DMA. The payload is then sent over the network.
 
   \item As soon as the first segment arrives at system B's NIC, it consumes the posted receive buffer. It writes the incoming
     data to the referenced buffer and generates a \emph{Completion Queue Entry (CQE)}. 
@@ -250,7 +250,7 @@ queue to it. Both systems have registered a MR of at least the size of the to be
     consumed and that a new message has been written to the receive buffer.
 \end{enumerate}
 
-So when we get over the rather unusual interface through these three queues and the rather tedious manual management of 
+So once we get over the rather unusual interface through these three queues and the rather tedious manual management of 
 memory regions, the send and receive verbs are quite simple. They give us a fairly clean message passing notion.
 
 
@@ -295,18 +295,18 @@ Figure~\ref{fig:seq-wrt} show the operations involved in writing data to the rem
 similar to the send and receive sequence presented in the previous section. The sending CPU still issues a work request which
 is handled by the NIC and is notified of its completion through the completion queue.
 The main difference is that the remote system does not need to post a receive buffer and there is no CQE generated at the 
-remote. Also the work request is a little different and does not only contain a pointer to the local send buffer but
+remote. Also, the work request is a structured differently. It does not only contain a pointer to the local send buffer but
 also provides the remote address to write it to.
 
 \paragraph{} The standard RDMA write does not generate a completion entry at the receiver, which is generally more efficient.
-Sometimes however it is very helpful for the receiver to be notified of a completed write. For this purpose the Verbs API 
+However, sometimes it is very helpful for the receiver to be notified of a completed write. For this purpose the Verbs API 
 also provides a related operation called \emph{Write with Immediate}.
 This operation works very similarly to a normal RDMA write, but it generates a completion entry at the receiver, in the same way 
 the send verb does. This means it will also consume a posted receive request, so the receiver needs to post a receive request 
 prior to the transfer. Write with Immediate however will not write any data to the associated receive buffer.
 
 It further allows us to send a 32 bit value called \emph{Immediate} with the request. This value is added to
-the completion entry at the receiver. This means Write with Immediate allows us to notify the remote that we have written data and to 
+the completion entry at the receiver. Thus, Write with Immediate allows us to notify the remote that we have written data and to 
 send additional out of band data, but it also negates any performance improvements over the send verb.
 
 
@@ -344,23 +344,24 @@ remote CPU. The key difference being that instead of writing to the remote memor
 \label{fig:seq-rd}
 \end{figure}
 
-Figure~\ref{fig:seq-rd} shows the sequence necessary to perform an RDMA Read. For this operation the remote source memory as
+Figure~\ref{fig:seq-rd} shows the sequence necessary to perform an RDMA Read. For this operation, the remote source memory as
 well as the local target buffer need to be appropriately registered as memory regions, in the same way necessary for the
 other verbs.
 
 \paragraph{} The order of operations again looks very similar. We first need to issue a work request. The work request needs 
-to include the remote address to read from, how much to read from it, and a pointer to a local target buffer that is large
-enough to receive it. As soon as the  transfer is completed a CQE is generated. 
+to include the remote address to read from, the amount of data to read from it, and a pointer to a local target buffer that is large
+enough to receive the payload. As soon as the  transfer is completed a CQE is generated. 
 
 The key difference to the RDMA write verb is, 
-instead of sending the payload, writing to memory using DMA, and replying with lightweight acknowledgement. The 
+instead of sending the payload, writing to memory using DMA, and replying with lightweight acknowledgement, the 
 RDMA read verb sends a lightweight request, performs a DMA reading from memory, and replies with the payload.
 
 \pagebreak
 \subsubsection{Atomics}
 
-While it is guaranteed that multiple Write and Send operation of the same QP will appear in the same order as they are 
-issued~\cite{rdma-reference}, it is not guaranteed that Read operations will show the effects of previous writes and operations from
+While it is guaranteed that multiple Write and Send operations of the same QP will appear in the same order as they are 
+issued~\cite{rdma-reference}, it is not guaranteed that Read operations will show the effects of previous writes. 
+Additionally, operations from
 different QPs have hardly any synchronization guarantees.
 
 To prevent data races when accessing the same data from different QPs the Verbs API provides two different atomic operations 
@@ -369,10 +370,10 @@ to perform these are very similar to the read verb.
 
 
 \begin{itemize}
-  \item \textbf{Fetch and Add} reads a 64 bit value from the remote memory space, add the additionally provided 
-    \code{compare\_add} value, and writes the original data before the addition to the provided local memory.
+  \item \textbf{Fetch and Add} reads a 64 bit value from the remote memory space, adds the additionally provided 
+    \code{compare\_add} value, and writes the original data to the provided local memory.
   \item \textbf{Compare and Swap} reads a 64 bit value from the remote memory space and compares it to 
-    the \code{compare\_add} value provided in the work request. If they are equal it writes the value \code{swap},
+    the \code{compare\_add} value provided in the work request. If they are equal, it writes the value \code{swap},
     which is also provided in the work request. Regardless of success, it returns the original data to the requester.
 \end{itemize}
 

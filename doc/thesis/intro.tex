@@ -2,7 +2,7 @@
 
 Remote Direct Memory Access (RMDA) is a powerful communication mechanism that offers the potential for exceptional performance.
 RDMA allows one machine to directly access the memory of a remote machine across the network without the interaction of the 
-remote CPU. This gives developers a plethora of options to implement communication protocols. However using these options 
+remote CPU. This gives developers a plethora of options to implement communication protocols. However, using these options 
 effectively is nontrivial and the observed performance can vary greatly for seemingly minor differences. 
 
 Existing research either primarily focus on evaluating very low level verb performance~\cite{anuj-guide} or focus strongly on 
@@ -14,9 +14,9 @@ features offered by modern RDMA-capable network controllers. Further hardly any 
 queues, memory fences, or atomics for resource sharing.
 
 \paragraph{}In this thesis we implement and evaluate various different message passing protocols. We show that there are a 
-lot of ways to implement data exchange connections using less used RDMA features such as \emph{shared receive queues}, \emph{reads}, 
+many ways to implement data exchange connections using less used RDMA features such as \emph{shared receive queues}, \emph{reads}, 
 \emph{memory fences}, and \emph{RDMA atomics}. We also show that even common approaches such as ring-buffer based protocols 
-can be implement in multiple ways giving us different performance characteristics and features.
+can be implemented in multiple ways giving us different performance characteristics and features.
 
 \begin{itemize}
   \item We focus on implementing message passing protocols, without limiting us to RPCs. We believe this gives engineers 

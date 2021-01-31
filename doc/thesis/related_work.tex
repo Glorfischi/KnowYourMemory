@@ -4,37 +4,36 @@ In recent years there has been a lot of work on making effective use of RDMA and
 RDMA enabled protocols. Most of it focuses on either low level verb performance or design and evaluate much higher level
 abstractions that mostly focus on RPC performance or the performance of a whole system.
 
-\paragraph{} We give an overview of work on how to use RDMA effectively as well as of 
-some recent systems that try to utilize these
-capabilities.
+\paragraph{} We give an overview of related work that discuss how  RDMA can be used effectively as well as an overview of 
+some recent systems that try to utilize these capabilities.
 
-\subsection{Using RDMA effectively}
+\subsection{Using RDMA Effectively}
 
 Design Guidelines for High Performance RDMA Systems~\cite{anuj-guide} provides a very low level guide on how to
-effectively use RDMA enabled networks. It focuses on specific optimizations to make and pitfalls to avoid to achieve the 
-best possible performance. 
+effectively use RDMA enabled networks. It focuses on specific optimizations to make and pitfalls to avoid in order to 
+achieve the best possible performance. 
 
-\paragraph{} There are many papers focusing on RPCs. Some try to systematically  compare RPC protocol
-approaches~\cite{ziegler2020rdma,Huang2019AnEO}. This is similar to what we are doing for more general 
-message passing protocols. These gives us valuable insight in verb performance and scalability, but they all use very 
-simplified protocols and a very limited design space.
+\paragraph{} There are many papers focusing on RPCs. Some try to systematically compare RPC protocol
+approaches~\cite{ziegler2020rdma,Huang2019AnEO}.  These gives us valuable insight in verb performance and scalability, but 
+they all use very simplified protocols and a very limited design space.
 
 The Remote Fetching Paradigm~(RFP)~\cite{rfp} exposes an RPC interface while utilizing RDMAs asymmetric performance 
-characteristics. In RPC clients write their request to a request buffer on the server. The server processes the request
-and writes the result to a local buffer and the client polls this buffer for the response. Reduces server side load and 
-makes it \emph{passive} from a network interaction standpoint. A feature we also look at in this thesis.
+characteristics. In RFP, clients write their request to a request buffer on the server. The server processes the request
+and writes the result to a local buffer. The client then polls this sever-local buffer for the response. This approach reduces 
+server side load and makes it \emph{passive} from a network interaction standpoint. A feature we also look at in this thesis.
 
-ScaleRPC~\cite{scalerpc} and other work~\cite{fasst, rfp, herd} address the scalability of RDMA for RPCs when using 
+ScaleRPC~\cite{scal-rdma-rpc} and other works~\cite{fasst, rfp, herd} address the scalability of RDMA for RPCs when using 
 \emph{Reliable Connections}. They point out that the main scalability problem of reliable connections stem from limited 
-RNIC and CPU caches, resulting in cache thrashing with a large amount of active QPs. ScaleRPC uses RDMA writes to 
-transmit both requests as well as responses. It addresses scaling problem with temporal slicing.
+RNIC and CPU caches, resulting in cache thrashing with a large amount of active Queue Pairs(QPs). ScaleRPC uses RDMA writes to 
+transmit both requests as well as responses. It addresses scaling problems with temporal slicing.
 
 
 
 \paragraph{} There has been quite a lot of research into designing fast and scalable RDMA system. This thesis aims to take
 a step back and take a broader look at RDMA based protocols for data exchange. A recent master thesis of the University of 
-Waterloo~\cite{sharma2020design} saw a similar need for a design space analysis. They look at the design space of \emph{flow structures} 
-a much narrower protocol definition we are using, but provides a similar analysis of possible protocols and their features.
+Waterloo~\cite{sharma2020design} saw a similar need for a design space analysis. They look at the design space of \emph{flow structures},
+a much narrower protocol definition compared to our definition. But the work provides a similar analysis of possible
+protocols and their features.
 
 
 \subsection{RDMA Systems}
@@ -44,19 +43,19 @@ There have been a lot of work on designing and evaluating new systems that take 
 Many papers focus on optimizing RDMA enabled key-value stores. There are designs like Nessie~\cite{nessie} that is 
 client-driven and only relies on one-sided verbs like RDMA read, write, and atomics to issue \code{GET}, \code{PUT}
 or \code{DELETE} operations without server side polling.
-Systems like Pilaf~\cite{pilaf} and FaRM~\cite{farm} also use RDMA reads to perform \code{GET} operations, they both use 
-RPC like approaches for \code{DELETE} and \code{PUT}. While Pilaf relies on send and receive verbs, farm uses a ring buffer
+Systems like Pilaf~\cite{pilaf} and FaRM~\cite{farm} also use RDMA reads to perform \code{GET} operations. But both use 
+RPC like approaches for \code{DELETE} and \code{PUT}. While Pilaf relies on send and receive verbs, FaRM uses a ring buffer
 based protocol using RDMA writes.
 HERD~\cite{herd} uses a fully server-driven approach and issues all key-value operations through an RPC interface. For this
 RPC protocol clients issue requests using RDMA writes to server-polled memory region. The server processes the request and
 replies using the RDMA send verb and unreliable datagrams.
 
-Other work design new database systems~\cite{dbrackjoin} or propose new new approaches to message brokers~\cite{broker},
+Other works design new database systems~\cite{dbrackjoin} or propose new approaches to message brokers~\cite{broker}
 that take full advantages of RDMA features. 
 
-\paragraph{} There are may updates to existing systems that replace existing sockets with RDMA 
-connections.~\cite{memcached, hbase, hdfs}. This can result in a significant boost in performance. RDMA-Memcached~\cite{memcached} 
-uses this approach and achieves a performance improvement of over 4 times compared to using traditional TCP/IP sockets.
+\paragraph{} There are many updates to existing systems that replace existing sockets with RDMA 
+connections~\cite{memcached, hbase, hdfs}. This can result in a significant boost in performance. RDMA-Memcached~\cite{memcached} 
+uses this approach and achieves a performance improvement of over four times compared to using traditional TCP/IP sockets.
 
 There are however also newly designed systems that rely on classical message passing interfaces. For example 
 PolarFS~\cite{polarfs} uses a hybrid approach of using Send/Receive as well as Read/Write, which is reminiscent of 
@@ -64,7 +63,7 @@ our \emph{direct read} protocol we introduce in Section~\ref{sec:conn:direct_rea
 that does not have RDMA at its core, but rather
 uses it as another features to speed up the system. 
 
-We think this thesis is a good starting point for engineers building similar systems to design an appropriate protocol.
+This thesis is a good starting point for engineers building similar systems to design an appropriate RDMA-based protocol.
 
 
 
