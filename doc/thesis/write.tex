@@ -32,7 +32,7 @@ two different approaches for this problem
 
 This essentially gives us 6 different versions of our buffered write protocol.
 
-\subsection{Ring Buffer} \label{sec:conn:write:buf}
+\subsection{Ring-Buffer} \label{sec:conn:write:buf}
 \begin{figure}[!ht]
 \begin{center}
 
@@ -104,7 +104,7 @@ This essentially gives us 6 different versions of our buffered write protocol.
 
 \end{tikzpicture}
 \end{center}
-\caption{Ring Buffer with twice mapped memory to allows DMA writes over the end}
+\caption{Ring-Buffer with twice mapped memory to allows DMA writes over the end}
 \label{fig:ringbuffer}
 \end{figure}
 
@@ -263,7 +263,7 @@ on the highest memory address to check whether a transfer is complete.
 
 \end{tikzpicture}
 \end{center}
-\caption{Reversed Ring buffer}
+\caption{Reversed Ring-buffer}
 \label{fig:write-rev}
 \end{figure}
 
@@ -315,7 +315,7 @@ performance improvements by adding it, we decided not to add this to reduce code
 
 We also implemented a push based approach, where the receiver will send updates of the tail value using 
 RDMA sends. To reduce the load of this acknowledgements we only send updates when the receiver has processed an eighth of 
-the complete ring buffer. The sender polls its receive queue as soon as it cannot write the next message given its
+the complete ring-buffer. The sender polls its receive queue as soon as it cannot write the next message given its
 cache of the tail value.
 
 \paragraph{} The main drawback of this approach is that this forces the sender to manage receive buffers and this prevents

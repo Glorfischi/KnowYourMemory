@@ -44,7 +44,7 @@ Many papers focus on optimizing RDMA enabled key-value stores. There are designs
 client-driven and only relies on one-sided verbs like RDMA read, write, and atomics to issue \code{GET}, \code{PUT}
 or \code{DELETE} operations without server side polling.
 Systems like Pilaf~\cite{pilaf} and FaRM~\cite{farm} also use RDMA reads to perform \code{GET} operations. But both use 
-RPC like approaches for \code{DELETE} and \code{PUT}. While Pilaf relies on send and receive verbs, FaRM uses a ring buffer
+RPC like approaches for \code{DELETE} and \code{PUT}. While Pilaf relies on send and receive verbs, FaRM uses a ring-buffer
 based protocol using RDMA writes.
 HERD~\cite{herd} uses a fully server-driven approach and issues all key-value operations through an RPC interface. For this
 RPC protocol clients issue requests using RDMA writes to server-polled memory region. The server processes the request and

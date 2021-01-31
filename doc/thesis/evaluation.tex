@@ -35,14 +35,15 @@ of about 2.25 $\mu s$, which is still very much comparable to the send-receive p
 two writes for a single message.
 
 
-\paragraph{} The two read based protocols have significantly higher latency for our ping-pong evaluation. This stark difference
+\paragraph{} The two read based protocols have significantly higher latency for our ping-pong evaluation. This vast
+difference in latency 
 is however not only caused by the read verb. For this experiment both of our read protocols have a significant 
-communication overhead. Coupled with the fact that smaller reads do have a higher latency than comparable writes~\cite{}
-\comment{I would like to cite something, but don't know what}
-this results in the very high base overheads we see.
+communication overhead. Coupled with the fact that smaller reads do have a higher latency this results in the very high
+base overheads we see.
 
 The direct read protocol (DR) first sends a read request from the sender to the receive using a send operation. Only then the
-receive can issue the RDMA read operation that transfers the message. So the observed base latency overhead of nearly 6~$\mu s$
+receive can issue the RDMA read operation that transfers the message. So the observed base latency overhead of 
+nearly 6~$\mu s$
 does not only contain the read operation, but also a complete send latency for a small message.
 
 For buffered read protocol~(BR) the receiver needs to read from the senders memory to notice new messages. This means for our
@@ -52,9 +53,9 @@ sender not having written the complete message to the buffer when the receiver i
 This result in up to three read operations per message for large messages.
 
 \paragraph{} We can summarize this subsection with simplicity is key. The most important thing to achieve low 
-latency is to avoid unnecessary round-trip times and minimize the number of RDMA operations. We achieved the best performance 
-using send-receive or single writes. We could however not reproduce the common assumption that RDMA writes are faster 
-than send-receive.
+latency is to avoid unnecessary round-trip times and minimize the number of RDMA operations. We achieved the best
+performance  using send-receive or single writes. We could however not reproduce the common assumption that RDMA writes 
+are faster than send-receive.
 
 
 
@@ -89,7 +90,7 @@ on two separate nodes.
   \caption{Direct-Read}
   \label{fig:plot-dr-bw}
 \end{subfigure}
-\begin{subfigure}[b]{0.49\textwidth}
+\begin{subfigure}[b]{0.57\textwidth}
   \centering
   \includegraphics[width=1\textwidth]{buf-read-bw-msgsize.png}
   \caption{Buffered-Read}
@@ -110,10 +111,7 @@ The direct-write protocol however seems to be limited by the sending NIC instead
 to wait for the operation to be completed and we are not limited by our ability to issue work requests like we are for the 
 send-receive connection. This results in up to 30\% lower throughput for medium sized messages. We suspect that the large 
 amount of returning writes interferes with outgoing writes and increases the per message overhead for the NIC. 
-\comment{I'm in no way sure if this is correct. I made some quick hacks to check that we actually routinely need to wait 
-  multiple polls to receive a completion event, so I believe that this is a NIC bottleneck, but I don't know whether
-this explanation is reasonable}
- 
+
 
 \paragraph{} Figure~\ref{fig:plot-bw-bw} shows the 1:1 bandwidth for all buffered write variants. We only show the measurements
 using the \emph{send} acknowledger as, with one exception we will explain below, there are not significant differences
@@ -186,9 +184,10 @@ For all other plots we purposely avoid to exactly hit this window for the \emph{
 sender but will send slightly smaller messages.
 
 
-\paragraph{}"More is less", als seems to hold for maximizing 1:1 bandwidth. The best performing protocols are the send-receive 
+\paragraph{} To maximize 1:1 bandwidth, reducing the number of necessary RDMA operations seems to be important.
+The best performing protocols are the send-receive 
 protocol as well as the buffer-write implementations that only issue a single write. Compared to our latency evaluation
-however the difference are not as stark. 
+however the difference are not as severe. 
 Protocols like direct-read or direct-write, which can achieve true zero-copy capabilities, can still achieve decent 
 throughout and if we are handling messages larger than 16 KB almost all approaches can achieve line rate.
 
@@ -484,8 +483,10 @@ compared to the write-immediate (BW-Imm) protocol. This can be explained by the 
 receiving CPU needs to perform when using write with immediate. 
 
 The write-offset (BW-Off) implementation achieves similar performance to BW-Imm. Interestingly BW-Off seems to achieve slightly 
-higher performance when opening more than 7 concurrent connections with both 512 byte as well as 16 byte sized messages. We do 
-not have a reasonable explanation for this as of writing this and further research into this is necessary.
+higher performance when opening more than 7 concurrent connections with both 512 byte as well as 16 byte sized messages. As of
+writing this, we do not have a clear explanation for it. Our current best guess is, that with more than 7 connection the 
+metadata is spread over more than one cache line. This can result in less cache invalidation and in turn to lower receiver 
+CPU usage and better overall performance. Further research into this is necessary. \comment{Veery rough guess}
 
 
 \paragraph{} Figure~\ref{fig:plot-write-bw-n1} also evaluates the shared write protocol (SW). We can see that we are strongly limited
@@ -493,7 +494,7 @@ by our two phase approach for all message sizes. That means we see a linear incr
 senders as we are able to issue more requests in parallel.
 
 For the large message size of 8 KB the total throughput increases linearly until we hit the line rate with 10 
-active sender. The use of device memory \mbox{(SW-DM)} allows us to saturate the link with only 9. This is not a 
+active sender. The use of device memory \mbox{(SW-DM)} allows us to saturate the link with only 9 connections. This is not a 
 large difference and we are able to take full advantage of the bandwidth with or without the usage of device memory.
 
 Smaller messages give use more interesting results. For a message size of 512 bytes we first see a linear 

@@ -60,7 +60,7 @@ at the same time, we need to add an \code{IBV\_SEND\_FENCE} flag to the write re
 request its processing will not begin until all previous read and atomic operations on the same QP  have been completed. This 
 allows us to issue both the read as well as the acknowledging write at the same time.
 
-\subsection{Features}
+\subsection{Feature Analysis}
 
 The Direct Read connection is a protocol with the main goal of achieving  \emph{True Zero Copy} capabilities as 
 the receiver itself can read the message to its final place, preventing any additional 

@@ -152,8 +152,7 @@ are however downsides to using a buffer to transfer data. Most importantly the b
 data should finally end up in, which forces us to copy the received data again.
 
 There is a more detailed analysis of \emph{Buffered Write Protocols} with our implementation of one using a ring-buffer in 
-Section \ref{sec:conn:buf_write}. Further in Section \ref{sec:conn:shared_write} we look at a way to share this ring
-buffer between multiple connections using RDMA atomics.
+Section \ref{sec:conn:buf_write}. Further in Section \ref{sec:conn:shared_write} we look at a way to share this ring-buffer between multiple connections using RDMA atomics.
 
 
 \paragraph{} The  \emph{Unbuffered Write Protocol} avoids the additional copy which is usually necessary when 

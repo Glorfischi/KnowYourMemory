@@ -22,15 +22,15 @@ do for [c in conns] {
   print sprintf("%s %f\n", c, STATS_sum*8/1024/1024/1024)
 }
 
-set terminal png small size 960,640 font "Computer Modern,16"
+set terminal png small size 960,640 font "Computer Modern,24"
 set output "plots/send-bw-n1.png"
 
 set xlabel "Senders" 
 set ylabel "Bandwith (Gbit/s)" enhanced
 set yrange [0:100]
-set ytics 0, 5, 100
+set ytics 0, 10, 100
 set xrange [0.5:15.5]
-set xtics 0, 1, 16
+set xtics 1, 2, 16
 
 set grid ytics lt 0 lw 1 lc rgb "#bbbbbb"
 set grid xtics lt 0 lw 1 lc rgb "#bbbbbb"

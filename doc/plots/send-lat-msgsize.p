@@ -27,7 +27,7 @@ f(x)=b*x + osnd + orcv + L + onsnd + onrcv
 
 b=0.0002;
 osnd=0.19;
-orcv=0.007;
+orcv=0.05;
 L=1.9;
 onsnd=0.02;
 onrcv=0.02;

@@ -21,7 +21,7 @@ features that can be critical for applications.  These features include achievin
 for variable message sizes, avoiding additional copying by being truly zero-copy, or one slow processing message not
 being able to stall the whole connection.
 
-\paragraph{} We introduced a new on LogGP based performance model for RDMA based message passing protocols, that allows us to 
+\paragraph{} We introduced a new performance model for RDMA based message passing protocols, that allows us to 
 better understand the evaluated protocols. We discussed the often ignored limitation of protocols that do not allow for enough
 concurrent requests, severely limiting the capabilities of an RDMA-enable network. We also show that for high speed networks
 even with the heavy NIC offloading of RDMA, the systems CPU is often the bottleneck as it is unable to issue enough work requests to

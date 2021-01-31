@@ -14,7 +14,7 @@ do for [s in msgs] {
 }
 
 
-set terminal png small size 960,640 font "Computer Modern,16" 
+set terminal png small size 1120,640 font "Computer Modern,24" 
 set output "plots/buf-read-bw-msgsize.png"
 
 set xlabel "Message size (bytes)" 
@@ -26,7 +26,7 @@ set xrange [16:20000]
 
 set y2label "Mean Transfer Size (KB)" enhanced
 
-set y2tics 0, 10,  200
+set y2tics 0, 20,  200
 set y2range [0:200]
 
 set key left top
@@ -35,6 +35,6 @@ set grid ytics lt 0 lw 1 lc rgb "#bbbbbb"
 set grid xtics lt 0 lw 1 lc rgb "#bbbbbb"
 
 set logscale x 2
-set xtics 1, 2, 16384
-plot $data with points pt 5 ps 1.5 title "Bandwidth", \
-     $msgsize u ($1):($2/1024) with points pt 6 ps 1.5 axes x1y2 title "Mean Transfer Size"
+set xtics 1, 4, 16384
+plot $data with points pt 5 ps 2 title "Bandwidth", \
+     $msgsize u ($1):($2/1024) with points pt 6 ps 2 axes x1y2 title "Mean Transfer Size"

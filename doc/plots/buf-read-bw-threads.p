@@ -21,7 +21,7 @@ do for [c in conns] {
 }
 
 
-set terminal png small size 960,640 font "Computer Modern,16"
+set terminal png small size 960,640 font "Computer Modern,24"
 set output "plots/buf-read-bw-threads.png"
 
 set grid ytics lt 0 lw 1 lc rgb "#bbbbbb"
@@ -33,11 +33,11 @@ set ylabel "Bandwith (Gbit/s)" enhanced
 set yrange [0:100]
 set ytics 0, 10, 100
 set xrange [0.5:15.5]
-set xtics 0, 1, 16
+set xtics 1, 2, 16
 
 set key right center
 
-plot $data8192 pt 5 ps 1.5 title "8192 bytes", \
-     $data512 pt 7 ps 1.5 title "512 bytes", \
-     $data pt 9 ps 1.5 title "16 bytes"
+plot $data8192 pt 5 ps 2 title "8192 bytes", \
+     $data512 pt 7 ps 2 title "512 bytes", \
+     $data pt 9 ps 2 title "16 bytes"
 

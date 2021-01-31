@@ -45,7 +45,7 @@ set terminal pngcairo size 960,640 font "Computer Modern,16"
 set output "plots/lat-msgsize.png"
 set xlabel "Message size (bytes)" 
 set ylabel "Latency (μs)" enhanced
-set yrange [2 : 12]
+set yrange [0 : 12]
 set ytics 0, 1, 20
 
 set xtics 1, 2, 8192
@@ -55,12 +55,12 @@ set grid xtics lt 0 lw 1 lc rgb "#bbbbbb"
 
 set key left top
 set logscale x 2
-plot $bufread with linespoints pt 11 ps 1.5 title "BR", \
-     $dirread with linespoints pt 9 ps 1.5 title "DR", \
-     $writeOff with linespoints pt 5 ps 1.5 title "BR-Off", \
-     $writeRev with linespoints pt 4 ps 1.5  title "BR-Rev", \
-     $median with linespoints pt 13 ps 1.5 title "DW", \
-     $send with linespoints pt 7 ps 1.5 title "SR", \
+plot $bufread with linespoints pt 11 ps 1.5 title "Buffered Read (BR)", \
+     $dirread with linespoints pt 9 ps 1.5 title "Direct Read (DR)", \
+     $writeOff with linespoints pt 5 ps 1.5 title "Buffered Write Offset (BR-Off)", \
+     $writeRev with linespoints pt 4 ps 1.5  title "Buffered Write Reverse (BR-Rev)", \
+     $median with linespoints pt 13 ps 1.5 title "Direct Write (DW)", \
+     $send with linespoints pt 7 ps 1.5 title "Send-Receive (SR)", \
 
 
      
