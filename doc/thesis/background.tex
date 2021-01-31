@@ -140,10 +140,17 @@ additional information to perform it. The RNIC will pop the WR from the queue an
   \queue[Receive Queue]{0,1.5};
   \rqueue[Completion Queue]{0,0};
 
-  \draw[rounded corners] (-.5, -1.5) rectangle (5.5, 3.5) {};
-  \node[align=center] at (3cm, 3.2cm) {RNIC};
-  \draw[rounded corners] (3.4, -.5) rectangle (5.1, 2.5) {};
-  \node[align=center] at (4.25cm, 1cm) {Processing \\ Unit};
+  \draw[rounded corners] (-1, .4) rectangle (2.25, 3.4) {};
+  \node[align=center] at (-.6, 3.1) {QP};
+  \draw[rounded corners] (-1.5, -1.5) rectangle (5.5, 4) {};
+  \node[align=center] at (2cm, 3.7cm) {RNIC};
+  \draw[rounded corners] (4, 1) circle (1) {};
+
+  \draw[thick, ->] (2.1, 2.5) -- (3, 1.75);
+  \draw[thick, ->] (2.1, 1) -- (2.8, 1);
+  \draw[thick, <-] (2.1, -.5) -- (3, 0.25);
+
+  \draw[thick, <->] (5.2, 1) -- (6.5, 1);
 \end{tikzpicture}
 \end{center}
 \caption{Resources of the Verbs API}
