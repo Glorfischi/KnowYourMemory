@@ -107,7 +107,7 @@ as an inspiration for other developers to design their own protocols.
  Buffered-Read (BR)  &  & \checkmark & Sender &  &   & \\
 \hline
 \end{tabular}
-\caption{Protocol Overview and summary of their features}
+\caption{Protocol overview and summary of their features}
 \label{tab:protocols}
 \end{table}
 
@@ -210,7 +210,7 @@ are messages that have been sent but its transfer has not yet been completed. Th
 important to achieve the best possible performance.
 
 \begin{figure}[htp]
-\begin{lstlisting} [caption={Sender Interface},captionpos=b, label={list:sender}] 
+\begin{lstlisting} [caption={Sender interface},captionpos=b, label={list:sender}] 
 class Sender {
     // Takes a registered region containing the message
     // and initiates the transfer. Returns an ID 
@@ -242,7 +242,7 @@ As soon as the application  has processed this message it needs to signal to the
 buffer. We call this \emph{freeing} the receive buffer.
 
 \begin{figure}[htp]
-\begin{lstlisting} [caption={Receiver Interface},captionpos=b, label={list:receiver}] 
+\begin{lstlisting} [caption={Receiver interface},captionpos=b, label={list:receiver}] 
 class Receiver {
     // Waits for an incoming message and returns
     // the buffer containing it
