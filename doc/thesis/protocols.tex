@@ -1,6 +1,6 @@
 \section{Data Exchange Protocols}\label{sec:protocols}
 The goal of this work is design, implement, and study a comprehensive list of RDMA based protocols for data exchange. 
-However without a clear definition of \emph{data exchange} the number of possible protocols is virtually endless.
+However, without a clear definition of \emph{data exchange} the number of possible protocols is virtually endless.
 
 In this section we limit our definition of \emph{data exchange protocol} to that of a more clearly defined message passing
 protocol, which reduces the size of our design space and allows us to compare protocols. We then introduce
@@ -10,7 +10,7 @@ capabilities and performance guarantees.
 
 \subsection{Definition}\label{sec:proto-def}
 
-Most research focuses on RPCs \cite{anuj-guide, fasst, herd}, remote datastructure access \cite{pilaf, farm}, or replicate 
+Most research focuses on RPCs \cite{anuj-guide, fasst, herd}, remote datastructure access \cite{pilaf, farm}, or replications of
 socket like interfaces \cite{socksdirect}. In this thesis we look at message passing protocols with fairly few guarantees.
 We believe with this more general communication model we can give engineers and researchers a better understanding of the 
 building blocks that can be  used to build more specific connection protocols, like RPCs, while not only 
@@ -37,36 +37,35 @@ There is more to data exchange protocols than raw throughput or latency. Sometim
 that the connection is \emph{non-blocking} or that the memory requirements do not grow too large, even if that protocol wastes
 a few microseconds.
 
-To be able to better compare our presented protocols we define a few traits that are often required by systems and
+To be able to better compare our presented protocols, we define a few traits that are often required by systems and
 analyse which protocols provide these traits
 
-\paragraph{True Zero-Copy} Whether the protocol can be employed to receive directly to the destination buffer. While RDMA 
+\paragraph{True Zero-Copy} A protocol is truly zero copy if it can receive directly to the destination address. While RDMA 
 claims to be zero-copy, most protocols are not truly zero-copy. Protocols using ring-buffers or mailboxes are
-strictly speaking not zero-copy, as the receiver will always have to copy the data from this buffer to its actual destination.
-This is can be especially important when transferring a large amount of data that does not have to be further processed.
+strictly speaking not zero-copy, as the receiver will always have to copy the data from the buffer to its actual destination.
+This is can be especially important when, for example, transferring a large amount of data that does not have to be further processed.
 
-\paragraph{Variable Message Size} That the protocol allows us to send messages with different sizes, without using the 
-complete buffer at the receiver. Ring-buffers for example can be designed to only use the necessary space per message
+\paragraph{Variable Message Size} The protocol allows us to send messages with different sizes, without using the 
+complete buffer at the receiver. Ring-buffers, for example, can be designed to only use the necessary space per message
 while send receive will always use the complete receive buffer, no matter how small the message actually is. Variable
 message sizes allow us to avoid memory fragmentation and reduce total memory usage in general.
 
-\paragraph{Passive Sender/Receiver} Whether the sender or receiver is \emph{passive}. We define \emph{passivity} as not 
+\paragraph{Passive Sender/Receiver} It describes whether the sender or receiver is \emph{passive}. We define \emph{passivity} as not 
 requiring any CPU involvement in the actual data transfer. That means a \emph{passive receiver} can receive messages by
 simply reading from a memory location, without having to acknowledge anything or post receive buffers. \emph{Passivity} 
 reduces the necessary CPU usage to a minimum and can be useful for applications with heterogeneous CPU requirements.
 
-\paragraph{Interrupts} Whether there is some kind of notification system, that allows the receiver to be notified 
+\paragraph{Interrupts} There exists some kind of notification system, that allows the receiver to be notified 
 of an incoming message without having to constantly poll for it. While polling gives us better performance in almost all cases
 constantly polling wastes a lot of CPU cycles when we do not receive a lot of messages.
 
-\paragraph{Resource Sharing} If multiple connections can share resources, especially memory. We are using \emph{reliable connections}
+\paragraph{Resource Sharing} Multiple connections can share resources, especially memory. We are using \emph{reliable connections}
 so we inherently need to use one \emph{QP} per sender and receiver pair, but we can reduce memory usage by sharing receive 
 buffers between multiple connections. Without any memory sharing, utilization grows linearly with the number of QPs, which 
 can quickly lead to unacceptable memory requirements, especially for $N$ to $N$ communication patterns.
 
 \paragraph{Non-Blocking} By non-blocking we mean that a single not processed message cannot block a complete connection. 
-In systems
-is it very common to distribute incoming messages messages to different threads. It is important that a single slow running 
+It is very common in systems to distribute incoming messages to different threads. It is important that a single slow running 
 task cannot completely block the system of making progress. The way we use it a ring-buffer is a good example of a blocking
 behaviour. If a single buffer segment is not marked as available to be reused it may block the whole buffer. A send receive 
 based connection however is non-blocking. As long as there is at least one posted receive buffer, the connection is able to
@@ -79,8 +78,8 @@ make progress.
 
 
 Even with the more limited definition of \emph{data exchange} in Section~\ref{sec:proto-def} there are countless numbers
-of non trivial ways to implement such a protocol using RDMA features. In this section we take a look at the design 
-space of data exchange protocols, we show different approaches and point out specific protocols that we implemented
+of non-trivial ways to implement such a protocol using RDMA features. In this section we take a look at the design 
+space of data exchange protocols, show different approaches, and point out specific protocols that we implemented
 as an inspiration for other developers to design their own protocols.
 
 
@@ -114,7 +113,7 @@ as an inspiration for other developers to design their own protocols.
 
 
 \paragraph{} One way to split all possible exchange protocols is by the verbs they use to transfer the actual 
-data. We look at each of these verbs separately, as they all work in different ways and have different requirements
+data. We look at each of these verbs separately, as they all work in different ways and have different requirements.
 
 We did not see any advantages in splitting the actual data transfer into multiple verbs, as this only seems to add overhead 
 and complexity. And while it would theoretically be possible to use \emph{Compare and Swap} for generic data transfer,
@@ -129,7 +128,7 @@ The \emph{Send} verb basically fulfills our requirements for a \emph{data exchan
 initiated, the sender can reuse the buffer after the send is complete, and the receiver is notified of a new message by
 a completion event.
 
-There are however still multiple ways to tweak and tune a send-receive-based protocol by batching, inline sending, or 
+There are, however, still multiple ways to tweak and tune a send-receive-based protocol by batching, inline sending, or 
 sharing receive buffers between multiple connections using a \emph{Shared Receive Queue}. We explore these implementation 
 details and their performance characteristics in Section \ref{sec:conn:send}.
 
@@ -146,31 +145,31 @@ problems which the \emph{Send} verb solved for us.
 
 We look at and implement two general approaches for write-based protocols, a \emph{buffered} and an \emph{unbuffered} approach.
 
-\paragraph{} The idea of a buffered read connection is to have a dedicated, structured buffer at the receiver. In most cases 
+\paragraph{} The idea of a buffered read connection is to have a dedicated, structured buffer at the receiver. In most cases, 
 this is a ring-buffer. This allows the sender to always know where to write to without any communication overhead. There 
-are however downsides to using a buffer to transfer data. Most importantly the buffer is usually not the place the 
+are, however, downsides to using a buffer to transfer data. Most importantly the buffer is usually not the place the 
 data should finally end up in, which forces us to copy the received data again.
 
-There is a more detailed analysis of \emph{Buffered Write Protocols} with our implementation of one using a ring-buffer in 
-Section \ref{sec:conn:buf_write}. Further in Section \ref{sec:conn:shared_write} we look at a way to share this ring-buffer between multiple connections using RDMA atomics.
+A more detailed analysis of \emph{Buffered Write Protocols} with our implementation using a ring-buffer is in 
+Section \ref{sec:conn:buf_write}. Further in Section \ref{sec:conn:shared_write},
+we look at a way to share this ring-buffer between multiple connections using RDMA atomics.
 
 
 \paragraph{} The  \emph{Unbuffered Write Protocol} avoids the additional copy which is usually necessary when 
 using a \emph{Buffered Write Protocol}. The receiver should be able to decide the target location for each message. 
-That means there is a communication overhead for each message, as the sender either need to query the receiver where to 
+That means, there is a communication overhead for each message, as the sender either needs to query the receiver where to 
 write to or the receiver needs to preemptively send locations to write to.
-For a more detailed analysis of \emph{Unbuffered Write Protocols} and our implementation of one, 
-see Section \ref{sec:conn:direct_write}.
+For a more detailed analysis of \emph{Unbuffered Write Protocols} see Section \ref{sec:conn:direct_write}.
 
 
-\paragraph{}Each of these two write-based protocol approaches can again be implemented in a lot different ways which can
+\paragraph{}Each of these two write-based protocol approaches can again be implemented in many different ways which can
 in turn have drastically different performance characteristics. 
 
 
 \subsubsection{Read-based Protocols}
 The \emph{Read} verb is generally very similar to the \emph{Write} verbs. This time it allows the receiver to read from 
 an arbitrary location in the senders memory, without any interaction of the senders CPU. Any protocol
-using \emph{Read} as the data transfer verb we need to solve two problems.
+using \emph{Read} as the data transfer verb needs to solve two problems:
 
 \begin{itemize}
   \item The receiver needs to know that new data is ready and where to read it from.
@@ -182,32 +181,32 @@ We implemented a buffered as well as an unbuffered approach to a read-based prot
 
 \paragraph{} The buffered read works similarly to the buffer write approach: This time the \emph{sender} has a structured buffer where the 
 \emph{receiver} can read from. This reduces the communication overhead as the receiver always knows where to read the next 
-message from. Section \ref{sec:conn:buf_read} contains a more detailed look at \emph{Buffered Read Protocols} and our 
-implementation of one.
+message from. Section \ref{sec:conn:buf_read} contains a more detailed look at \emph{Buffered Read Protocols} together with 
+our implementation.
 
 \paragraph{} A \emph{Unbuffered Read Protocol} avoids the additional copy which is usually necessary when using a buffer. This means the 
 sender needs to notify the receiver when a new message arrives and where to read it from.  This introduces a large
 communication overhead but by being truly zero-copy this approach can be efficient, especially for large messages.
-We present our implementation of an \emph{Unbuffered Read Protocol} in Section~\ref{sec:conn:direct_read}
+We present our implementation of an \emph{Unbuffered Read Protocol} in Section~\ref{sec:conn:direct_read}..
 
 
 \pagebreak
 \subsection{Interface}
 
-One of our goals is to be able to compare the different protocols we evaluate, we introduce a programming 
+One of our goals is to be able to compare the different protocols we evaluate. We introduce a programming 
 interface that is implemented by nearly all of the six presented connection types. We also describe a few implementation 
 details that are shared by almost all of our connections.
 
 \subsubsection{Sender}
 
-Our protocol definition requires that the sender initiates the transfer. To achieve optimal performance it is
-vital to avoid unnecessary copies and it is very important to not block on a single transfer, but to give an RNIC multiple
+Our protocol definition requires that the sender initiates the transfer. To achieve optimal performance, it is
+vital to avoid unnecessary copies. Also, it is very important to not block on a single transfer, but to give an RNIC multiple
 requests to work on and fill up its processing pipeline. 
 
 This results in the interface shown in Listing~\ref{list:sender}. Where we send a message by providing a reference
 to a previously allocated memory region, which asynchronously starts the message transfer. This asynchronous approach allows
-us to start multiple concurrent transmissions. Throughout this thesis we will talk about \emph{unacknowledged messages}, which
-are messages that have been sent, but the transfer has not yet been completed. These unacknowledged messages are very 
+us to start multiple concurrent transmissions. Throughout this thesis, we will talk about \emph{unacknowledged messages}, which
+are messages that have been sent but its transfer has not yet been completed. These unacknowledged messages are very 
 important to achieve the best possible performance.
 
 \begin{figure}[htp]
@@ -225,19 +224,19 @@ class Sender {
 \end{lstlisting}
 \end{figure}
 
-\paragraph{} To allow us to \code{Wait} for a specific work request, most of our implementation use the same process. 
+\paragraph{} To allow us to \code{Wait} for a specific work request, most of our implementations use the same process. 
 Initiating a send request returns a monotonically increasing ID. This ID is also used as a \code{wr\_id} for the issued RDMA
 operation. We store the last ID with a matching completion event. If we try to wait on a lower ID we know we already received 
-a matching completion event prior, because of the in order guarantees of InfiniBand. If the provided ID is higher then the
+a matching completion event prior, because of the in order guarantees of InfiniBand. If the provided ID is higher than the
 last seen ID, we poll the completion queue until we receive one with a matching \code{wr\_id}.
 
 This approach will eventually lead to an overflow, but given our observed  message rates we do not expect to see this 
-happen in the next 10 thousand years. 
+happen in the next 10'000 years. 
 
 \subsubsection{Receiver}
 
 \paragraph{} Almost all of our implementations of a receiver have fixed regions of memory to receive messages into. 
-For an application receiving means that the protocol returns a reference to one of, or a part of, this memory regions. 
+For an application, receiving means that the protocol returns a reference to one of, or a part of, these memory regions. 
 
 As soon as the application  has processed this message it needs to signal to the protocol that it can reuse the corresponding
 buffer. We call this \emph{freeing} the receive buffer.

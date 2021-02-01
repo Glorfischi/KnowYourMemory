@@ -6,7 +6,7 @@ RDMA write verb and a ring-buffer. In this section we present a way to share a s
 where multiple sender transmit messages to a single receiver.
 We point out that there are multiple different approaches that use the same atomics based reserving we present below. One
 could use the same \emph{write offset} or \emph{write reverse} approach presented earlier and multiple receivers could
-utilize the same ring-buffer when using \emph{write with immediate}. A deep dive in all this variations however is out
+utilize the same ring-buffer when using \emph{write with immediate}. A deep dive in all these variations, however, is out
 of scope of this thesis.
 
 \subsection{Protocol}
@@ -22,7 +22,7 @@ of scope of this thesis.
 To allow for multiple sender to write to a shared ring-buffer we need to coordinate them. We need a system that 
 assigns a unique destination addresses to each message. This translates to implementing a \emph{sequencer} that issues
 increasing addresses based on the message size. This can either be implemented using atomic operations or by using RPCs
-and handling the sequencing at the receives CPU. An RPC based approach is expected to provide us with higher 
+and handling the sequencing at the receive's CPU. An RPC based approach is expected to provide us with higher 
 throughput~\cite{anuj-guide}, but introduces more complexity and CPU overhead for the receiver. So we focus on an atomics based 
 implementation.
 
@@ -36,9 +36,9 @@ We are aware that this approach will eventually lead to an overflow of the head 
 more than 18 exabytes, this approach will not work. An extension using some kind of epochs to handle offset overflows could
 fix this, but this was not explored in this thesis.
 
-\paragraph{}When a sender wants to send a message of size $s$ it issues a \emph{fetch and add} on the remote tail with the 
+\paragraph{}When a sender wants to send a message of size $s$, it issues a \emph{fetch and add} on the remote tail with the 
 size $s$. It receives its destination address and can be assured that the next $s$ bytes are reserved. It then needs
-to check whether the buffer segment is actually free to write to by comparing the tail with the head. This might cause one 
+to check whether the buffer segment is actually free to write to by comparing the tail to the head. This might cause one 
 or multiple reads to update the cached head value.
 
 \paragraph{} We could also use \emph{compare and swap} for the reservation phase, but that would introduce another read and
@@ -58,14 +58,14 @@ QPs. The out of order freeing of messages can then be solved in very similar way
 
 
 \subsection{Device Memory}
-Since fairly recently RDMA-enabled NICs provide on device memory that can be accessed using the Verbs API. This device memory can 
-be accessed the same way as regular memory through verbs and is completely transparent for the remote system. It does however
+Since fairly recently, RDMA-enabled NICs provide on-device memory that can be accessed using the Verbs API. This device memory can 
+be accessed the same way as regular memory through verbs and is completely transparent for the remote system. It does, however,
 reduce latency and does not have to make any PCI accesses. From this we especially expect atomic operations to be a lot faster
 when using device memory.
 
 \paragraph{} Quick micro benchmarks reaffirm these expectations. In our case maximum throughput of fetch and add operations 
 increased form around 2 MOps to nearly 8 MOps. This means by using device memory for the ring-buffer metadata we can increase
-the throughput of our reservation phase by nearly 300\%. We can also achieve a minor speed up for reading the head update after
+the throughput of our reservation phase by nearly 300\%. We can also achieve a minor speed-up for reading the head update after
 reserving a buffer segment.
 
 
@@ -83,7 +83,7 @@ for a completely \emph{passive receiver} by using an offset approach, similarly 
 Section~\ref{sec:conn:buf_write}.
 
 \paragraph{} The shared write protocol does still not provide \emph{true zero copy} capabilities, and the \emph{blocking}
-behaviour is even more pronounced than for the unshared buffered write protocol. A single sender that reserves spaces, but does not
+behaviour is even more pronounced than for the unshared buffered write protocol. A single sender that reserves space, but does not
 write to it can block all other connections. This means a single crashed sender can block the whole system. For a real world
-application there needs to be some extension to achieve better resilience.
+application, there needs to be some extension to achieve better resilience.
 

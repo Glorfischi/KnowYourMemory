@@ -12,7 +12,6 @@ The receiver then issues an RDMA read operation to directly read this message to
 
 By allowing the sender to attach additional domain specific information to this read request, the receiver can directly 
 move this data to the correct space in a data structure, or potentially even directly to NVMe storage for certain applications.
-\comment{I remember correctly this is possible right? I had a hard time finding a relevant paper}
 
 
 \subsection{Protocol}
@@ -25,7 +24,7 @@ containing the location of the buffer. It is then the job of the receiver to acc
 \paragraph{} To wait for the transfer to be completed, and for the buffer to be able to be reused, we can not simply wait 
 for the completion event of the send, like we do for the send or write based connections. We need to wait for the receiver 
 to explicitly signal that the buffer was transfered. We append a signaling byte at the end of the send buffer. 
-When sending this byte will be set to 0 and we can wait for the transport to be completed by polling this byte until the 
+When sending this byte, will be set to 0 and we can wait for the transport to be completed by polling this byte until the 
 receiver will update it.
 
 This push based implementation introduces little additional complexity, but there are other ways to implement such 
@@ -38,7 +37,7 @@ receive buffer. Using the information in the Read Request it issues an RDMA read
 
 
 It is crucial that we do not block until the read is completed to get reasonable performance.  This means the receiver has a
-slightly different interface that the previously presented connections. We split the receive call into a 
+slightly different interface than the previously presented connections. We split the receive call into a 
 \code{RequestAsync} and a \code{Wait} method. The \code{RequestAsync} takes a receive buffer
 to read into. It will wait for an incoming read request and issue the corresponding read. It uses the same increasing 
 \code{wr\_id} approach we use for sending with which the \code{Wait} method can wait for the read to complete. This approach
@@ -49,15 +48,15 @@ allows us to pipeline receives the same way we pipeline sends.
 \subsection{Fences}
 
 To signal the end of the transmission, the receiver needs to issue a write as soon as the read is completed. One way to 
-implement this is by issuing the write as part of the receivers \code{Wait}. This is the approach we implemented for our
+implement this is by issuing the write as part of the receiver's \code{Wait}. This is the approach we implemented for our
 base version.
 
-One idea we had to optimize this is by issuing the write at the same time as we issue the read. This however introduces a 
+One idea for optimization is to issue the write at the same time as the read. This however introduces a 
 problem. While RDMA guarantees that two consecutively issued writes and sends will happen in the issued order, 
 it will not guarantee us that reads issued before writes will be completed before we can observe the write~\cite{rdma-reference}.
 This results in a data race when we issue a read directly before a write. To still be able to post these two operations 
 at the same time, we need to add an \code{IBV\_SEND\_FENCE} flag to the write request. When we add a fence indicator to a write
-request its processing will not begin until all previous read and atomic operations on the same QP  have been completed. This 
+request, its processing will not begin until all previous read and atomic operations on the same QP  have been completed. This 
 allows us to issue both the read as well as the acknowledging write at the same time.
 
 \subsection{Feature Analysis}
@@ -66,8 +65,9 @@ The Direct Read connection is a protocol with the main goal of achieving  \emph{
 the receiver itself can read the message to its final place, preventing any additional 
 copying. 
 
-The protocol is also \emph{Non-Blocking} and achieves efficient memory usage though \emph{Variable Message Sizes} and not 
-having any fixed buffers. With that \emph{Resource Sharing} follows as multiple connections can reuse the same receive and 
+The protocol is also \emph{Non-Blocking} and achieves efficient memory usage through \emph{Variable Message Sizes} and through 
+not 
+having any fixed buffers. With that, \emph{Resource Sharing} follows as multiple connections can reuse the same receive and 
 send buffers. It also allows us to use \emph{Interrupts} from completion events
 giving us low CPU utilization in low load situations as no component needs to constantly poll.
 

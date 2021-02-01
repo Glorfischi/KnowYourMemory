@@ -69,14 +69,14 @@ the receiver to send information on prepared receive buffers to the sender. The 
 \end{figure}
 
 Figure~\ref{fig:dirwrite-resources} is a representation of the data structures involved in the direct write 
-connection. In the following subsections we will walk tough the steps involved in sending and receiving a message and
+connection. In the following subsections we will walk trough the steps involved in sending and receiving a message and
 will reference these data structures.
 
 \subsection{Protocol}
 
 The sender has an array of structs, which we call \code{BufferInfo} in local memory. This array is populated by the 
 receiver and represent receive buffers to which the sender is allowed to write to. The struct contains two fields: 
-\code{addr}, which is the virtual address of the corresponding buffer in the receivers memory, and \code{valid} which 
+\code{addr}, which is the virtual address of the corresponding buffer in the receiver's memory, and \code{valid}, which 
 indicates whether this entry is actually valid. 
 
 \paragraph{} This array acts as a ring-buffer, so when sending a message, the sender looks at the next field. If it is
@@ -93,14 +93,14 @@ for the buffered write protocol.
 \paragraph{} In a way the direct write receiver works in a similar way to the send and receive receiver. It can \code{Receive()} and 
 \code{Free()} buffers. 
 
-\emph{Freeing} a buffer means making it available for the sender to write to. As we established  
+\emph{Freeing} a buffer means making it available for the sender to write to. As we have established,  
 there is a queue of \code{BufferInfo} in the senders memory. To \emph{free} a buffer the receiver first sets the very last 
 signal byte of its local buffer to 0, then we write its address and a valid byte of 1 to the next empty or 
-invalidated queue entry at the sender. The receiver keeps a very similar local queue to keep track of the oder of 
+invalidated queue entry at the sender. The receiver keeps a very similar local queue to keep track of the order of 
 posted buffers.
 
-To \emph{Receive} a buffer the receiver polls on the signal bit of the oldest freed buffer. This will be set
-to one by the sender when the transmission is completed. We are using the fact that RDMA updates memory in increasing memory 
+To \emph{receive} a buffer the receiver polls on the signal bit of the oldest freed buffer. This will be set
+to 1 by the sender when the transmission is completed. We are using the fact that RDMA updates memory in increasing memory 
 order, for any modern systems~\cite{herd, farm}. This guarantees us that the complete message has been written as soon a we
 see an update to the last byte.
 
@@ -112,14 +112,14 @@ specific systems.
 
 \paragraph{} Our current implementation fulfills our requirements for being \emph{non-blocking}, the same way the send-receive
 protocol does. It however does not provide any \emph{interrupts} and we did not explore any \emph{resource sharing} approaches.
-As it stands it also does not provide \emph{True Zero Copy} capabilities and it lacks support for 
+As it stands, it also does not provide \emph{True Zero Copy} capabilities and it lacks support for 
 \emph{variable message sizes}.
 
 
 \paragraph{} We do however think that this protocol can be adapted to enable more features. By adding metadata when posting a
 buffer we could enable \emph{True Zero Copy} capabilities for certain applications, by performing some routing decisions at
 the sender and being able to directly write to the correct final memory location.
-And with a more sophisticated buffer management one could more effectively utilizes the available memory by supporting 
+And with a more sophisticated buffer management one could more effectively utilize the available memory, by supporting 
 \emph{variable message sizes}.
 
 

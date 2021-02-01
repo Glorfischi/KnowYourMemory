@@ -1,7 +1,7 @@
 \section{Buffered Write} \label{sec:conn:buf_write}
 
-The basic idea of a buffered write protocol is to have a ring-buffer at the receiver which the sender write to using
-RDMA write operations. This is widely used approach and can be found in many systems~\cite{herd, scal-rdma-rpc}
+The basic idea of a buffered write protocol is to have a ring-buffer at the receiver which the sender writes to using
+RDMA write operations. This is a widely used approach and can be found in many systems~\cite{herd, scal-rdma-rpc}.
 
 One goal of this section is to demonstrate that there are many different ways to implement such a buffer write 
 protocol, which all can have different features and performance characteristics.
@@ -11,7 +11,7 @@ protocol, which all can have different features and performance characteristics.
 \emph{where} to  write to. This leaves two problems that we solve in multiple different ways.
 
 First we need to specify how the sender writes to the ring-buffer and how the reader notices this new message. We 
-implemented three different approaches for this. 
+implemented three different approaches for this: 
 \begin{itemize}
   \item \textbf{Write Immediate}, which uses the write with immediate verb and allows us to use completion 
     events at the receiver.
@@ -22,11 +22,11 @@ implemented three different approaches for this.
  
 
 \paragraph{} Further the receiver needs to signal to the sender how much free space is left in the buffer. We implemented 
-two different approaches for this problem
+two different approaches for this problem:
 
 \begin{itemize}
   \item \textbf{Send Acknowledging}, where the receiver periodically sends updates to the sender indicating how much of
-    the buffer has been processed an can be reused.
+    the buffer has been processed and can be reused.
   \item \textbf{Read Acknowledging}, where the sender issues an RDMA read operation to check for available space.
 \end{itemize}
 
@@ -112,7 +112,7 @@ The ring-buffer is the main component for all of our implementations. Figure \re
 basis for this buffer.
 
 We use a buffer that allows us to write arbitrary message sizes.  That means 
-in contrast to the send protocol presented in Section~\ref{sec:conn:send} we do not have a fixed maximum buffer size
+in contrast to the send protocol presented in Section~\ref{sec:conn:send}, we do not have a fixed maximum buffer size
 that will always be consumed, but we will only use the space we actually need.
 
 \paragraph{}There are three relevant pointers. The \emph{tail} which points to the next free memory address, the \emph{head},
@@ -124,7 +124,7 @@ next message to. The head and read pointer is managed by the receiver. The sende
 updates when necessary to notice if there is enough free space left to write the next message.
 
 \paragraph{}\emph{Receiving} from a buffered read protocol will 
-return a pointer to a segment of the buffer. \emph{Freeing} message marks this buffer segment as being free to be reused.
+return a pointer to a segment of the buffer. \emph{Freeing} a message marks this buffer segment as being free to be reused.
 
 This is where the difference between the \emph{head} and the \emph{read pointer} becomes apparent. The read pointer points 
 to the next message the receiver has not read, while the head points to the oldest message the receiver has not freed. Reading
@@ -140,16 +140,16 @@ Section~\ref{sec:conn:write:sender} below.
 
 
 
-\subsubsection{"Magic" Buffer} 
+\subsubsection{``Magic" Buffer} 
 
 One problem we encountered while using such a ring-buffer for RDMA is that we cannot simply 
-\emph{wrap around} the end of the buffer using DMA. So if we want to write a message that is larger then the space left until
-the end of the buffer we either need to skip to the front of the buffer, wasting space, or perform two writes, which is 
+\emph{wrap around} the end of the buffer using DMA. So if we want to write a message that is larger than the space left until
+the end of the buffer, we either need to skip to the front of the buffer, wasting space, or perform two writes, which is 
 significantly slower.
 
 Figure \ref{fig:ringbuffer} shows our problem. Message $A$ cannot be written in a single RDMA write as it consists of 
 two distinct, not connected memory regions. We can solve this by using something that has been coined 
-\emph{"Magic" ring-buffer}. The idea is to map the same memory twice, so that the same physical memory is adjacent to itself
+\emph{``Magic" ring-buffer}. The idea is to map the same memory twice, so that the same physical memory is adjacent to itself
 in virtual memory. You can see a representation of this in the Figure above. We use \emph{shared memory segments} on 
 Linux to achieve this memory layout. One limitation this introduces is that the buffer length needs to be a multiple of the
 page size.
@@ -166,7 +166,7 @@ the problem of notifying the receiver that we sent a message and communicate the
 
 \paragraph{}The sender and receiver interfaces stay exactly the same as presented in Section \ref{sec:conn:send}. We use the same 
 monotonically increasing \code{wr\_id}s to wait for sends to complete. The freeing is explained in the buffer section
-above. We implemented three different ways to send and receive
+above. We implemented three different ways to send and receive.
 
 
 \subsubsection{Write Immediate}
@@ -178,29 +178,28 @@ and receiving in a very similar way to the send connection presented in the last
 consumes a receive buffer and creates a completion event at the receiver. This completion event also contains the number 
 of bytes written. So by writing the message using write with immediate, we will generate a completion event at the receiver
 which gives it the size of the message. The receiver can then immediately repost the received buffer and return the buffer
-segment. Through the in order guarantees of RDMA we know that the messages in the ring-buffer will be in the same
+segment. Through the in-order guarantees of RDMA we know that the messages in the ring-buffer will be in the same
 order as the completion events in the queue. We can reuse both the receive buffer management and batching from the send 
 connection.
 
 
 \subsubsection{Write Offset}
 
-One key reason to use the write instead of send verb is that we do not need to generate a completion event at the receiver
-and the common assumption that writes are faster than sends~\cite{herd}. When we use 
-write with immediate however, we expect the same performance as when using the send verb and we still need to handle receive
-buffers and completion events. So we need other ways to notify the sender of incoming messages.
+One key reason to use the write instead of send verb is that we do not need to generate a completion event at the receiver.
+ When we use  write with immediate however, we do generate completion events and we still need to handle receive
+buffers. So we need other ways to notify the sender of incoming messages.
 
 \paragraph{} One way to implement this is by having additional metadata that allows the receiver to notice incoming data.
 We implement such a protocol with what we call \emph{Write Offset}. The idea is that together with each message, the sender
 also updates a metadata region at the receiver containing the \emph{tail}. The receive can then notice new incoming messages
-by polling this tail and comparing it to the \emph{Read Pointer}. We write the size of the message as the first 4 bytes we 
-write to the ring-buffer.
+by polling this tail and comparing it to the \emph{Read Pointer}. We write the size of the message as the first 4 bytes 
+that we write to the ring-buffer.
 
 This means to send a message of size $s$ the sender prepends the size $s$ to the message and writes it to the
 tail of the buffer. It then writes the updated tail to the metadata region at the sender. Of these two RDMA writes only the 
 latter needs to be signaled and we can issue both of the work requests at the same time, mitigating the impact of having to 
 perform two writes for a single message. The receiver will always poll its local copy of the tail. As soon as the tail is 
-not equal it \emph{Read Pointer} it knows that there are outstanding messages. We can read the first 4 bytes to get the size
+not equal to the \emph{Read Pointer} it knows that there are outstanding messages. We can read the first 4 bytes to get the size
 of the next message and can then read it and update the \emph{Read Pointer}.
 
 \paragraph{} This connection has obvious drawbacks, as we need to issue two writes for a single message. But this way we 
@@ -295,8 +294,8 @@ similar way.
 
 \subsection{Acknowledging}
 
-We showed that there are multiple ways to transfer data and notify the sender. One other thing we need to prevent is for the
-sender to overrun the ring-buffer. That means the sender needs at least a periodic update of the head position to decide if
+We showed that there are multiple ways to transfer data and notify the sender. One other thing we need to prevent is the
+sender  overrunning the ring-buffer. That means the sender needs at least a periodic update of the head position to decide if
 there is space left to write to. We call this \emph{acknowledging} the head position.
 
 We present two different approaches to do this. A pull based approach, where the sender reads the updated head from the
@@ -314,7 +313,7 @@ performance improvements by adding it, we decided not to add this to reduce code
 \subsubsection{Send Acknowledging} 
 
 We also implemented a push based approach, where the receiver will send updates of the tail value using 
-RDMA sends. To reduce the load of this acknowledgements we only send updates when the receiver has processed an eighth of 
+RDMA sends. To reduce the load of these acknowledgements we only send updates when the receiver has processed an eighth of 
 the complete ring-buffer. The sender polls its receive queue as soon as it cannot write the next message given its
 cache of the tail value.
 
@@ -328,7 +327,7 @@ Ring-buffer based connections are often used because of their apparent speed, bu
 
 
 \paragraph{} All of our buffered write protocol implementations support \emph{variable message sizes}, so messages will only
-use up the buffer space they actually need. This result more effective memory usage than for example the send-receive protocol.
+use up the buffer space they actually need. This result in more effective memory usage than, for example, the send-receive protocol.
 The write immediate implementation provides convenient \emph{interrupts}, while both the write offset and write reverse 
 implementation have the possibility for a completely \emph{passive receiver} when using the read acknowledging. This can
 reduce unnecessary load for the receiver.
