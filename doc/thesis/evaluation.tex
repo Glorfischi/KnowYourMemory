@@ -144,21 +144,19 @@ to achieve comparable throughput.
 
 
 \paragraph{} Figure~\ref{fig:plot-br-bw} shows the 1:1 bandwidth for the buffered-read protocol. We also plot the 
-\emph{mean transfer size}, so the data transfered by a single read. This can vary greatly for this protocol as it periodically
+\emph{mean transfer size}, so the amount of data transfered by a single read. 
+This can vary greatly for this protocol as it periodically
 fetches the complete sending ring-buffer. For this reason we also plot the mean bandwidth instead of the median bandwidth 
 as the data is not normally distributed.
 
-As expected with increasing message size the mean transfer size also increases linearly and with that the 
-total bandwidth also increases until we hit a maximum at around 70 Gbit/s and a transfer size of about 100KB. After that 
-the performance starts to degrade. \comment{Why? I can't explain it really. I'm having a hard time in general to explain 
-this graph}
+As expected with increasing message size the mean transfer size also increases linearly. The total bandwidth 
+also increases quickly with approaches a maximum of a little over 80 Gbit/s. This is what we expect given our current 
+implementation. We only issue a new read as soon as the previous read was completed. This results in the sub-linear
+curve we can see. The observed performance could be drastically improved by preemptively issuing reads to fill up
+the pipeline.
 
-We can also see that we achieve significantly better performance for very small messages compared to the other protocols we
+We can also see that we achieve significantly better performance for small messages compared to the other protocols we
 look at in this thesis. This is a result of the automatic batching behaviour of this protocol. 
-Performance of the buffered-read
-protocol in a single connection situation could be drastically improved by limiting the maximum transfer size and 
-preemptively issuing reads to fill up the pipeline and not having to explicitly wait for each
-read to complete.
 
 
 \begin{figure}[h]
@@ -479,7 +477,7 @@ achieves significantly worse performance than the send-receive protocol.
 \paragraph{} Figure~\ref{fig:plot-write-bw-n1} shows the N:1 throughput for all buffered-write protocols as 
 well as the two shared-write implementations.
 
-For large messages of size 8196 throughput is again limited by the link speed for all buffered-read implementations, 
+For large messages of size 8196 throughput is again limited by the link speed for all buffered-write implementations, 
 with the same slight overhead for the write offset (BW-Off) implementation we have seen in all previous bandwidth plots.
 For smaller messages the buffered-write protocols are limited by the receivers CPU. We can avoid any 
 RNR errors for the write immediate sender by limiting the ring-buffer size. This way we do not have to artificially limit 
@@ -494,7 +492,7 @@ slightly higher performance when opening more than 6 concurrent connections with
 sized messages. As of
 writing this, we do not have a clear explanation for it. Our current best guess is, that with more than 6 connections the 
 metadata is spread over more than one cache line. This can result in less cache invalidation and in turn in lower receiver 
-CPU usage and better overall performance. Further research into this is necessary. \comment{Veery rough guess}
+CPU usage and better overall performance. Further research into this is necessary. 
 
 
 \paragraph{} Figure~\ref{fig:plot-write-bw-n1} also evaluates the shared write protocol (SW). We can see that we are strongly limited
@@ -545,13 +543,13 @@ This communication pattern does not seem to be good fit for this protocol as it 
 2.6 MOp/s by the receiving CPU speed. This gives us the 10 Gbit/s and 0.3 Gbit/s bottlenecks for the 512 byte and
 16 byte size messages respectively.
 
-\paragraph{} Figure~\ref{fig:plot-bufread-bw-n1} shows the buffered-read protocols N:1 throughput. It achieves basically the 
+\paragraph{} Figure~\ref{fig:plot-bufread-bw-n1} shows the buffered-read protocol's N:1 throughput. It 
+achieves basically the 
 same performance as when using a single connection. This is exactly what we expect as receiving from multiple connections
 behaves the same way as receiving from a single connection.
 
-There seems to be performance degradation when increasing the number of senders. This can for one be explained
-by increased cache misses and more importantly for large messages the same performance drop we see in the single connection 
-benchmark when further increasing the transfer size.
+There seems to be performance degradation when increasing the number of senders. This can  be explained
+by increased cache misses, caused by the growing total buffer space and the usage of multiple QPs.
 
 
 \paragraph{} Unsurprisingly when developing a protocol for a N:1 communication it is vitally important to reduce the 

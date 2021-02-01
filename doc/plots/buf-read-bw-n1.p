@@ -1,25 +1,24 @@
 set print $data
 conns = "1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16"
 do for [c in conns] {
-  bw = sprintf("data/buf-read-bw/buf-read-bw-single-receiver-conn-%s-size-16-server", c);
+  bw = sprintf("data/buf-read-bw/buf-read-8M-bw-single-receiver-conn-%s-size-16-server", c);
   stats bw using 5 noout
   print sprintf("%s %f\n", c, STATS_sum*8/1024/1024/1024)
 }
 
 set print $data512
 do for [c in conns] {
-  bw = sprintf("data/buf-read-bw/buf-read-bw-single-receiver-conn-%s-size-512-server", c);
+  bw = sprintf("data/buf-read-bw/buf-read-8M-bw-single-receiver-conn-%s-size-512-server", c);
   stats bw using 5 noout
   print sprintf("%s %f\n", c, STATS_sum*8/1024/1024/1024)
 }
 
 set print $data8192
 do for [c in conns] {
-  bw = sprintf("data/buf-read-bw/buf-read-bw-single-receiver-conn-%s-size-8192-server", c);
+  bw = sprintf("data/buf-read-bw/buf-read-8M-bw-single-receiver-conn-%s-size-8192-server", c);
   stats bw using 5 noout
   print sprintf("%s %f\n", c, STATS_sum*8/1024/1024/1024)
 }
-
 
 set terminal png small size 960,640 font "Computer Modern,24"
 set output "plots/buf-read-bw-n1.png"

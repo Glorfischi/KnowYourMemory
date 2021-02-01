@@ -38,7 +38,7 @@ namespace connection {
 
 namespace {
   const uint32_t inflight = 200;
-  const uint32_t default_buffer_size = 32*1024*1024;
+  const uint32_t default_buffer_size = 8*1024*1024;
   endpoint::Options default_opts = {
     .qp_attr = {
       .cap = {
@@ -148,8 +148,11 @@ Status BufferedReadConnection::Send(void *buf, uint32_t len){
   uint32_t tail = *this->tail_ % this->length_;
   bool free_space = false;
 
+  int rnr_i = 0;
   while (!free_space) {
     uint32_t head = *this->head_ % this->length_;
+    /*rnr_i++;
+    if (rnr_i > 1) info(stderr, "Sender cannot write %d\n", rnr_i);*/
     if ( head == tail && len > this->length_){
       // We are empty, but the message is larger then our complete buffer.
       return Status(StatusCode::Unknown, "message larger then buffer");

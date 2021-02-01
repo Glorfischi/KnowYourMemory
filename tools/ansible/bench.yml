@@ -1080,7 +1080,7 @@
       vars:
         bench_type: "{{ item[0] }}"
         bench_msg_size: "{{ item[1] }}"
-        bench_output: "buf-read-bw-single-size-{{ item[1] }}"
+        bench_output: "buf-read-8M-bw-single-size-{{ item[1] }}"
         bench_count: 1048576
       with_nested:
         - ["bw"]
@@ -1131,7 +1131,7 @@
       vars:
         bench_type: "{{ item[0] }}"
         bench_msg_size: "{{ item[1] }}"
-        bench_output: "buf-read-bw-single-receiver-conn-{{ item[2] }}-size-{{ item[1] }}"
+        bench_output: "buf-read-8M-bw-single-receiver-conn-{{ item[2] }}-size-{{ item[1] }}"
         bench_count: 1048576
         bench_conn: "{{ item[2] }}"
         bench_single_rcv: true

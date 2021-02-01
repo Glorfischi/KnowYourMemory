@@ -1,14 +1,14 @@
 set print $data
 msgs = "16 32 64 128 256 512 1024 2048 4096 8192 16384"
 do for [s in msgs] {
-  bw = sprintf("data/buf-read-bw/buf-read-bw-single-size-%s-server", s);
+  bw = sprintf("data/buf-read-bw/buf-read-8M-bw-single-size-%s-server", s);
   stats bw using 5 noout
   print sprintf("%s %f\n", s, STATS_median*8/1024/1024/1024)
 }
 
 set print $msgsize
 do for [s in msgs] {
-  bw = sprintf("data/buf-read-bw/buf-read-bw-single-size-%s-server", s);
+  bw = sprintf("data/buf-read-bw/buf-read-8M-bw-single-size-%s-server", s);
   stats bw using 4 noout
   print sprintf("%s %f\n", s, STATS_median)
 }
@@ -26,8 +26,8 @@ set xrange [16:20000]
 
 set y2label "Mean Transfer Size (KB)" enhanced
 
-set y2tics 0, 20,  200
-set y2range [0:200]
+set y2tics 0, 20,  320
+set y2range [0:280]
 
 set key left top
 
