@@ -95,7 +95,7 @@ significantly.
 write connection. This allows us to update the \code{head} accordingly when freeing messages out of order and freeing will
 occasionally update the remote head using an RDMA write operation.
 
-\paragraph{} For both ring-buffers we use the same \emph{"Magic Buffer"} trick introduced in Section~\ref{sec:conn:buf_write} to 
+\paragraph{} For both ring-buffers we use the same \emph{``Magic Buffer"} trick introduced in Section~\ref{sec:conn:buf_write} to 
 allow us to wrap around the end of the buffer.
 
 \subsection{Feature Analysis}
@@ -110,4 +110,4 @@ has the same \emph{Blocking} behaviour as the buffered write protocol.
 
 \paragraph{} For future work it would also be interesting to implement a system where multiple threads can write to and receive 
 from a single  connection by atomically updating head or tail pointers, or we could explore the possibilities of sharing send or
-receive buffers using atomic operations. The current implementation, however, does not provide any kind of \emph{Resource Sharing}
+receive buffers using atomic operations. The current implementation, however, does not provide any kind of \emph{Resource Sharing}.

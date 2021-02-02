@@ -38,7 +38,7 @@ that the connection is \emph{non-blocking} or that the memory requirements do no
 a few microseconds.
 
 To be able to better compare our presented protocols, we define a few traits that are often required by systems and
-analyse which protocols provide these traits
+analyse which protocols provide these traits.
 
 \paragraph{True Zero-Copy} A protocol is truly zero copy if it can receive directly to the destination address. While RDMA 
 claims to be zero-copy, most protocols are not truly zero-copy. Protocols using ring-buffers or mailboxes are
@@ -188,7 +188,7 @@ our implementation.
 \paragraph{} A \emph{Unbuffered Read Protocol} avoids the additional copy which is usually necessary when using a buffer. This means the 
 sender needs to notify the receiver when a new message arrives and where to read it from.  This introduces a large
 communication overhead but by being truly zero-copy this approach can be efficient, especially for large messages.
-We present our implementation of an \emph{Unbuffered Read Protocol} in Section~\ref{sec:conn:direct_read}..
+We present our implementation of an \emph{Unbuffered Read Protocol} in Section~\ref{sec:conn:direct_read}.
 
 
 \pagebreak
