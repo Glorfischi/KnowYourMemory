@@ -27,7 +27,7 @@ set terminal png small size 960,640 font "Computer Modern,24"
 set output "plots/write-bw-threads-8192.png"
 
 set xlabel "Threads" 
-set ylabel "Bandwith (Gbit/s)" enhanced
+set ylabel "Bandwidth (Gbit/s)" enhanced
 set yrange [0:100]
 set ytics 0, 10, 100
 set xrange [0.5:15.5]
@@ -36,7 +36,7 @@ set xtics 1, 2, 16
 set grid ytics lt 0 lw 1 lc rgb "#bbbbbb"
 set grid xtics lt 0 lw 1 lc rgb "#bbbbbb"
 
-set key left bottom
+set key right bottom
 plot $writeRev title "BW-Rev" pt 5 ps 2, \
      $writeImm title "BW-Imm" pt 7 ps 2, \
      $writeOff title "BW-Off" pt 9 ps 2

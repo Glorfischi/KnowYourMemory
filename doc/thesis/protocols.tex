@@ -123,7 +123,7 @@ following verbs.
 \paragraph{} We want to point out that this is in no way an exhausting list of protocols, but should rather show that the 
 design space is very large and that there are a lot of interesting protocols that can still be explored.
 
-\subsubsection{Send-based Protocols}
+\subsubsection{Send-Based Protocols}
 The \emph{Send} verb basically fulfills our requirements for a \emph{data exchange protocol} out of the box. It is sender
 initiated, the sender can reuse the buffer after the send is complete, and the receiver is notified of a new message by
 a completion event.
@@ -132,7 +132,7 @@ There are, however, still multiple ways to tweak and tune a send-receive-based p
 sharing receive buffers between multiple connections using a \emph{Shared Receive Queue}. We explore these implementation 
 details and their performance characteristics in Section \ref{sec:conn:send}.
 
-\subsubsection{Write-based Protocols}
+\subsubsection{Write-Based Protocols}
 The \emph{Write} verb is a lot less restrictive. It allows the sender to write to an arbitrary 
 location in the receivers memory, without any interaction of the receivers CPU. This also means we need to solve some of the 
 problems which the \emph{Send} verb solved for us.
@@ -166,7 +166,7 @@ For a more detailed analysis of \emph{Unbuffered Write Protocols} see Section \r
 in turn have drastically different performance characteristics. 
 
 
-\subsubsection{Read-based Protocols}
+\subsubsection{Read-Based Protocols}
 The \emph{Read} verb is generally very similar to the \emph{Write} verbs. This time it allows the receiver to read from 
 an arbitrary location in the senders memory, without any interaction of the senders CPU. Any protocol
 using \emph{Read} as the data transfer verb needs to solve two problems:

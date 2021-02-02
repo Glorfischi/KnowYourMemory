@@ -18,7 +18,7 @@ set terminal png small size 1120,640 font "Computer Modern,24"
 set output "plots/buf-read-bw-msgsize.png"
 
 set xlabel "Message size (bytes)" 
-set ylabel "Bandwith (Gbit/s)" enhanced
+set ylabel "Bandwidth (Gbit/s)" enhanced
 set yrange [0:100]
 set ytics 0, 10, 100 nomirror
 set xrange [16:20000]

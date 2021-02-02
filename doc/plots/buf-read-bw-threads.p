@@ -29,7 +29,7 @@ set grid xtics lt 0 lw 1 lc rgb "#bbbbbb"
 
 
 set xlabel "Connections" 
-set ylabel "Bandwith (Gbit/s)" enhanced
+set ylabel "Bandwidth (Gbit/s)" enhanced
 set yrange [0:100]
 set ytics 0, 10, 100
 set xrange [0.5:15.5]

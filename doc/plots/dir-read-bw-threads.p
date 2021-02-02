@@ -27,7 +27,7 @@ set output "plots/dir-read-bw-threads.png"
 
 
 set xlabel "Connections" 
-set ylabel "Bandwith (Gbit/s)" enhanced
+set ylabel "Bandwidth (Gbit/s)" enhanced
 set yrange [0:100]
 set ytics 0, 10, 100
 set xrange [0.5:15.5]

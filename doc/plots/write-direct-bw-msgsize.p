@@ -17,7 +17,7 @@ set terminal png small size 960,640 font "Computer Modern,24"
 set output "plots/write-direct-bw-msgsize.png"
 
 set xlabel "Message Size (bytes)" 
-set ylabel "Bandwith (Gbit/s)" enhanced
+set ylabel "Bandwidth (Gbit/s)" enhanced
 set yrange [0:100]
 set ytics 0, 10, 100
 set xrange [14:20000]

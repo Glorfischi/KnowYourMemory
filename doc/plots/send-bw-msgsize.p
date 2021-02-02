@@ -25,7 +25,7 @@ set terminal pngcairo size 960,640 font "Computer Modern,16"
 set output "plots/send-bw-msgsize.png"
 
 set xlabel "Message size (bytes)" 
-set ylabel "Bandwith (Gbit/s)" enhanced
+set ylabel "Bandwidth (Gbit/s)" enhanced
 set yrange [0:100]
 set ytics 0, 5, 100
 set xrange [16:20000]

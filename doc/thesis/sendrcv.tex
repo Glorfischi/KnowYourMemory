@@ -15,7 +15,7 @@ and to get any reasonable performance we need to be able to send multiple messag
 The sender assumes that the receiver is always ready to receive the message and has at least one receive buffer 
 posted. This means sending essentially only involves issuing a send work request. As we already mentioned earlier, it is very 
 important to keep the sending pipeline full to get good performance. Using \emph{unacknowledged messages} can increase
-throughout by a factor of five or more.
+throughput by a factor of five or more.
 We use the trick of issuing send requests with monotonically increasing \code{wr\_id}s, explained in Section~\ref{sec:protocols},
 to be able to support multiple 
 outstanding messages.

@@ -40,7 +40,7 @@ set terminal png small size 960,640 font "Computer Modern,24"
 set output "plots/write-bw-n1-16.png"
 
 set xlabel "Senders" 
-set ylabel "Bandwith (Gbit/s)" enhanced
+set ylabel "Bandwidth (Gbit/s)" enhanced
 set yrange [0:5]
 set ytics 0, 0.5, 10
 set xrange [0.5:15.5]
