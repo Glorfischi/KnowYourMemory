@@ -101,7 +101,7 @@ us with the following parameters, which are illustrated in Figure~\ref{fig:model
     to receive into (e.g. post receive). This needs to happen sometime before receiving the next message.
 \end{itemize}
 
-\paragraph{} This model does not take the MTU into account. While some prior work use a slightly different model parameters 
+\paragraph{} This model does not take the MTU into account. While some prior work use slightly different model parameters 
 when sending messages over the MTU~\cite{dare}, which span multiple transmission units, we found our model to work well
 enough to understand most of our results.
 
@@ -167,7 +167,7 @@ acknowledged. The lower bound for this is at $3.4\mu s$, or a bit less then twic
 linearly with the message size $k$.
 
 It is worth noting here, that our reported network latency $L$ includes both the PCI latency as well as the latency
-of the switch between our two nodes. The omission of the PCI latency is also the reason that $g$ can be less than $2L$, 
+of the switch between our two nodes. The PCI latency is also the reason that $g$ can be less than $2L$, 
 as it does not include a PCI round-trip.
 
 \paragraph{} For the network bandwidth G, we also report a batched and unbatched estimation. We use the unbatched estimation
@@ -250,7 +250,7 @@ This implementation is limited by a sending CPU bottleneck. In Figure~\ref{fig:m
 increasing throughput we predict until we reach a message size of 2 KB where we start to be limited by the NIC.
 
 \paragraph{} We can avoid this bottleneck by introducing batching. The verbs API allows us to post multiple work requests at 
-the same time. This \emph{Doorbell batching} reduces the number of generated MMIOs~\cite{anuj-guide} and reduces the CPU 
+the same time. This \emph{doorbell batching} reduces the number of generated MMIOs~\cite{anuj-guide} and reduces the CPU 
 load. We measured that batching can reduce the sending CPU overhead $o_{snd}$ by up to a factor of 10. 
 
 When introducing doorbell batching to the send-receive protocol, we are never bottlenecked by the sending CPU. 

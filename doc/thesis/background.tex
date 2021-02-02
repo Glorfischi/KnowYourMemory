@@ -3,7 +3,7 @@
 Remote Direct Memory Access (RDMA) is a network mechanism that allows moving buffers between applications over the network.
 The main difference to traditional network protocols like TCP/IP is that it is able to completely bypass the hosts kernel
 and even circumvents the CPU for data transfer. This allows applications using RDMA to achieve latencies as low as 2 $\mu s$
-and throughputs of up to 100 $Gb/s$, all while having a smaller CPU footprint.
+and throughputs of up to 100 $Gbit/s$, all while having a smaller CPU footprint.
 
 
 \paragraph{} While initially developed as part of the \emph{InfiniBand} network protocol, which completely replaces the OSI 
@@ -114,14 +114,15 @@ can issue multiple different operations called \emph{verbs}. These verbs are:
 \begin{itemize}
   \item \textbf{Send (with Immediate):} Transfers data from the senders memory to a prepared memory region at the receiver.
   \item \textbf{Receive:} Prepares a memory region to receive data through the send verb.
-  \item \textbf{Write (with Immediate):} Copies data from the senders memory to known memory location at the receiver without any 
+  \item \textbf{Write (with Immediate):} Copies data from the senders memory to a known memory location at the receiver without any 
     interaction from the remote CPU.
   \item \textbf{Read:} Copies data from remote memory to a local buffer without any inteaction from the remote CPU.
   \item \textbf{Atomics:} Two different atomic operations. Compare and Swap (CAS) and Fetch and Add (FAA). They can access 64-bit 
     values in the remote memory. 
 \end{itemize}
 
-\paragraph{} Like traditional socket these QPs come in different transport modes: Reliable Connection (RC), Unreliable Connection (UC),
+\paragraph{} Like traditional socket, these QPs come in different transport modes: Reliable Connection (RC),
+Unreliable Connection (UC),
 and Unreliable Datagram (UD). While UD supports sending to arbitrary other endpoints, similarly to a UDP socket, RC and UC 
 need to establish a one to one connection between Queue Pairs, similarly to TCP sockets. Only RC supports all 
 verbs and we will focus on this transport mode.
@@ -129,7 +130,7 @@ verbs and we will focus on this transport mode.
 
 \paragraph{} Queue Pairs give us a direct connection to the RNIC. A QP essentially consists of two queues that allow us to 
 issue verbs directly to the RNIC. The \emph{Send Queue} is used to issue Send, Write, Read, and Atomic verbs, and the 
-\emph{Receive Queue} which is used to issue a Receive verb. These verbs are issued by pushing a \emph{Work Request (WR)}
+\emph{Receive Queue} is used to issue  Receive verbs. These verbs are issued by pushing a \mbox{\emph{Work Request~(WR)}}
 to the respective queue. A work request is simply a struct that contains an id, the type of verb to issue, and all necessary 
 additional information to perform it. The RNIC will pop the WR from the queue and execute the corresponding action.
 
@@ -158,10 +159,12 @@ additional information to perform it. The RNIC will pop the WR from the queue an
 \end{figure}
 
 
-\paragraph{} This gives us an asynchronous interface. Issuing a work request for a Write does not mean that the Write was
-performed, but simply that the RNIC will eventually process this request. To signal completion of certain work requests there
+\paragraph{} This gives us an asynchronous interface. Issuing a work request for a Write operations
+does not mean that the Write was
+performed, but simply that the RNIC will eventually process this request. To signal the completion of a
+work requests there
 is an additional type of queue called the \emph{Completion Queue (CQ)}. There needs to be a CQ associated with each Send and 
-Receive Queue. When the RNIC completes a work request it will enqueue a \emph{Completion Queue Entry~(CQE)} to the respective
+Receive Queue. When the RNIC completes a work request it will enqueue a \mbox{\emph{Completion Queue Entry~(CQE)}} to the respective
 CQ. This CQE informs the application whether the request was processed successfully. The application can match CQEs to 
 previously issued work requests by the ID it provided during issuing. It is also possible to post an \emph{unsignaled} network
 operation that does not generate a CQE after its completion.
@@ -169,7 +172,7 @@ operation that does not generate a CQE after its completion.
 
 \paragraph{}  All locally and remotely accessible memory needs to be previously registered for the RNIC to be able write to
 or read from it. We call these preregistered regions of memory \emph{Memory Regions (MRs)}.  
-Registering memory pins it so that it is not swapped out by the host. The process of registering is generally orders of magnitude slower 
+Registering memory pins it so that it is not swapped out by the host. The process of registering is orders of magnitude slower 
 then data operations like sending or writing. So in general all accessed memory is registered at connection setup. Henceforth,  
 we will assume these memory regions to be registered if not specified otherwise.
 
@@ -225,7 +228,7 @@ a receive buffer to write the incoming message to, which it does through the rec
 
 \paragraph{} To better understand this communication model we will walk through the operations involved in sending a single
 message from a system A to another system B. We assume that the two nodes have already setup a connection. In this
-thesis we will not go into the details of connections setup. Each nodes has prepared a QP and associated a completion 
+thesis we will not go into the details of connections setup. Each node has prepared a QP and associated a completion 
 queue to it. Both systems have registered a MR of at least the size of the message to be sent.
 
 \begin{enumerate}
@@ -238,7 +241,7 @@ queue to it. Both systems have registered a MR of at least the size of the messa
 
     System B now polls its CQ until it receives a CQE for its issued receive request.
 
-  \item System A can initiate the transfer by posting a \emph{Send Request}. To do this it copies a work request to 
+  \item System A initiates the transfer by posting a \emph{Send Request}. To do this it copies a work request to 
     the Send Queue. This request contains a pointer to its local memory containing the  message to be sent
     and its size. This request notifies the NIC to initiate the transfer.
     It also starts polling its CQ to notice the completion of the send request.
@@ -298,17 +301,18 @@ remote. This is the main reason why RDMA writes are generally considered to be f
 \label{fig:seq-wrt}
 \end{figure}
 
-Figure~\ref{fig:seq-wrt} show the operations involved in writing data to the remote using RDMA write. It is generally very
+Figure~\ref{fig:seq-wrt} show the operations involved in writing data to remote memory using RDMA write. It is generally very
 similar to the send and receive sequence presented in the previous section. The sending CPU still issues a work request which
 is handled by the NIC and is notified of its completion through the completion queue.
 The main difference is that the remote system does not need to post a receive buffer and there is no CQE generated at the 
 remote. Also, the work request is a structured differently. It does not only contain a pointer to the local send buffer but
 also provides the remote address to write it to.
 
-\paragraph{} The standard RDMA write does not generate a completion entry at the receiver, which is generally more efficient.
+\paragraph{} The standard RDMA write does not generate a completion queue entry at the receiver, 
+which is generally more efficient.
 However, sometimes it is very helpful for the receiver to be notified of a completed write. For this purpose the Verbs API 
 also provides a related operation called \emph{Write with Immediate}.
-This operation works very similarly to a normal RDMA write, but it generates a completion entry at the receiver, in the same way 
+This operation works very similarly to a normal RDMA write, but it generates a CQE at the receiver, in the same way 
 the send verb does. This means it will also consume a posted receive request, so the receiver needs to post a receive request 
 prior to the transfer. Write with Immediate however will not write any data to the associated receive buffer.
 

@@ -5,7 +5,7 @@ a buffered write connection with a ring-buffer. We can achieve this by having th
 regions for the sender to write to. 
 
 \paragraph{} For this thesis we implemented something very reminiscent of the send receive protocol. The core idea is for
-the receiver to send information on prepared receive buffers to the sender. The sender will then use these buffers in order. 
+the receiver to send information on prepared receive buffers to the sender. The sender will then use these buffers. 
 
 
 
@@ -104,19 +104,20 @@ to 1 by the sender when the transmission is completed. We are using the fact tha
 order, for any modern systems~\cite{herd, farm}. This guarantees us that the complete message has been written as soon a we
 see an update to the last byte.
 
-\subsection{Features Analysis}
+\subsection{Feature Analysis}
 
 With our Direct Write connection we essentially rebuilt the send and receive verbs using only RDMA writes. This gives us 
 similar features but also allows for more control over the protocol. This could potentially allow us to extend it for 
 specific systems.
 
 \paragraph{} Our current implementation fulfills our requirements for being \emph{non-blocking}, the same way the send-receive
-protocol does. It however does not provide any \emph{interrupts} and we did not explore any \emph{resource sharing} approaches.
+protocol does. It, however, does not provide any \emph{interrupts} and we did not explore any \emph{resource sharing} approaches.
 As it stands, it also does not provide \emph{True Zero Copy} capabilities and it lacks support for 
 \emph{variable message sizes}.
 
 
-\paragraph{} We do however think that this protocol can be adapted to enable more features. By adding metadata when posting a
+\paragraph{} Nevertheless, we do think that this protocol can be adapted to enable more features.
+By adding metadata when posting a
 buffer we could enable \emph{True Zero Copy} capabilities for certain applications, by performing some routing decisions at
 the sender and being able to directly write to the correct final memory location.
 And with a more sophisticated buffer management one could more effectively utilize the available memory, by supporting 

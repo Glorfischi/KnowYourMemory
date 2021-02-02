@@ -3,7 +3,7 @@
 The basic idea of a buffered write protocol is to have a ring-buffer at the receiver which the sender writes to using
 RDMA write operations. This is a widely used approach and can be found in many systems~\cite{herd, scal-rdma-rpc}.
 
-One goal of this section is to demonstrate that there are many different ways to implement such a buffer write 
+One goal of this section is to demonstrate that there are many different ways to implement such a buffered write 
 protocol, which all can have different features and performance characteristics.
 
 
@@ -30,7 +30,7 @@ two different approaches for this problem:
   \item \textbf{Read Acknowledging}, where the sender issues an RDMA read operation to check for available space.
 \end{itemize}
 
-This essentially gives us 6 different versions of our buffered write protocol.
+This essentially gives us six different versions of our buffered write protocol.
 
 \subsection{Ring-Buffer} \label{sec:conn:write:buf}
 \begin{figure}[!ht]
@@ -104,7 +104,7 @@ This essentially gives us 6 different versions of our buffered write protocol.
 
 \end{tikzpicture}
 \end{center}
-\caption{Ring-buffer with twice mapped memory to allows DMA writes over the end}
+\caption{Ring-buffer and the three different offsets, with a visualisation of double mapped memory.}
 \label{fig:ringbuffer}
 \end{figure}
 
@@ -125,7 +125,6 @@ updates when necessary to notice if there is enough free space left to write the
 
 \paragraph{}\emph{Receiving} from a buffered read protocol will 
 return a pointer to a segment of the buffer. \emph{Freeing} a message marks this buffer segment as being free to be reused.
-
 This is where the difference between the \emph{head} and the \emph{read pointer} becomes apparent. The read pointer points 
 to the next message the receiver has not read, while the head points to the oldest message the receiver has not freed. Reading
 and freeing messages should work interleaved, so we need some kind of management of free buffer to update the head 
@@ -172,7 +171,7 @@ above. We implemented three different ways to send and receive.
 \subsubsection{Write Immediate}
 
 We introduced \emph{Write with Immediate} in Section \ref{sec:bg:write}, which  allows us to implement our sending 
-and receiving in a very similar way to the send connection presented in the last section.
+and receiving in a very similar way to the send connection presented earlier.
 
 \paragraph{} Write with Immediate sends a 32 bit value while also writing to the specified location. More importantly it 
 consumes a receive buffer and creates a completion event at the receiver. This completion event also contains the number 
@@ -182,7 +181,7 @@ segment. Through the in-order guarantees of RDMA we know that the messages in th
 order as the completion events in the queue. We can reuse both the receive buffer management and batching from the send 
 connection.
 
-
+\pagebreak
 \subsubsection{Write Offset}
 
 One key reason to use the write instead of send verb is that we do not need to generate a completion event at the receiver.
@@ -192,15 +191,15 @@ buffers. So we need other ways to notify the sender of incoming messages.
 \paragraph{} One way to implement this is by having additional metadata that allows the receiver to notice incoming data.
 We implement such a protocol with what we call \emph{Write Offset}. The idea is that together with each message, the sender
 also updates a metadata region at the receiver containing the \emph{tail}. The receive can then notice new incoming messages
-by polling this tail and comparing it to the \emph{Read Pointer}. We write the size of the message as the first 4 bytes 
+by polling this tail and comparing it to the \emph{read pointer}. We write the size of the message as the first 4 bytes 
 that we write to the ring-buffer.
 
 This means to send a message of size $s$ the sender prepends the size $s$ to the message and writes it to the
 tail of the buffer. It then writes the updated tail to the metadata region at the sender. Of these two RDMA writes only the 
 latter needs to be signaled and we can issue both of the work requests at the same time, mitigating the impact of having to 
 perform two writes for a single message. The receiver will always poll its local copy of the tail. As soon as the tail is 
-not equal to the \emph{Read Pointer} it knows that there are outstanding messages. We can read the first 4 bytes to get the size
-of the next message and can then read it and update the \emph{Read Pointer}.
+not equal to the read pointer it knows that there are outstanding messages. We can read the first 4 bytes to get the size
+of the next message and can then read it and update the read pointer.
 
 \paragraph{} This connection has obvious drawbacks, as we need to issue two writes for a single message. But this way we 
 circumvent the need of receive buffers and end up with a completely \emph{passive receiver}.
@@ -321,7 +320,7 @@ cache of the tail value.
 us from easily using this connection bidirectionally when coupled with the write immediate sender implementation, as both 
 incoming messages as well as tail updates will generate completion events.
 
-\subsection{Features Analysis}
+\subsection{Feature Analysis}
 
 Ring-buffer based connections are often used because of their apparent speed, but they also have a few additional features.
 

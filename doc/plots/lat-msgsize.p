@@ -59,8 +59,8 @@ plot $bufread with linespoints pt 11 ps 1.5 title "Buffered Read (BR)", \
      $dirread with linespoints pt 9 ps 1.5 title "Direct Read (DR)", \
      $writeOff with linespoints pt 5 ps 1.5 title "Buffered Write Offset (BR-Off)", \
      $writeRev with linespoints pt 4 ps 1.5  title "Buffered Write Reverse (BR-Rev)", \
+     $send with linespoints pt 7 ps 1.5 lc rgb "dark-orange" title "Send-Receive (SR)" , \
      $median with linespoints pt 13 ps 1.5 title "Direct Write (DW)", \
-     $send with linespoints pt 7 ps 1.5 title "Send-Receive (SR)", \
 
 
      

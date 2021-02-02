@@ -1,9 +1,9 @@
 
 \section{Direct Read} \label{sec:conn:direct_read}
 
-In Section~\ref{sec:conn:direct_write} we discussed how we can possibly avoid an additional copy at the receiver by giving 
+In Section~\ref{sec:conn:direct_write} we discussed how we can possibly avoid an additional copy at the receiver, by giving 
 the sender information which allows him to potentially write the data to the correct final memory location. The next logical
-step is to let the receiver decide for each message where to write it to. We can achieve this by our implementation of a
+step is to let the receiver decide for each message where to write it to. We can achieve this with our implementation of a
 \emph{Direct Read Connection}.
 
 \paragraph{} The core idea of a direct read protocol is that instead of directly sending a message through a send or write 
@@ -24,8 +24,8 @@ containing the location of the buffer. It is then the job of the receiver to acc
 \paragraph{} To wait for the transfer to be completed, and for the buffer to be able to be reused, we can not simply wait 
 for the completion event of the send, like we do for the send or write based connections. We need to wait for the receiver 
 to explicitly signal that the buffer was transfered. We append a signaling byte at the end of the send buffer. 
-When sending this byte, will be set to 0 and we can wait for the transport to be completed by polling this byte until the 
-receiver will update it.
+When sending, this byte  is set to 0 and we can wait for the transport to be completed by polling this byte until the 
+receiver updates it.
 
 This push based implementation introduces little additional complexity, but there are other ways to implement such 
 signaling. The signaling bit forces us to use a specific memory arrangement, which could prevent us to send data directly 
@@ -39,8 +39,8 @@ receive buffer. Using the information in the Read Request it issues an RDMA read
 It is crucial that we do not block until the read is completed to get reasonable performance.  This means the receiver has a
 slightly different interface than the previously presented connections. We split the receive call into a 
 \code{RequestAsync} and a \code{Wait} method. The \code{RequestAsync} takes a receive buffer
-to read into. It will wait for an incoming read request and issue the corresponding read. It uses the same increasing 
-\code{wr\_id} approach we use for sending with which the \code{Wait} method can wait for the read to complete. This approach
+to read into. It  waits for an incoming read request and issue the corresponding read. It uses the same increasing 
+\code{wr\_id} approach we use for sending, with which the \code{Wait} method can wait for the read to complete. This approach
 allows us to pipeline receives the same way we pipeline sends.
 
 \paragraph{} As soon as the transfer is complete, the receiver updates the corresponding signaling bit using an RDMA write.

@@ -2,9 +2,10 @@
 In Section~\ref{sec:conn:buf_write} we presented multiple ways to build a message passing protocol based on the 
 RDMA write verb and a ring-buffer. In this section we present a way to share a single ring-buffer for multiple connections.
 
-\paragraph{} We only implement a single variant based on the \emph{Write with Immediate} verb and focus on a N:1 connection pattern only,
-where multiple sender transmit messages to a single receiver.
-We point out that there are multiple different approaches that use the same atomics based reserving we present below. One
+\paragraph{} We only implement a single variant based on the \emph{Write with Immediate} verb and 
+focus on a N:1 connection pattern only,
+where multiple senders transmit messages to a single receiver.
+We point out that there are multiple different approaches that use the same atomics based reservation we present below. One
 could use the same \emph{write offset} or \emph{write reverse} approach presented earlier and multiple receivers could
 utilize the same ring-buffer when using \emph{write with immediate}. A deep dive in all these variations, however, is out
 of scope of this thesis.
@@ -19,7 +20,7 @@ of scope of this thesis.
   \item In the second phase the sender writes to the reserved space.
 \end{itemize}
 \subsubsection{Reservation}
-To allow for multiple sender to write to a shared ring-buffer we need to coordinate them. We need a system that 
+To allow for multiple senders to write to a shared ring-buffer, we need to coordinate them. We need a system that 
 assigns a unique destination addresses to each message. This translates to implementing a \emph{sequencer} that issues
 increasing addresses based on the message size. This can either be implemented using atomic operations or by using RPCs
 and handling the sequencing at the receive's CPU. An RPC based approach is expected to provide us with higher 
@@ -49,7 +50,7 @@ After the reservation phase the sender can write to its reserved buffer segment 
 to the receiver. We decided to do this using the \emph{Write with Immediate} verb. This allows us to notify the receiver 
 with completion event. 
 
-One thing we need to note is that this time the completion events do not have to arrive in the same oder as they appear in
+This time the completion events do not have to arrive in the same oder as they appear in
 the ring-buffer. That means we need to send the offset of the corresponding buffer segment as immediate data.
 
 
@@ -63,8 +64,10 @@ be accessed the same way as regular memory through verbs and is completely trans
 reduce latency and does not have to make any PCI accesses. From this we especially expect atomic operations to be a lot faster
 when using device memory.
 
-\paragraph{} Quick micro benchmarks reaffirm these expectations. In our case maximum throughput of fetch and add operations 
-increased form around 2 MOps to nearly 8 MOps. This means by using device memory for the ring-buffer metadata we can increase
+\paragraph{} Quick micro-benchmarks reaffirm these expectations. In our case the maximum throughput of 
+fetch and add operations 
+increased form around 2 MOp/s to nearly 8 MOp/s. This means by using device memory for the ring-buffer
+metadata we can increase
 the throughput of our reservation phase by nearly 300\%. We can also achieve a minor speed-up for reading the head update after
 reserving a buffer segment.
 
@@ -74,7 +77,7 @@ reserving a buffer segment.
 The shared write protocol allows us to share a single ring-buffer between multiple connections by using atomic operations.
 
 This gives \emph{resource sharing} capabilities to a buffered read protocol, while keeping the features of 
-\emph{variable message size}. This allows us to have a constant memory requirement for a lot of connections,
+\emph{variable message size}. It allows us to have a constant memory requirement for a lot of connections,
 resulting in very effective use of buffer space.
 
 

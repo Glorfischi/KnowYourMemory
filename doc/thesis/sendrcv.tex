@@ -28,8 +28,10 @@ it marks it as free which will repost the corresponding buffer. By having multip
 numerous unacknowledged messages which improves performance drastically.
 
 \paragraph{} It is important to note that in production systems there needs to be a way for the sender to notice whether 
-enough receive buffers are ready. If there is no posted receive buffer available when a message is received, the receiver  generates
-a so-called \emph{Reader Not Ready} error. This will either cause a large back-off for the sender or even cause the connection
+enough receive buffers are ready. If there is no posted receive buffer available when a message is received,
+the receiver  generates
+a so-called \emph{Reader Not Ready} error. This will either cause a large back-off for the sender 
+or even cause the connection
 to break.
 
 We observed this problem specifically for N:1 communication. This can be mitigated to some extend by optimizing receiving and
@@ -46,7 +48,8 @@ share resources between connections, or enable different kinds of communication 
 \subsubsection{Inline Sending}
 The send verb has a slight variation called \emph{inline send}. Inline sending means that instead of 
 simply referencing the payload in a work request, the sending CPU directly copies it to the RNIC using MMIO. This prevents
-the NIC from having to issue an addition DMA and can reduce latency for very small messages~\cite{anuj-guide}. It does however
+the NIC from having to issue an addition DMA and can reduce latency for very small messages~\cite{anuj-guide}. It does,
+however,
 increase the load for the sending CPU. As we will see, the sending CPU is oftentimes the bottleneck so we did not further 
 evaluate inline sending in this thesis. It can, however, be a viable optimization for small messages.
 
@@ -63,7 +66,8 @@ large. If a node has  open connections to $N$ other nodes, it needs to reserve  
 the total request volume is quite small (i.e., we expect only burst of $k$ messages but from different nodes at different times).
 
 We can reduce the total memory usage by using \emph{Shared Receive Queues~(SRQ)}. As the name already tells us SRQs allow us
-share receive queues between multiple QPs. This means, we can reuse a single receive queue for multiple connections, allowing
+to share receive queues between multiple QPs. This means, we can reuse a single receive queue
+for multiple connections, allowing
 multiple receivers to share the same receive buffers. This means the total memory usage does not grow with the number of
 open connections, but stays constant.
 
@@ -79,7 +83,7 @@ implementation.
 
 \subsubsection{Single Receiver} 
 It is very common to have an N:1 communication pattern where a single server receives messages from multiple clients. This
-could be achieved by simply round-robin over the $N$ connections. For this connection however we used the fact that we can 
+could be achieved by simply round-robin over the $N$ connections. For this connection, however, we used the fact that we can 
 associate a single completion queue with multiple queue pairs. This means, if we are in a \emph{single receiver mode}, all 
 receive completion events will end up in a single CQ. Allowing us to poll a single queue to receive a message from $N$ 
 different sender.
