@@ -70,7 +70,7 @@ As mentioned the sender of our buffered read connection is entirely passive, tha
 CPU does not issue any RDMA operations. The only thing it needs to do to send is to check its head if there is enough space,
 copy the message to its tail, and update the tail offset.  It also prepends the message size when  writing. 
 
-The head is completely managed by the receiver and the tail pointer needs to be accessible to it. That means for the sender 
+The head is completely managed by the receiver and the tail pointer needs to be accessible to it. That means for the sender,
 transmitting a message does only involve copying it to its local memory. This results in
 a very low sending overhead.
 
@@ -84,7 +84,7 @@ we have not received yet. Meaning the \code{read\_pointer} is not equal to the \
 return the next message with the length at the beginning of the buffer and update the \code{read\_pointer}.
 
 If there are no transmitted messages to return, the receiver updates the \code{remote\_tail} with an RDMA read. If the remote
-tail has not updated it retries until it has. With the updated tail the receiver issues an RDMA read for the whole buffer 
+tail has not updated, it retries until it has. With the updated tail the receiver issues an RDMA read for the whole buffer 
 section between the read pointer and the updated tail. It then returns the next message in the newly transmitted section.
 
 This gives us an interesting characteristic of most receives being very cheap, while some are very expensive as they need to 
@@ -110,4 +110,4 @@ has the same \emph{Blocking} behaviour as the buffered write protocol.
 
 \paragraph{} For future work it would also be interesting to implement a system where multiple threads can write to and receive 
 from a single  connection by atomically updating head or tail pointers, or we could explore the possibilities to share send or
-receive buffers using atomic operations. The current implementation however does not provide any kind of \emph{Resource Sharing}
+receive buffers using atomic operations. The current implementation, however, does not provide any kind of \emph{Resource Sharing}

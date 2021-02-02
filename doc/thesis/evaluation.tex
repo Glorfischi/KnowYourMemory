@@ -1,12 +1,12 @@
 \section{Evaluation}
 
-We ran all our evaluations on two machines running CentOS 7 containing two Intel Xeon Gold 6152 and 384 GiB of memory.
+We ran all our evaluations on two machines running CentOS 7, containing two Intel Xeon Gold 6152 and 384 GiB of memory.
 The two nodes each contain a Mellanox ConnectX-5 (100Gbps) and are connected through a 100 Gbps switch. All measurements
 have been performed using RoCE.
 
 \subsection{Latency}
 
- In our latency benchmark a single client and server perform a \emph{ping-pong}. With that 
+ In our latency benchmark, a single client and server perform a \emph{ping-pong}. With that 
 we mean that the client initiates the communication and measures the RTT. The server mirrors all received packages. 
 We then take half of this RTT as our measurement of latency.
 
@@ -18,9 +18,9 @@ We then take half of this RTT as our measurement of latency.
 
 
 Figure~\ref{fig:plot-lat} shows the median latency of nearly all of our protocol implementations. For all but one of these 
-connections we see more or less what we have predicted given our model. They all have different base latency overheads
-and then the latency grows linearly with increasing message sizes. The one connection that is standing out
-and not quite adheres to our model is the buffered read connection (BR).
+connections, we see more or less what we predict, given our model. They all have different base latency overheads
+and the latency grows linearly with increasing message sizes. The one connection that is standing out
+and which does not quite adhere to our model is the buffered read \mbox{connection (BR)}.
 
 \paragraph{} The send-receive connection (SR) as well as the direct-read connection (DR) achieve very similar low latency,
 with a base overhead of just over 2 $\mu s$. This reinforces the similarities between these two protocols and that the 
@@ -35,10 +35,10 @@ of about 2.25 $\mu s$, which is still very much comparable to the send-receive p
 issue two writes for a single message.
 
 
-\paragraph{} The two read based protocols have significantly higher latency for our ping-pong evaluation. This vast
+\paragraph{} The two read based protocols have significantly higher latency in our ping-pong evaluation. This vast
 difference in latency 
-is however not only caused by the read verb. For this experiment both of our read protocols have a significant 
-communication overhead. Coupled with the fact that smaller reads do have a higher latency this results in the very high
+is, however, not only caused by the read verb. For this experiment, both of our read protocols have a significant 
+communication overhead. Coupled with the fact that smaller reads do have a higher latency, this results in the very high
 base overheads we see.
 
 The direct read protocol (DR) first sends a read request from the sender to the receive using a send operation. Only then the
@@ -46,16 +46,16 @@ receive can issue the RDMA read operation that transfers the message. So the obs
 nearly 6~$\mu s$
 does not only contain the read operation, but also a complete send latency for a small message.
 
-For the buffered read protocol~(BR) the receiver needs to read from the senders memory to notice new messages. 
-This means for our
-latency experiment the buffered read protocol needs to issue at least two read operations per message. This results in the
-very high base overhead of over 7 $\mu s$. We see another jump in latency for messages over 1 KB. This is likely cause by the
+For the buffered read protocol~(BR), the receiver needs to read from the sender's memory to notice new messages. 
+This means, for our
+latency experiment, the buffered read protocol needs to issue at least two read operations per message. This results in the
+very high base overhead of over 7 $\mu s$. We see another jump in latency for messages over 1 KB. This is likely caused by the
 sender not having written the complete message to the buffer when the receiver issues its first polling read operation. 
 This results in up to three read operations per message for large messages.
 
-\paragraph{} We can summarize this subsection with: Simplicity is key. The most important thing to achieve low 
+\paragraph{} The most important thing for achieving low 
 latency is to avoid unnecessary round-trip times and minimize the number of RDMA operations. We achieved the best
-performance  using send-receive or single writes. We could however not reproduce the common assumption that RDMA writes 
+performance  using send-receive or single writes. We could, however, not reproduce the common assumption that RDMA writes 
 are faster than send-receive.
 
 
@@ -67,9 +67,11 @@ are faster than send-receive.
 
 \subsection{Bandwidth}
 
-We evaluate the single connection bandwidth of our protocol implementations for varying message sizes. Where applicable all 
-protocols allow for sufficient unacknowledged messages to not run into a round-trip bottleneck. If not 
-stated otherwise we report the median throughput of sending a million messages from a single sender to a single receiver
+We evaluate the single connection bandwidth of our protocol implementations for varying message sizes. 
+In order to prevent running into a round-trip bottleneck, all protocols allow for sufficient unacknowledged messages, where
+applicable.
+If not 
+stated otherwise, we report the median throughput of sending a million messages from a single sender to a single receiver
 on two separate nodes.
 
 \begin{figure}[htp]
@@ -101,16 +103,16 @@ on two separate nodes.
   \label{fig:plot-bw}
 \end{figure}
 
-Figure~\ref{fig:plot-sr-dw-bw} shows the point to point throughput for different message sizes for both the send-receive (SR)
+Figure~\ref{fig:plot-sr-dw-bw} shows the point to point throughput with different message sizes for both the send-receive (SR)
 protocol as well as the direct-write (DW) protocol. 
 
-For the send-receive connection we see a linear increase in bandwidth with increasing message size until we hit the
+For the send-receive connection, we see a linear increase in bandwidth with increasing message size until we hit the
 maximum goodput of our network link. This indicates that we are client side CPU bound. This is confirmed by the fact that we can
-improve performance for smaller messages using sender side batching which we have shown in Section~\ref{sec:model}.
+improve performance for smaller messages using sender side batching, which we have shown in Section~\ref{sec:model}.
 
-The direct-write protocol however seems to be limited by the sending NIC instead or possibly by the PCIe bus, as the CPU needs
-to wait for the operation to be completed and we are not limited by our ability to issue work requests like we are for the 
-send-receive connection. This results in up to 30\% lower throughput for medium sized messages. We suspect that the large 
+The direct-write protocol, however, seems to be limited by the sending NIC instead or possibly by the PCIe bus. The CPU needs
+to wait for the operation to be completed, so we are not limited by our ability to issue work requests. 
+This results in up to 30\% lower throughput for medium sized messages. We suspect that the large 
 amount of returning writes interferes with outgoing writes and increases the per message overhead for the NIC. 
 
 
@@ -119,44 +121,44 @@ using the \emph{send} acknowledger as, with one exception we will explain below,
 in performance between these two implementations.
 
 Both the write immediate (BW-Imm) as well
-as the write reverse (BW-Rev) implementations achieve very similar performance. They achieve slightly lower throughout
+as the write reverse (BW-Rev) implementations achieve very similar performance. They achieve slightly lower throughput
 than the send-receive protocol, but show the same linear increase in performance indicating a sender CPU bottleneck. The
-slightly lower throughout can be explained by the small CPU overhead of managing the ring-buffer and more importantly  
-polling for tail updates.
+slightly lower throughput can be explained by the small CPU overhead caused by managing the ring-buffer and more importantly  
+polling for head updates.
 
-The write offset (BW-Off) implementation shows consistently lower throughput until it also achieves
-link speed for message sizes of 16 KB. This is what we would expect as this implementation needs to issue 
-twice as many operations. It seems that we are bottleneck by the sending NIC overhead when the other
+The write offset (BW-Off) implementation shows consistently lower throughput until it achieves
+link speed for message sizes of 16 KB. This is what we expect as this implementation needs to issue 
+twice the number of operations. It seems that we are bottlenecked by the sending NIC overhead when the other
 implementations already achieve line rate.
 
-\paragraph{} Figure~\ref{fig:plot-dr-bw} show the bandwidth for the direct-read protocol, with using a memory fence
+\paragraph{} Figure~\ref{fig:plot-dr-bw} shows the bandwidth for the direct-read protocol, both with using a memory fence
 to issue the read and send operation at the same time, and without this fence.  The main thing we notice is that the 
 fenced version achieves drastically lower throughput. The fence essentially serializes the reads and prevents the NIC 
-to effectively pipeline operations. This gives us the low and linearly increasing bandwidth we observe.
+from effectively pipelining operations. This gives us the low and linearly increasing bandwidth we observe.
 
-While the direct read protocol actually works very differently from what we represent in our model the performance 
+While the direct read protocol actually works very differently from what we represent in our model, the performance 
 characteristics of the unfenced direct read connection is very similar to what we observed for previous connections. The
-throughput increases linearly for small messages as we are limited by the number of request we are able to post. For larger
-messages we are limited by the receiving NIC giving us this sub-linear curve until we reach the maximum goodput of our link.
+throughput increases linearly for small messages, as we are limited by the number of requests we are able to post. For larger
+messages, we are limited by the receiving NIC giving us this sub-linear curve until we reach the maximum goodput of our link.
 
-For all further measurement we only focus on the unfenced implementation as the fenced version is generally unable
+For all further measurements we only focus on the unfenced implementation, as the fenced version is generally unable
 to achieve comparable throughput.
 
 
 \paragraph{} Figure~\ref{fig:plot-br-bw} shows the 1:1 bandwidth for the buffered-read protocol. We also plot the 
-\emph{mean transfer size}, so the amount of data transfered by a single read. 
-This can vary greatly for this protocol as it periodically
-fetches the complete sending ring-buffer. For this reason we also plot the mean bandwidth instead of the median bandwidth 
+\emph{mean transfer size}, to illustrate the amount of data transfered by a single read. 
+This can vary greatly for this protocol, as it periodically
+fetches the complete sending ring-buffer. For this reason, we also plot the mean bandwidth instead of the median bandwidth, 
 as the data is not normally distributed.
 
-As expected with increasing message size the mean transfer size also increases linearly. The total bandwidth 
-also increases quickly with approaches a maximum of a little over 80 Gbit/s. This is what we expect given our current 
+As expected with increasing message size, the mean transfer size also increases linearly. The total bandwidth 
+increases quickly and approaches a maximum of a little over 80 Gbit/s. This is what we expect given our current 
 implementation. We only issue a new read as soon as the previous read was completed. This results in the sub-linear
 curve we can see. The observed performance could be drastically improved by preemptively issuing reads to fill up
-the pipeline.
+the NIC processing pipeline.
 
-We can also see that we achieve significantly better performance for small messages compared to the other protocols we
-look at in this thesis. This is a result of the automatic batching behaviour of this protocol. 
+We can also see that we achieve significantly better performance for small messages compared to the other protocols. 
+This is the result of the automatic batching behaviour of this protocol. 
 
 
 \begin{figure}[h]
@@ -165,35 +167,29 @@ look at in this thesis. This is a result of the automatic batching behaviour of 
 \label{fig:plot-write-rev-anom}
 \end{figure}
 
-\paragraph{Write Reverse Anomaly} During our evaluation we encountered a anomaly we cannot fully explain at
+\paragraph{Write Reverse Anomaly} During our evaluation we encountered an anomaly we cannot fully explain at
 this point. As seen in Figure~\ref{fig:plot-write-rev-anom}, when using a \emph{write reverse} sender and a 
-\emph{read} acknowledger we see a significant drop in performance when sending messages that are slightly larger
-than 4090 bytes. It is worth noting that when adding the 6 byte overhead from the protocol explained in 
-Section~\ref{sec:conn:write:sender} this happens to be exactly when the write is larger than 4 KB, 
-which is both the pagesize and MTU. Bandwidth then seems to linearly increase and will drop again very similarly 
+\emph{read} acknowledger, we see a significant drop in performance when sending messages that are slightly larger
+than 4090 bytes. 
+With the added 6 byte of protocol overhead, the performance degradation happens when the total write is larger than 4KB.
+Both the pagesize as well as the MTU is 4KB. Bandwidth then seems to linearly increase and will drop again very similarly 
 for all multiples of 4 KB.
 
-Interestingly this cannot be observed with other sender implementations and the effect is greatly
-reduce when using send acknowledgements instead of read based acknowledgements.
-
-We suspect this anomaly is caused by our unusual write direction which causes suboptimal NIC cache usage and 
+Interestingly, this cannot be observed with other sender implementations and the effect is greatly
+reduced when using send acknowledgements instead of read based acknowledgements.
+We suspect that this anomaly is caused by our unusual write direction, which causes suboptimal NIC cache usage and 
 results in many TLB cache misses while writing. But this is just one possible explanation and further research is 
 necessary to fully explain these results.
 
-For all other plots we purposely avoid to exactly hit this window for the \emph{write reverse}
-sender but will send slightly smaller messages.
+For all other plots, we purposely avoid sending messages in this window for the \emph{write reverse}
+sender, but instead we will send slightly smaller messages.
 
-
+\pagebreak
 \paragraph{} To maximize 1:1 bandwidth, reducing the number of necessary RDMA operations seems to be important.
-The best performing protocols are the send-receive 
-protocol as well as the buffer-write implementations that only issue a single write. Compared to our latency evaluation
-however the difference are not as severe. 
+The best performing protocols are the \mbox{send-receive} protocol as well as the buffer-write implementations that only issue 
+a single write. Compared to our latency evaluation, however, the differences are not as severe. 
 Protocols like direct-read or direct-write, which can achieve true zero-copy capabilities, can still achieve decent 
-throughout and if we are handling messages larger than 16 KB almost all approaches can achieve line rate.
-
-
-
-
+throughput and if we are handling messages larger than 16 KB, almost all approaches can achieve line rate.
 
 
 
@@ -202,20 +198,20 @@ throughout and if we are handling messages larger than 16 KB almost all approach
 \subsection{N:N}
 
 
-We can see that when we have single point to point connection, we are almost always limited by the sender and the 
-amount of requests we are able to issue. In practice however we usually do not have a such a simple setup, but we
+We can see that when we have a single connection, we are almost always limited by the sender and the 
+amount of requests we are able to issue. In practice, however, we usually do not have such a simple setup, but 
 need to send to and receive from multiple different nodes. This means each node needs to handle multiple open
 connections. 
 
-To evaluate the performance of our protocols with multiple open connections we again only use two nodes, however  
+To evaluate the performance of our protocols with multiple connections, we again only use two nodes. However,  
 on each node we run $T$ threads. Each thread $t_k$ opens a connection with the corresponding 
-thread on the other node, giving us a total of $T$ connection sharing the same NIC. We evaluate the throughput for 
+thread on the other node, giving us a total of $T$ connections sharing the same NIC. We evaluate the throughput for 
 three different message sizes which had different performance characteristics in our single threaded evaluation: 16 bytes, 
 which was usually heavily bound by how fast we could post send requests, 512 bytes, which was also normally limited by the 
-sender but less extremely, and 8192 bytes, which is limited by the actual device bandwidth for almost all protocols. 
+sender but less extremely, and 8192 bytes, which is limited by the actual network bandwidth for almost all protocols. 
 
-We do not perform any sender side batching but allow for sufficient unacknowledged messages to keeping the pipeline full.
-In our plots we report the sum of all connection throughputs.
+We do not perform any sender side batching, but allow for sufficient unacknowledged messages in order to keep the pipeline full.
+In our plots, we report the sum of all connection throughputs.
 
 \begin{figure}[ht]
   \centering
@@ -243,34 +239,33 @@ In our plots we report the sum of all connection throughputs.
 
 
 \paragraph{} Figure \ref{fig:plot-sndrcv-bw-thread-nosrq} shows the N:N throughput for the send-receive protocol.
-We can see that for large messages we keep being bottlenecked by the network bandwidth of 100 Gbit/s. For smaller
-messages the throughout first increases linearly until we hit a bottleneck. Interestingly for a message size 
+We can see that for large messages we are bottlenecked by the network bandwidth of 100 Gbit/s. For smaller
+messages, the throughput first increases linearly until we hit a bottleneck. Interestingly, for a message size 
 of 16 bytes we are able to send over twice the amount of messages per second compared to a message size of 512 bytes.
-We suspect this to be caused by NIC level optimizations for small messages such as inline receiving~\cite{anuj-guide} which 
-is supported by Mellanox NICs up to 64 bytes. This bottleneck we encounter seems to be the total throughput of the 
-receiving NIC. This is significantly higher than our maximum throughput seen for a single connection, this can be 
-attributed to the usage of multiple processing units~\cite{anuj-guide}
+We suspect this to be caused by NIC level optimizations for small messages, such as in-line receiving~\cite{anuj-guide} which 
+is supported by Mellanox NICs for messages up to 64 bytes. The bottleneck seems to be the total throughput of the 
+receiving NIC. This is significantly higher than the maximum throughput seen for a single connection, this can be 
+attributed to the usage of multiple processing units~\cite{anuj-guide}.
 
 
 Figure \ref{fig:plot-sndrcv-bw-thread-srq} shows the same data when using a shared receive queue (SRQ) to share memory
-between the connections. In this case we seem to be limited by the rate at which the receiver is able to
+between the connections. In this case, we seem to be limited by the rate at which the receiver is able to
 repost receive buffers. We
 had to limit all senders to about 1.8 MOp/s to not run into RNR erros.
-
-We later show that when using SRQs we are limited a maximum of 2 MOp/s. So even with more optimized receive buffer management
+We later show that, when using SRQs we are limited at a maximum of 2 MOp/s. So even with more optimized receive buffer management,
 this is drastically lower than without any resource sharing and heavily limits the performance for small messages. This seems
 to be a limit of the receivers NIC.
 
 \paragraph{} Figure~\ref{fig:plot-wdir-bw-threads} shows the N:N bandwidth for the direct-write protocol. When using 8192 
-byte messages, we are again limited by the maximum link speed. When using 512 byte messages we seem to bottleneck at around 
+byte messages, we are again limited by the maximum link speed. When using 512 byte messages we seem to be bottlenecked at around 
 70 Gbit/s, and for small messages we are capped at around 6 Gbit/s, which is very close to the performance of the send-receive
 protocol.
 
-However the 70 Gbit/s limit for 512 byte messages is significantly less than the 80 Gbit/s maximum we saw for the
+However, the 70 Gbit/s limit for 512 byte messages is significantly less than the 80 Gbit/s maximum we saw for the
 send-receive protocol. We also see a slightly lower goodput for 8192 byte messages. We assume this is caused by the 
-large amount of returning write, limiting the NICs maximum throughout. We can see very similar performance for the
+large amount of returning writes, limiting the NICs maximum throughput. We can see very similar performance for the
 write offset implementation in Figure~\ref{fig:plot-write-bw-thread-512}. This reinforces our assumption that the returning write
-for each message is impacting our throughput, as the write offset protocol also needs to issue two writes per message.
+for each message is impacting our throughput as the write offset protocol also needs to issue two writes per message.
 
 
 
@@ -304,11 +299,11 @@ for each message is impacting our throughput, as the write offset protocol also 
 with varying number of connections and the three different message sizes.
 
 We can again see that for large messages we keep being bottlenecked by the network bandwidth of 100 Gbit/s, regardless of 
-the sender, however the write offset (BW-Off) implementation shows a small overhead and does not quite achieve the same 
-throughput as the other two implementation. 
+the sender. However, the write offset (BW-Off) implementation shows a small overhead and does not quite achieve the same 
+throughput as the other two implementations. 
 
-For smaller messages we see a linear increase in throughput with increasing number of connections until we hit a bottleneck. 
-There does seem to be a fair amount of noise,
+For smaller messages, we see a linear increase in throughput with increasing number of connections until we hit a bottleneck. 
+There does seem to be a fair amount of noise
 but for both message sizes the write immediate (BW-Imm) and write reverse (BW-Rev) implementation achieve similar performance,
 while the write offset implementation is significantly slower. This can again be explained by the additionally issued write, 
 which in this case  gives us a more pronounced overhead as we are bottlenecked by the number of operations the NIC can process.
@@ -335,17 +330,17 @@ similar bandwidth, while the results of the write offset implementation are very
   \caption{N:N Bandwidth Read-based Protocols}
 \end{figure}
 
-\paragraph{}Figure~\ref{fig:plot-dirread-bw-threads} shows the direct-read protocols N:N performance. The results look very similar to 
-other connections. There is a linear increase in performance, both by being able to post more work request for smaller 
-messages and being able to utilize more NIC processing units.~\cite{anuj-guide}
+\paragraph{}Figure~\ref{fig:plot-dirread-bw-threads} shows the direct-read protocol's N:N performance. The results look very similar to 
+other connections. There is a linear increase in performance caused by the ability to post more work requests  
+as well as the ability to utilize more NIC processing units.~\cite{anuj-guide}
 
-When using 8192 byte messages, we are limited by the maximum link speed. When using 512 byte messages we hit a bottleneck at
-around 70 Gbit/s, which is in line with what we observe with other protocols that need to issue two operations per message, 
-like the direct-write or write-offset connection.
+When using 8192 byte messages, we are limited by the maximum link speed. When using 512 byte messages, we hit a bottleneck at
+around 70 Gbit/s which is in line with what we observe with other protocols that need to issue two operations per message, 
+such as the direct-write or write-offset connection.
 
 
 
-\paragraph{} Figure~\ref{fig:plot-bufread-bw-threads} shows the buffered-read protocols N:N performance. We see drastically 
+\paragraph{} Figure~\ref{fig:plot-bufread-bw-threads} shows the buffered-read protocol's N:N performance. We see drastically 
 improved performance compared to the single connection evaluation. This is mainly caused by the fact that we now have multiple
 concurrent active read operations. Through the inbuilt message batching we achieve  significantly higher throughput for small
 messages compared to the other connection types we evaluated. Throughput for all message sizes grow linearly with increasing 
@@ -362,8 +357,8 @@ per message. We saw very similar throughput for all connections with a single op
 message respectively. Interestingly it does not seem to matter in which direction these operations are performed. The 
 direct-write protocol with its returning writes performed very similarly to the write-offset or direct-read protocol.
 
-One thing the buffered read connection has shown us is that to achieve optimal bandwidth for small messages sending side and
-whenever possible application level batching is necessary. And we also saw that SRQs, while saving memory usage, have 
+One thing the buffered read connection has shown us is that to achieve optimal bandwidth for small messages, sending side and,
+whenever possible, application level batching is necessary.  We also saw that SRQs, while saving memory usage, have 
 significant performance limitations.
 
 
@@ -373,13 +368,13 @@ significant performance limitations.
 One of the most prevalent communication pattern is the N:1 configuration, where a single server handles the messages
 of multiple clients. 
 
-For our evaluation we only use two nodes. On the sending node we have $N$ threads that send messages to a
-single receiving thread on the other node. If not stated otherwise this receiving thread will simply 
+For our evaluation we only use two nodes. On the sending node, we have $N$ threads that send messages to a
+single receiving thread on the other node. If not stated otherwise, this receiving thread will simply 
 round robin over the $N$ open connections. 
 
 As we did for the N:N experiments, we evaluate the throughput for three different message sizes: 16 bytes, 
 512 bytes, and 8192 bytes. We do not perform any sender side batching but allow for sufficient unacknowledged messages 
-and in our plots we report the sum of all connection throughputs.
+In our plots, we report the sum of all connection throughputs.
 
 
 \begin{figure}[ht]
@@ -409,34 +404,35 @@ and in our plots we report the sum of all connection throughputs.
 
 
 \paragraph{} Figure~\ref{fig:plot-sndrcv-bw-n1-nosrq} shows the throughput for the send-receive protocol and a single receiver. We
-use the single receive approach we described in Section~\ref{sec:conn:send}, which allows us to route all completion events for 
+use the single receive approach described in Section~\ref{sec:conn:send}, which allows us to route all completion events for 
 multiple QPs to a single receiving thread. To prevent Reader-Not-Ready (RNR) errors, which happen when the receiving CPU is 
 unable to repost receive buffers quickly enough, we limit the sender to a stable sending rate.
 
-For 16 byte messages we seem to be limited at around 11 MOp/s, while for 512 bytes we limited at around 16 MOp/s. Both bottlenecks
+For 16 byte messages, we seem to be limited at around 11 MOp/s, while for 512 bytes we are limited at around 16 MOp/s. Both bottlenecks
 are caused by the receiving CPU. We expect the difference in sustainable message rates to be the result of inline receives for 
-16 byte messages, which actually has detrimental effects on throughput, as this causes additional overhead for the CPU which 
+16 byte messages, which actually has detrimental effects on throughput as this causes additional overhead for the receiving 
+CPU which 
 is already the bottleneck in this situation.
 
 However for both smaller message sizes we see a drop in performance when further increasing the number of sender. We explain 
 this by increased cache misses, caused by having to access more QPs and the linearly growing number of receive buffers.
 
 \paragraph{} Figure~\ref{fig:plot-sndrcv-bw-n1-srq} shows the same plot while using a shared receive queue for all QPs. For
-large messages we are again only limited by the link speed.
+large messages, we are again only limited by the link speed.
 
-For small messages of 32 bytes or lower we see similar throughout as without using a shared receive queue. We are still
-limited by the receiving CPU. We do however not see any performance drops when using an increasing amount of senders. This
-would fit our explanation of cache misses for receive buffers, as when we are using a SRQ the number of receive buffer stays
-constant.
+For small messages of 32 bytes or lower, we see similar throughput as without using a shared receive queue. We are still
+limited by the receiving CPU. We do, however, not see any performance drops when using an increasing amount of senders. This
+fits our explanation of cache misses for receive buffers as the number of receive buffers stays constant when using an SRQ.
+
 
 More interesting are message sizes above 32 bytes that are not limited by the link speed. Without the receive optimizations 
-for very small messages we seem to be limited at 2 MOp/s
-when using an SRQ. Interestingly this effect does not show up when only
+for very small messages, we seem to be limited at 2 MOp/s
+when using an SRQ. Interestingly, this effect does not show up when only
 one QP is using the SRQ. We expect this to be some kind of locking or atomic operation of the NIC itself. This results in a
 major bottleneck for any implementation using shared receive queues.
 
-\paragraph{} Figure~\ref{fig:plot-wdir-bw-n1} shows the direct-write protocols throughput. Similarly to the 
-send-receive protocol we are very much limited by the receiving CPU.
+\paragraph{} Figure~\ref{fig:plot-wdir-bw-n1} shows the direct-write protocol's throughput. Similarly to the 
+send-receive protocol, we are very much limited by the receiving CPU.
 
 Very large messages achieve the maximum goodput,  while smaller messages seem to be limited by the reposting speed of the 
 receiver at around 4 MOp/s, which is already a bottleneck with two open connections.
@@ -445,7 +441,7 @@ This bottleneck gives us performance caps for 512 byte messages at around 15 Gbi
 There seems to be a very slight reduction in throughput when further increasing the number of open connections, which we 
 attribute to increased cache misses.
 
-The maximum throughput could be be improved by batching returning writes, but as it stands the direct-write connections
+The maximum throughput could be be improved by batching returning writes, but as it stands the direct-write connection
 achieves significantly worse performance than the send-receive protocol.
 
 
@@ -477,35 +473,35 @@ achieves significantly worse performance than the send-receive protocol.
 \paragraph{} Figure~\ref{fig:plot-write-bw-n1} shows the N:1 throughput for all buffered-write protocols as 
 well as the two shared-write implementations.
 
-For large messages of size 8196 throughput is again limited by the link speed for all buffered-write implementations, 
-with the same slight overhead for the write offset (BW-Off) implementation we have seen in all previous bandwidth plots.
-For smaller messages the buffered-write protocols are limited by the receivers CPU. We can avoid any 
-RNR errors for the write immediate sender by limiting the ring-buffer size. This way we do not have to artificially limit 
+For large messages of size 8196, throughput is again limited by the link speed for all buffered-write implementations, 
+with the same slight overhead for the write offset (BW-Off) implementation which we have seen in all previous bandwidth plots.
+For smaller messages, the buffered-write protocols are limited by the receiver's CPU. We can avoid any 
+RNR errors for the write immediate sender by limiting the ring-buffer size. This way, we do not have to artificially limit 
 the sender as we did for the send-receive protocol.
 
-For both 16 byte as well as 512 byte messages, the write reverse \mbox{(BW-Rev)} implementation achieves up to 20\% higher throughout
-compared to the write immediate (BW-Imm) protocol. This can be explained by the additional receive buffer reposting the 
+For both 16 byte as well as 512 byte messages, the write reverse \mbox{(BW-Rev)} implementation achieves up to 20\% higher throughput
+compared to the write immediate (BW-Imm) protocol. This can be explained by the additional which receive buffer reposting the 
 receiving CPU needs to perform when using write with immediate. 
 
-The write offset (BW-Off) implementation achieves similar performance to BW-Imm. Interestingly BW-Off seems to reach
-slightly higher performance when opening more than 6 concurrent connections with both 512 byte as well as 16 byte
+The write offset (BW-Off) implementation achieves similar performance to BW-Imm. Interestingly, BW-Off seems to reach
+slightly higher performance when opening more than six concurrent connections with both 512 byte as well as 16 byte
 sized messages. As of
-writing this, we do not have a clear explanation for it. Our current best guess is, that with more than 6 connections the 
+today, we do not have a clear explanation for it. Our current best guess is that with more than six connections the 
 metadata is spread over more than one cache line. This can result in less cache invalidation and in turn in lower receiver 
 CPU usage and better overall performance. Further research into this is necessary. 
 
 
 \paragraph{} Figure~\ref{fig:plot-write-bw-n1} also evaluates the shared write protocol (SW). We can see that we are strongly limited
-by our two phase approach for all message sizes. That means we see a linear increase in bandwidth with increasing number of 
+by our two phase approach for all message sizes. That means, we see a linear increase in bandwidth with increasing number of 
 senders as we are able to issue more requests in parallel.
 
-For the large message size of 8 KB the total throughput increases linearly until we hit the line rate with 10 
-active senders. The use of device memory \mbox{(SW-DM)} allows us to saturate the link with only 9 connections.
+For the large message size of 8 KB, the total throughput increases linearly until we hit the line rate with 10 
+active senders. The use of device memory \mbox{(SW-DM)} allows us to saturate the link with only nine connections.
 This is not a 
 large difference and we are able to take full advantage of the bandwidth with or without the usage of device memory.
 
 Smaller messages give use more interesting results. For a message size of 512 bytes we first see a linear 
-increase in bandwidth for both versions with and without usage of device memory. The version without device memory however
+increase in bandwidth for both versions with and without usage of device memory. The version without device memory, however
 caps at around 7.5 Gbps, which is exactly what we predicted given our \emph{fetch and add} micro-benchmark that gave us a
 peek throughput of 2 MOp/s. The version utilizing device memory for the metadata achieves higher throughput with more
 senders and we expect it to theoretically reach a maximum throughput of around 30 Gbps with enough concurrent senders.
@@ -528,18 +524,18 @@ while the version operating on device memory is able to achieve higher throughpu
   \caption{Buffered-Read}
   \label{fig:plot-bufread-bw-n1}
   \end{subfigure}
-  \caption{N:1 Bandwidth Read-based Protocols}
+  \caption{N:1 Bandwidth Read-Based Protocols}
 \end{figure}
 
-Figure~\ref{fig:plot-dirread-bw-n1} shows the direct-read protocols throughput with a single receiver and varying number of senders.
-We are again very much limited by the receiving CPU in this case, as the receiver already needs to do the heavy lifting for 
+Figure~\ref{fig:plot-dirread-bw-n1} shows the direct-read protocol's throughput with a single receiver and varying number of senders.
+We are again very much limited by the receiving CPU in this case as the receiver already needs to do the heavy lifting for 
 this protocol. 
 
-For smaller messages there is no throughput improvements at all with increasing number of connections as we already have 
-been limited by the ability of the receiving CPU to post work requests. For very large messages we see small improvements
+For smaller messages, there is no throughput improvements at all with increasing number of connections as we already have 
+been limited by the ability of the receiving CPU to post work requests. For very large messages, we see small improvements
 in throughput. This is caused by the ability to use multiple NIC processing units.
 
-This communication pattern does not seem to be good fit for this protocol as it is always limited at around 
+This communication pattern does not seem to be a good fit for this protocol as it is always limited at around 
 2.6 MOp/s by the receiving CPU speed. This gives us the 10 Gbit/s and 0.3 Gbit/s bottlenecks for the 512 byte and
 16 byte size messages respectively.
 
@@ -552,17 +548,17 @@ There seems to be performance degradation when increasing the number of senders.
 by increased cache misses, caused by the growing total buffer space and the usage of multiple QPs.
 
 
-\paragraph{} Unsurprisingly when developing a protocol for a N:1 communication it is vitally important to reduce the 
-involvement of the receiving CPU in the transmission. This makes read based protocols unsuitable. Interestingly in our
+\paragraph{} Unsurprisingly, when developing a protocol for a N:1 communication, it is vitally important to reduce the 
+involvement of the receiving CPU in the transmission. This makes read based protocols unsuitable. Interestingly, in our
 evaluation the send-receive protocol outperformed both the direct as well as buffered-read protocols. But we need to 
 keep in mind that we should be able to drastically improve the direct-write protocol's performance by reposting
 buffers in batches or by redesigning this reposting entirely to reduce the number of returning writes.
 
-Also for the send-receive protocol to be stable enough for production use we would need to add some kind of acknowledging to
+Also, for the send-receive protocol to be stable enough for production use, we would need to add some kind of acknowledging to
 avoid RNR errors, which should further level the playing field and result in similar performance for send and write based 
 protocols.
 
-Finally we again saw that resource sharing does not come for free. Both the shared write as well as shared receive queue based
+Finally, we again saw that resource sharing does not come for free. Both the shared write as well as shared receive queue based
 protocols are significantly slower than their unshared counterparts. 
 
 

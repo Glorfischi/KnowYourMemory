@@ -1,9 +1,9 @@
 \section{Conclusion}
 
-This thesis described and implemented various RDMA based protocols for data exchange, we studied their advantages and 
+This thesis described and implemented various RDMA based protocols for data exchange. We studied their advantages and 
 drawbacks and evaluated them for multiple communication patterns.
 
-In contrast to most related work we did not focus on low level verb performance or on remote procedure calls, but instead 
+In contrast to most related work, we did not focus on low level verb performance or on remote procedure calls but instead 
 focused on different approaches to design a message passing protocol. These protocols can act as building blocks for 
 system designers to develop new and more complex protocols.
 
@@ -16,19 +16,19 @@ We looked at rarely used RNIC features such as shared receive queues, on device 
 at their capabilities and drawbacks.
 
 
-\paragraph{} We analysed the presented protocols and evaluated more then just raw performance, we looked at other
+\paragraph{} We analysed the presented protocols and evaluated more then just raw performance. We looked at other
 features that can be critical for applications.  These features include achieving effective memory usage by allowing 
-for variable message sizes, avoiding additional copying by being truly zero-copy, or one slow processing message not
+variable message sizes, avoiding additional copying by being truly zero-copy, or one slow processing message not
 being able to stall the whole connection.
 
-\paragraph{} We introduced a new performance model for RDMA based message passing protocols, that allows us to 
+\paragraph{} We introduced a new performance model for RDMA based message passing protocols that allows us to 
 better understand the evaluated protocols. We discussed the often ignored limitation of protocols that do not allow for enough
-concurrent requests, severely limiting the capabilities of an RDMA-enable network. We also show that for high speed networks
-even with the heavy NIC offloading of RDMA, the systems CPU is often the bottleneck as it is unable to issue enough work requests to
+concurrent requests, severely limiting the capabilities of an RDMA-enable network. We also show that for high speed networks,
+even with the heavy NIC offloading of RDMA, the system's CPU is often the bottleneck as it is unable to issue enough work requests to
 keep the RNIC busy if the protocol is not carefully designed.
 
 
 \paragraph{} This work shows that while there has been much work in designing and optimizing certain RDMA data
 exchange protocols, there is still room for many interesting protocols that take full advantage of modern RDMA-enabled NICs.
 We think that systems engineers can significantly improve overall system performance by putting more thought and research in
-RDMA protocol design and how it interacts with the rest of the system, instead of relying on the same widely used protocols.
+RDMA protocol design and its interaction with the rest of the system instead of relying on the same widely used protocols.

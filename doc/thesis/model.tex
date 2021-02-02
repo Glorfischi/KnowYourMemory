@@ -1,12 +1,12 @@
 \section{Performance Model}\label{sec:perf-model} \label{sec:model}
-In this section we introduce a general performance model for data exchange protocol that will allow us to estimate the 
+  In this section, we introduce a general performance model for data exchange protocols, that will allow us to estimate the 
 performance of our protocol implementations. It gives us a better understanding of our evaluation results and helps us 
 to locate bottlenecks.
 
 \paragraph{}We took a fairly detailed look at the operations involved in transmitting a message using RDMA in Section~\ref{sec:rdma}.
-Trying to closely model this however gives us a far too complex model, with a lot of parameters that are hard to assess,
+Trying to closely model this, however, gives us a far too complex model with a lot of parameters that are hard to assess,
 especially if we start to look at more complex protocols. We introduce a more simplified model inspired by the  
-\emph{LogGP model}~\cite{loggp}, which was developed  to model point to point communication with variable message sizes for 
+\emph{LogGP model}~\cite{loggp}. LogGP was developed  to model point to point communication with variable message sizes for 
 traditional IP based networks.
 
 \paragraph{} At its core the LogGP model uses a fixed CPU overhead $o$ per message, the communication latency $L$, and 
@@ -78,7 +78,7 @@ us with the following parameters, which are illustrated in Figure~\ref{fig:model
 
 \end{tikzpicture}
 \end{center}
-\caption{Sending an receiving messages under our model}
+\caption{Sending and receiving messages under our model}
 \label{fig:model-base}
 \end{figure}
 
@@ -93,7 +93,7 @@ us with the following parameters, which are illustrated in Figure~\ref{fig:model
   \item $o_{snd}$: the \emph{send overhead}, defined as the length of time that a processor is engaged in sending each message.
     For some protocols this also includes any preparation and communication overhead necessary to send a message.
   \item $g$: the \emph{send gap}, defined as the minimum time interval until the sender can reuse the resources involved in 
-    the transmission. (e.g. the send buffer) 
+    the transmission (e.g. the send buffer).
   \item $o_{nsnd}$: the \emph{send NIC overhead}, defined as the length of time that a NIC is engaged in sending each message.
   \item $o_{nrcv}$: the \emph{receive NIC overhead}, defined as the length of time that a NIC is engaged in receiving each message.
   \item $o_{rcv}$: the \emph{receive overhead}, defined as the length of time that a processor is engaged in receiving each message.
@@ -101,16 +101,16 @@ us with the following parameters, which are illustrated in Figure~\ref{fig:model
     to receive into (e.g. post receive). This needs to happen sometime before receiving the next message.
 \end{itemize}
 
-\paragraph{} This model does not take the MTU into account. While some prior work use a slightly different model when sending 
-messages over the MTU, that span multiple transmission units~\cite{dare}, we found our model to works well enough to understand
-most of our results.
+\paragraph{} This model does not take the MTU into account. While some prior work use a slightly different model parameters 
+when sending messages over the MTU~\cite{dare}, which span multiple transmission units, we found our model to work well
+enough to understand most of our results.
 
 \paragraph{} We built this model around send or write based protocols and it was not designed 
-for read based protocols. But as we will see it can still give us better insight in the observed performance of these 
+for read based protocols. But as we will see, it can still give us better insight in the observed performance of these 
 protocols.
 
-\paragraph{} Even with these simplifications it still is a fairly complex model and measuring each of these overheads in 
-practice is very hard. We do not try to quantitatively evaluate our model for all presented protocols, but rather use it 
+\paragraph{} Even with these simplifications, it still is a fairly complex model and measuring each of these overheads in 
+practice is very hard. We do not try to quantitatively evaluate our model for all presented protocols, but rather use it to
 get a better general understanding of the observed performance characteristics and to understand what is limiting throughput
 or latency in which situations.
 
@@ -150,35 +150,37 @@ parameter estimates.
 \hline
 \end{tabular}
 \begin{tablenotes}
-\item[a] \small The on NIC overheads are expected to be very small and are hard to accurately measure
-\item[b] \small Very protocol dependent. Increases linearly for the send-receive protocol
+\item[a] \small The on NIC overheads are expected to be very small and are hard to accurately measure.
+\item[b] \small Very protocol dependent. Increases linearly for the send-receive protocol.
 \end{tablenotes}
 \end{threeparttable}
 \end{table}
 
 
-\paragraph{} We are able to directly measure $o_{snd}$, $o_{rcv}$, and $o_{post}$. For the send-receive protocol $o_{snd}$ is the cost of 
+\paragraph{} We are able to directly measure $o_{snd}$, $o_{rcv}$, and $o_{post}$. For the send-receive protocol, $o_{snd}$ is the cost of 
 posting a single send request. The receiving overhead $o_{rcv}$ is the cost of polling for a receive completion event. And
 $o_{post}$ is the cost of posting a single receive request. For all of these overheads we measure both the cost of a single
 operation, as well as the cost per message when issuing multiple operations in a batch.
 
 \paragraph{} The gap $g$ is also directly measurable. This is the time it takes until the send is completed and has been
 acknowledged. The lower bound for this is at $3.4\mu s$, or a bit less then twice the network latency L. But it increases
-linearly with the size of the message $k$.
+linearly with the message size $k$.
 
 It is worth noting here, that our reported network latency $L$ includes both the PCI latency as well as the latency
-of the switch between our two nodes.
+of the switch between our two nodes. The omission of the PCI latency is also the reason that $g$ can be less than $2L$, 
+as it does not include a PCI round-trip.
 
-\paragraph{} For the network bandwidth G we also report a batched and unbatched estimation. We use the unbatched estimation
+\paragraph{} For the network bandwidth G, we also report a batched and unbatched estimation. We use the unbatched estimation
 for our latency prediction and the batched estimation for our throughput predictions.
 
 \paragraph{} Evaluating the RNIC overhead is tricky. We make the assumption that $o_{nsnd} = o_{nrcv}$ and use our latency
-and bandwidth measurement to estimate these parameters. This gives us a good enough estimation for a 1:1 communication pattern.
+and bandwidth measurements to estimate those parameters. This gives us a good enough estimation for a 1:1 communication pattern.
 
 
 
 
-\paragraph{} While we will see that our model is not quite able to accurately predict our bandwidth and latency 
+
+\paragraph{} While we will see that our model is not quite able to accurately predict all of our bandwidth and latency 
 measurements, it does  give us a better understanding of our results and predicts the different types of bottlenecks 
 we encounter in our evaluation.
 
@@ -200,8 +202,8 @@ $$
 \end{figure}
 
 \paragraph{} Figure~\ref{fig:model-lat} shows our prediction and the actual latency measurements for the send-receive protocol.
-We can see that we are not quite able to precisely match the actual data. It does
-however confirm our prediction of a mostly linear increase in latency with increased message size.
+We can see that we are not quite able to precisely match the actual data. There seems to be some small, not modeled overhead.
+It does, however, confirm our prediction of a mostly linearly increasing latency with increased message size.
 
 \pagebreak
 \subsubsection{Predicting Bandwidth}
@@ -217,7 +219,7 @@ bottlenecks. We take a look at each of these bottlenecks and illustrate them on 
 
 \paragraph{Round-Trip Bottleneck} One way to be bottlenecked is by simply not issuing enough concurrent send requests. In 
 this case we are bottlenecked by the gap $g$, which usually contains a complete round-trip time and grows linearly with 
-the size of the message. So when we issue only a single send at a time, for a message size of $k$ we predict to be limited by
+the size of the message. So when we issue only a single send at a time, for a message size of $k$, we predict to be limited by
 
 $$
 bw \leq \frac{k}{o_{snd} + g}\text{, where } g = g_{fix} + kg_{var} 
@@ -226,13 +228,13 @@ $$
 For the send-receive protocol this is exactly what we see. SR-Seq shows the throughput with varying message size when only 
 sending a single message at a time. 
 
-\paragraph{} This means to get decent 1:1 performance it is vitally important to issue enough concurrent requests, or as we 
-will call it from now on to allow for enough \emph{unacknowledged} messages. In a lot of related work this is not discussed
+\paragraph{} This means to get decent 1:1 performance, it is vitally important to issue enough concurrent requests, or as we 
+will call it from now on, to allow for enough \emph{unacknowledged} messages. In a lot of related work this is not discussed
 and either done without specifically mentioning it or sometimes the presented protocol only allows for a single unacknowledged
 message, without bringing up the disadvantages of such an approach.
 
 
-\paragraph{CPU Bottleneck} Another bottleneck we encounter especially for small messages, is a CPU bottleneck, either at the 
+\paragraph{CPU Bottleneck} Another bottleneck we encounter, especially for small messages, is a CPU bottleneck, either at the 
 sender or receiver.
 
 A sending CPU bottleneck means we simply are not able to issue enough send requests and the RNIC is processing them faster
@@ -244,16 +246,16 @@ $$
 
 
 The send-receive protocol (SR) allows for multiple unacknowledged messages and avoids the round-trip bottleneck. 
-This implementations is limited by a sending CPU bottleneck. In Figure~\ref{fig:model-bw} we can see the linearly
+This implementation is limited by a sending CPU bottleneck. In Figure~\ref{fig:model-bw} we can see the linearly
 increasing throughput we predict until we reach a message size of 2 KB where we start to be limited by the NIC.
 
-\paragraph{} We can avoid this bottleneck by introducing batching. The verbs API allows us to post multiple work request at 
+\paragraph{} We can avoid this bottleneck by introducing batching. The verbs API allows us to post multiple work requests at 
 the same time. This \emph{Doorbell batching} reduces the number of generated MMIOs~\cite{anuj-guide} and reduces the CPU 
 load. We measured that batching can reduce the sending CPU overhead $o_{snd}$ by up to a factor of 10. 
 
-When introducing doorbell batching to the send-receive protocol we never seem to be bottlenecked by the sending CPU. 
-Although this can drastically improve bandwidth, we will not evaluate other protocols with doorbell batching, as it is
-not directly applicable to some of the protocols and for connected QPs application level batching, i.e. sending larger 
+When introducing doorbell batching to the send-receive protocol, we are never bottlenecked by the sending CPU. 
+Although, this can drastically improve bandwidth, we will not evaluate other protocols with doorbell batching, as it is
+not directly applicable to some of the protocols and for connected QPs, application level batching, i.e., sending larger 
 messages, is a better approach.
 
 \paragraph{} A receiving CPU bottleneck means the receiver is unable to prepare enough receive buffers, 
@@ -264,22 +266,22 @@ bw \leq \frac{k}{o_{rcv} + o_{post}}
 $$
 
 This results in a very similar bottleneck which is proportional to the message size. We do not encounter this bottleneck for
-our 1:1 evaluation of the send-receive protocol, however when a single receiving thread handles multiple open connection 
-in a N:1 communication pattern this quickly becomes the key bottleneck.
-Similarly to the sending CPU bottleneck the impact can be reduced using batching.
+our 1:1 evaluation of the send-receive protocol. However, when a single receiving thread handles multiple open connections 
+in a N:1 communication pattern, this quickly becomes the key bottleneck.
+Similarly to the sending CPU bottleneck, the impact can be reduced using batching.
 
 \pagebreak
 \paragraph{Device Bottleneck} Finally, if we are able to issue enough requests and the receiver is not stalling the sender,
-we are bottlenecked by either one of the involved RNICs. According to our model this results in one of these two
+we are bottlenecked by either one of the involved RNICs. According to our model, this results in one of these two
 bandwidth limits
 
 $$
 bw \leq \frac{k}{o_{nsnd} + (k-1)G} \text{\quad or \quad} bw \leq \frac{k}{o_{nrcv} + (k-1)G}
 $$
 
-In both cases with increasing message size we first predict a linear increase in bandwidth which will eventually 
+In both cases, with increasing message size, we first predict a linear increase in bandwidth which will eventually 
 flatten out into the maximum possible goodput of the network link.
 
-Looking at the batched throughput results SR-Bat in Figure~\ref{fig:model-bw}, this is qualitatively what we expect 
-when being only limited by the RNIC. We are however not able to accurately predict the results for smaller messages 
+Looking at the batched throughput results SR-Bat in Figure~\ref{fig:model-bw}, the data qualitatively matches 
+what we expect. We are, however, not able to accurately predict the results for smaller messages 
 using our current model. This is a limitation of our model,  possibly caused by not modeled hardware optimizations.
